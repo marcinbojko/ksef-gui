@@ -8,7 +8,8 @@ Jako agent odpowiedzialny za rozwój tego projektu, będę przestrzegał następ
 
 *   **Nie wykonuję poleceń automatycznie bez planu**: Zawsze przedstawiam plan działania przed rozpoczęciem implementacji.
 *   **Generuję listę TODO**: Dla złożonych zadań, najpierw tworzę szczegółową, techniczną listę kroków (`TODO`) przy użyciu narzędzia `write_todos`.
-*   **Realizuję punkty TODO jeden po drugim**: Pracuję metodycznie, wykonując zadania z listy `TODO` sekwencyjnie.
+*   **Realizuję punkty TODO jeden po jednym**: Pracuję metodycznie, wykonując zadania z listy `TODO` sekwencyjnie.
+*   **Format listy TODO**: Lista zadań będzie zwięzła, wykorzystując tylko słowa kluczowe i nie będzie zawierać pełnych zdań. Wszystkie podzadania zostaną spłaszczone i przedstawione jako niezależne zadania.
 
 ## Inicjalizacja repozytorium
 
@@ -103,5 +104,15 @@ Konfiguracja aplikacji `ksefcli` jest ładowana z wielu źródeł, zapewniając 
 3.  **Argumenty wiersza poleceń**: Argumenty przekazane do aplikacji CLI.
 
 Konfiguracja jest parsowana i bindowana do obiektu `AppConfig` (zdefiniowanego w `src/KsefCli/Config/AppConfig.cs`). `ConfigLoader.cs` jest odpowiedzialny za proces ładowania i podstawową walidację konfiguracji. Walidacja zapewnia, że krytyczne ustawienia (np. `KsefApi.BaseUrl`) są obecne przed uruchomieniem aplikacji.
+
+## Model Tokenu i Mechanizm Przechowywania
+
+Aplikacja `ksefcli` wykorzystuje dedykowany model `Token` (zdefiniowany w `src/KsefCli/Services/Token.cs`) do reprezentowania tokenów autoryzacyjnych KSeF. Model ten zawiera wartość tokenu, datę wygaśnięcia (`ExpiresAt`) oraz identyfikator sesji KSeF (`SessionId`). Zapewnia również pomocnicze właściwości (`IsExpired`, `IsValid`) do łatwej weryfikacji statusu tokenu.
+
+Mechanizm przechowywania tokenów jest realizowany przez klasę `TokenStore` (zdefiniowaną w `src/KsefCli/Services/TokenStore.cs`). `TokenStore` jest odpowiedzialny za:
+*   **Ładowanie i zapisywanie tokenów**: Tokeny są serializowane do formatu JSON (przy użyciu `System.Text.Json`) i zapisywane do pliku. Ścieżka do pliku konfiguracyjnego jest pobierana z `AppConfig.TokenStore.Path`. Domyślnie jest to `~/.config/ksefcli/tokens.json`.
+*   **Obsługa ścieżki użytkownika**: Klasa `TokenStore` automatycznie rozwija `~` do katalogu domowego użytkownika, co pozwala na przechowywanie tokenów w standardowej lokalizacji systemowej (`~/.config/ksefcli/`).
+*   **Walidacja wygaśnięcia**: Przy ładowaniu tokenu, `TokenStore` sprawdza, czy token nie wygasł, zwracając `null` dla nieprawidłowych lub wygasłych tokenów.
+*   **Usuwanie tokenów**: Zapewnia metodę do usuwania przechowywanego pliku tokenu.
 
 Wnioski z analizy `ksef-client-csharp` i jego integracji, wraz z dalszymi decyzjami architektonicznymi, będą rozwijane w kolejnych sekcjach tego dokumentu.
