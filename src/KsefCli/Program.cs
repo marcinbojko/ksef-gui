@@ -2,6 +2,7 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 using KsefCli.Commands.Auth;
 using KsefCli.Commands.Faktura;
+using KsefCli.Config;
 using System.Threading.Tasks;
 
 namespace KsefCli
@@ -10,6 +11,9 @@ namespace KsefCli
     {
         public static async Task<int> Main(string[] args)
         {
+            // Load configuration
+            var appConfig = ConfigLoader.LoadConfig(args);
+
             var app = new CommandApp();
 
             app.Configure(config =>

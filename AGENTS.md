@@ -95,4 +95,13 @@ Dla parsowania argumentów CLI wybrano bibliotekę **Spectre.Console.Cli**. Jest
 
 Struktura CLI została zaimplementowana w `Program.cs` przy użyciu `CommandApp` i metody `AddBranch` dla zagnieżdżonych komend `auth` i `faktura`. Konkretne podkomendy (`token refresh`, `faktura wyslij`, `faktura ls`) są implementowane jako klasy dziedziczące z `AsyncCommand<TSettings>`, co zapewnia modularność i łatwość rozbudowy.
 
+## Konfiguracja Aplikacji
+
+Konfiguracja aplikacji `ksefcli` jest ładowana z wielu źródeł, zapewniając elastyczność i możliwość nadpisywania ustawień:
+1.  **`appsettings.json`**: Plik JSON znajdujący się w katalogu głównym aplikacji.
+2.  **Zmienne środowiskowe**: Zmienne środowiskowe z prefiksem `KSEFCLI_` (np. `KSEFCLI_KsefApi__BaseUrl`).
+3.  **Argumenty wiersza poleceń**: Argumenty przekazane do aplikacji CLI.
+
+Konfiguracja jest parsowana i bindowana do obiektu `AppConfig` (zdefiniowanego w `src/KsefCli/Config/AppConfig.cs`). `ConfigLoader.cs` jest odpowiedzialny za proces ładowania i podstawową walidację konfiguracji. Walidacja zapewnia, że krytyczne ustawienia (np. `KsefApi.BaseUrl`) są obecne przed uruchomieniem aplikacji.
+
 Wnioski z analizy `ksef-client-csharp` i jego integracji, wraz z dalszymi decyzjami architektonicznymi, będą rozwijane w kolejnych sekcjach tego dokumentu.
