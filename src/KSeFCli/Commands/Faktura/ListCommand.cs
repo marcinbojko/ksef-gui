@@ -3,7 +3,7 @@ using Spectre.Console.Cli;
 using System.ComponentModel;
 using System.Threading.Tasks;
 
-namespace KsefCli.Commands.Faktura
+namespace KSeFCli.Commands.Faktura
 {
     public sealed class ListCommand : AsyncCommand<ListCommand.Settings>
     {

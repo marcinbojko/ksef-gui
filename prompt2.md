@@ -27,7 +27,7 @@ prezentacja wyników
 2. Rekomendowana struktura katalogów
 ksefcli/
 ├── src/
-│   ├── KsefCli/
+│   ├── KSeFCli/
 │   │   ├── Program.cs
 │   │   ├── Cli/
 │   │   │   ├── RootCommand.cs
@@ -51,7 +51,7 @@ ksefcli/
 │   │   │   ├── TablePrinter.cs
 │   │   │   └── ErrorPrinter.cs
 │   │   └── ExitCodes.cs
-│   └── KsefCli.Tests/
+│   └── KSeFCli.Tests/
 │       ├── Cli/
 │       ├── Commands/
 │       └── Services/

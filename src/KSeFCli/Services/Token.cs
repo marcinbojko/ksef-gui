@@ -1,6 +1,6 @@
 using System;
 
-namespace KsefCli.Services
+namespace KSeFCli.Services
 {
     public class Token
     {

@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Spectre.Console;
 using System.IO;
 
-namespace KsefCli.Config
+namespace KSeFCli.Config
 {
     public static class ConfigLoader
     {

@@ -1,4 +1,4 @@
-namespace KsefCli
+namespace KSeFCli
 {
     public static class ExitCodes
     {

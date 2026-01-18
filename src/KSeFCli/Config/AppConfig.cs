@@ -1,4 +1,4 @@
-namespace KsefCli.Config
+namespace KSeFCli.Config
 {
     public class AppConfig
     {

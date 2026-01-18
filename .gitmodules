@@ -1,0 +1,6 @@
+[submodule "thirdparty/ksef-docs"]
+	path = thirdparty/ksef-docs
+	url = git@github.com:CIRFMF/ksef-docs.git
+[submodule "thirdparty/ksef-client-csharp"]
+	path = thirdparty/ksef-client-csharp
+	url = https://github.com/CIRFMF/ksef-client-csharp.git

@@ -1,7 +1,7 @@
 using Spectre.Console.Cli;
 using System.ComponentModel;
 
-namespace KsefCli.Commands.Auth
+namespace KSeFCli.Commands.Auth
 {
     // AuthCommand is a group command. Its subcommands are registered in Program.cs.
     // This class primarily serves to hold the description.

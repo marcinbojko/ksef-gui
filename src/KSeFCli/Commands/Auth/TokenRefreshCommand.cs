@@ -2,7 +2,7 @@ using Spectre.Console.Cli;
 using System.ComponentModel;
 using System.Threading.Tasks;
 
-namespace KsefCli.Commands.Auth
+namespace KSeFCli.Commands.Auth
 {
     public sealed class TokenRefreshCommand : AsyncCommand<TokenRefreshCommand.Settings>
     {

@@ -33,7 +33,7 @@ Projekt `ksefcli` będzie miał następującą strukturę katalogów, zgodnie z 
 ```
 ksefcli/
 ├── src/
-│   ├── KsefCli/
+│   ├── KSeFCli/
 │   │   ├── Program.cs           # Bootstrap aplikacji
 │   │   ├── Cli/                 # Definicje głównych komend i opcji CLI
 │   │   │   ├── RootCommand.cs
@@ -57,7 +57,7 @@ ksefcli/
 │   │   │   ├── TablePrinter.cs
 │   │   │   └── ErrorPrinter.cs
 │   │   └── ExitCodes.cs         # Definicje kodów wyjścia aplikacji
-│   └── KsefCli.Tests/           # Projekt z testami jednostkowymi i integracyjnymi
+│   └── KSeFCli.Tests/           # Projekt z testami jednostkowymi i integracyjnymi
 │       ├── Cli/
 │       ├── Commands/
 │       └── Services/
@@ -103,13 +103,13 @@ Konfiguracja aplikacji `ksefcli` jest ładowana z wielu źródeł, zapewniając 
 2.  **Zmienne środowiskowe**: Zmienne środowiskowe z prefiksem `KSEFCLI_` (np. `KSEFCLI_KsefApi__BaseUrl`).
 3.  **Argumenty wiersza poleceń**: Argumenty przekazane do aplikacji CLI.
 
-Konfiguracja jest parsowana i bindowana do obiektu `AppConfig` (zdefiniowanego w `src/KsefCli/Config/AppConfig.cs`). `ConfigLoader.cs` jest odpowiedzialny za proces ładowania i podstawową walidację konfiguracji. Walidacja zapewnia, że krytyczne ustawienia (np. `KsefApi.BaseUrl`) są obecne przed uruchomieniem aplikacji.
+Konfiguracja jest parsowana i bindowana do obiektu `AppConfig` (zdefiniowanego w `src/KSeFCli/Config/AppConfig.cs`). `ConfigLoader.cs` jest odpowiedzialny za proces ładowania i podstawową walidację konfiguracji. Walidacja zapewnia, że krytyczne ustawienia (np. `KsefApi.BaseUrl`) są obecne przed uruchomieniem aplikacji.
 
 ## Model Tokenu i Mechanizm Przechowywania
 
-Aplikacja `ksefcli` wykorzystuje dedykowany model `Token` (zdefiniowany w `src/KsefCli/Services/Token.cs`) do reprezentowania tokenów autoryzacyjnych KSeF. Model ten zawiera wartość tokenu, datę wygaśnięcia (`ExpiresAt`) oraz identyfikator sesji KSeF (`SessionId`). Zapewnia również pomocnicze właściwości (`IsExpired`, `IsValid`) do łatwej weryfikacji statusu tokenu.
+Aplikacja `ksefcli` wykorzystuje dedykowany model `Token` (zdefiniowany w `src/KSeFCli/Services/Token.cs`) do reprezentowania tokenów autoryzacyjnych KSeF. Model ten zawiera wartość tokenu, datę wygaśnięcia (`ExpiresAt`) oraz identyfikator sesji KSeF (`SessionId`). Zapewnia również pomocnicze właściwości (`IsExpired`, `IsValid`) do łatwej weryfikacji statusu tokenu.
 
-Mechanizm przechowywania tokenów jest realizowany przez klasę `TokenStore` (zdefiniowaną w `src/KsefCli/Services/TokenStore.cs`). `TokenStore` jest odpowiedzialny za:
+Mechanizm przechowywania tokenów jest realizowany przez klasę `TokenStore` (zdefiniowaną w `src/KSeFCli/Services/TokenStore.cs`). `TokenStore` jest odpowiedzialny za:
 *   **Ładowanie i zapisywanie tokenów**: Tokeny są serializowane do formatu JSON (przy użyciu `System.Text.Json`) i zapisywane do pliku. Ścieżka do pliku konfiguracyjnego jest pobierana z `AppConfig.TokenStore.Path`. Domyślnie jest to `~/.config/ksefcli/tokens.json`.
 *   **Obsługa ścieżki użytkownika**: Klasa `TokenStore` automatycznie rozwija `~` do katalogu domowego użytkownika, co pozwala na przechowywanie tokenów w standardowej lokalizacji systemowej (`~/.config/ksefcli/`).
 *   **Walidacja wygaśnięcia**: Przy ładowaniu tokenu, `TokenStore` sprawdza, czy token nie wygasł, zwracając `null` dla nieprawidłowych lub wygasłych tokenów.

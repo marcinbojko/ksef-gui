@@ -1,11 +1,11 @@
 using Spectre.Console;
 using Spectre.Console.Cli;
-using KsefCli.Commands.Auth;
-using KsefCli.Commands.Faktura;
-using KsefCli.Config;
+using KSeFCli.Commands.Auth;
+using KSeFCli.Commands.Faktura;
+using KSeFCli.Config;
 using System.Threading.Tasks;
 
-namespace KsefCli
+namespace KSeFCli
 {
     public static class Program
     {

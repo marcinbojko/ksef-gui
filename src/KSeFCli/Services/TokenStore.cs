@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
-using KsefCli.Config;
+using KSeFCli.Config;
 using Spectre.Console;
 
-namespace KsefCli.Services
+namespace KSeFCli.Services
 {
     public class TokenStore
     {

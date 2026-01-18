@@ -7,7 +7,7 @@ build:
 	dotnet build ksefcli.sln
 
 run: build
-	dotnet run --project src/KsefCli --
+	dotnet run --project src/KSeFCli --
 
 clean:
 	dotnet clean
