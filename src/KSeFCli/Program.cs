@@ -34,7 +34,8 @@ namespace KSeFCli
 
         [CommandOption("--base-url")]
         [Description("KSeF base URL")]
-        public string BaseUrl { get; set; } = Environment.GetEnvironmentVariable("KSEF_URL") ?? string.Empty;
+        [DefaultValue("https://api-test.ksef.mf.gov.pl/v2")]
+        public string BaseUrl { get; set; } = string.Empty;
     }
 
     public class GetInvoiceSettings : GlobalSettings
