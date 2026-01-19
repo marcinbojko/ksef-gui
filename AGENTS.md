@@ -11,6 +11,7 @@ Jako agent odpowiedzialny za rozwój tego projektu, będę przestrzegał następ
 *   **Realizuję punkty TODO jeden po jednym**: Pracuję metodycznie, wykonując zadania z listy `TODO` sekwencyjnie.
 *   **Format listy TODO**: Lista zadań będzie zwięzła, wykorzystując tylko słowa kluczowe i nie będzie zawierać pełnych zdań. Wszystkie podzadania zostaną spłaszczone i przedstawione jako niezależne zadania.
 *   **Minimalizm w komunikacji**: Bądź tak zwięzły, jak to tylko możliwe, i wypisuj minimalną ilość informacji, bez gramatyki.
+*   **Commit often**: Commituj zmiany często, po każdej znaczącej zmianie.
 
 ## Inicjalizacja repozytorium
 
