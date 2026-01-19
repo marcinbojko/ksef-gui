@@ -1,0 +1,95 @@
+root = true
+
+########################################
+# (C# 7.3)
+########################################
+
+# .csproj: <LangVersion>7.3</LangVersion>
+# Globalnie wyłącz NRT (żeby nikt nie włączył przypadkiem kontekstu #nullable enable)
+nullable = disable
+
+[*.{cs,vb}]
+charset = utf-8
+indent_style = space
+indent_size = 4
+max_line_length = 100
+dotnet_sort_system_directives_first = true
+
+# Put braces on the same line for everything
+csharp_new_line_before_open_brace = none
+
+# Optional: keep single-line statements compact
+csharp_preserve_single_line_statements = true
+
+
+
+# --- Zakaz 'var' ---
+csharp_style_var_for_built_in_types = false
+csharp_style_var_when_type_is_apparent = false
+csharp_style_var_elsewhere = false
+dotnet_diagnostic.IDE0008.severity = error   # użyj typu zamiast 'var'
+dotnet_diagnostic.CA2007.severity = error
+
+# --- Klamry preferowane ---
+csharp_prefer_braces = true
+dotnet_diagnostic.IDE0011.severity = warning
+
+# --- Jawne modyfikatory (z wyj. interfejsów) ---
+dotnet_style_require_accessibility_modifiers = for_non_interface_members
+dotnet_diagnostic.IDE0040.severity = warning
+
+# --- Async nazewnictwo ---
+dotnet_naming_rule.async_methods_end_with_async.severity = error
+dotnet_naming_rule.async_methods_end_with_async.symbols  = async_methods
+dotnet_naming_rule.async_methods_end_with_async.style    = end_with_async
+dotnet_naming_symbols.async_methods.applicable_kinds = method
+dotnet_naming_symbols.async_methods.required_modifiers = async
+dotnet_naming_style.end_with_async.required_suffix = Async
+
+# --- Prywatne pola: _camelCase ---
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols  = private_fields
+dotnet_naming_rule.private_fields_underscore.style    = underscore_prefix
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_prefix.required_prefix = _
+
+# --- Protected pola: _camelCase (tak samo jak private) ---
+dotnet_naming_rule.protected_fields_underscore.severity = warning
+dotnet_naming_rule.protected_fields_underscore.symbols  = protected_fields
+dotnet_naming_rule.protected_fields_underscore.style    = underscore_prefix
+dotnet_naming_symbols.protected_fields.applicable_kinds = field
+dotnet_naming_symbols.protected_fields.applicable_accessibilities = protected, protected_internal
+# (używamy tego samego stylu underscore_prefix zdefiniowanego wyżej)
+
+# (opcjonalnie) public API: PascalCase
+dotnet_naming_rule.public_members_pascal.severity = warning
+dotnet_naming_rule.public_members_pascal.symbols  = public_members
+dotnet_naming_rule.public_members_pascal.style    = pascalcase
+dotnet_naming_symbols.public_members.applicable_accessibilities = public, protected, protected_internal
+dotnet_naming_symbols.public_members.applicable_kinds = property, method, field, event, delegate
+dotnet_naming_style.pascalcase.capitalization = pascal_case
+
+# Nullable Reference Types (C# 8+) – wyciszamy na 7.3
+dotnet_analyzer_diagnostic.category-NullableAnalysis.severity = suggestion
+dotnet_diagnostic.CS8618.severity = suggestion
+
+# Tylko to ma być twardym błędem:
+# "Annotation for nullable reference types ('?') used poza kontekstem #nullable / w 7.3"
+dotnet_diagnostic.CS8632.severity = error
+
+# Collection w nazwie typów – ignorujemy
+dotnet_diagnostic.CA1711.severity = suggestion
+
+# XML docs
+dotnet_diagnostic.CS1591.severity = suggestion
+
+# Nie zamieniamy publicznych API na konkretne typy
+dotnet_diagnostic.CA1859.severity = suggestion
+
+# W testach umozliwiamy nazwy zawierające '_'
+dotnet_diagnostic.CA1707.severity = none
+
+[thirdparty/**]
+dotnet_diagnostic.CA*.severity = none
+dotnet_diagnostic.IDE*.severity = none

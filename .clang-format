@@ -1,0 +1,2 @@
+# Disable clang-format
+DisableFormat: true

@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="../src/KSeFCli/KSeFCli.csproj" />
-  <Project Path="../thirdparty/ksef-client-csharp/KSeF.Client.Core/KSeF.Client.Core.csproj" />
-  <Project Path="../thirdparty/ksef-client-csharp/KSeF.Client/KSeF.Client.csproj" />
-</Solution>

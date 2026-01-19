@@ -3,17 +3,16 @@
 all: build
 
 build:
-	dotnet restore ksefcli.sln
-	dotnet build ksefcli.sln
+	dotnet build src/KSeFCli
 
 run: build
 	dotnet run --project src/KSeFCli --
 
 format:
-	dotnet format src/KSeFCli
+	dotnet format src/KSeFCli --include src/KSeFCli
 
 test:
-	dotnet format src/KSeFCli --verify-no-changes
+	dotnet format src/KSeFCli --include src/KSeFCli --verify-no-changes
 
 clean:
-	dotnet clean ksefcli.sln
+	dotnet clean src/KSeFCli
