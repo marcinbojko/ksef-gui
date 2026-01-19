@@ -47,19 +47,36 @@ namespace KSeFCli
     public class QueryMetadataSettings : GlobalSettings
     {
         [CommandOption("-s|--subject-type")]
-        [Description("Invoice subject type (e.g., Subject1, Subject2, Subject3)")]
+        [Description("""
+                Enum: "Subject1" "Subject2" "Subject3" "SubjectAuthorized"
+
+                Typ podmiotu, którego dotyczą kryteria filtrowania metadanych faktur. Określa kontekst, w jakim przeszukiwane są dane.
+                Wartość 	Opis
+                Subject1 	Podmiot 1 - sprzedawca
+                Subject2 	Podmiot 2 - nabywca
+                Subject3 	Podmiot 3
+                SubjectAuthorized 	Podmiot upoważniony
+                """)]
         public string SubjectType { get; set; } = null!;
 
         [CommandOption("--from")]
-        [Description("Start date for the query (yyyy-MM-dd)")]
+        [Description("Data początkowa zakresu w formacie ISO-8601 np. 2026-01-03T13:45:00+00:00.")]
         public DateTime From { get; set; }
 
         [CommandOption("--to")]
-        [Description("End date for the query (yyyy-MM-dd)")]
+        [Description("Data końcowa zakresu w formacie ISO-8601 np. 2026-01-03T13:45:00+00:00.")]
         public DateTime To { get; set; }
 
         [CommandOption("--date-type")]
-        [Description("Date type for the query (Issue, Invoicing, Acquisition)")]
+        [Description("""
+             Enum: "Issue" "Invoicing" "PermanentStorage"
+
+            Typ daty, według której ma być zastosowany zakres.
+            Wartość 	Opis
+            Issue 	Data wystawienia faktury.
+            Invoicing 	Data przyjęcia faktury w systemie KSeF (do dalszego przetwarzania).
+            PermanentStorage 	Data trwałego zapisu faktury w repozytorium systemu KSeF.
+            """)]
         [DefaultValue("Issue")]
         public string DateType { get; set; } = "Issue";
 
@@ -77,11 +94,11 @@ namespace KSeFCli
     public class ExportInvoicesSettings : GlobalSettings
     {
         [CommandOption("--from")]
-        [Description("Start date for the query (yyyy-MM-dd)")]
+        [Description("Data początkowa zakresu w formacie ISO-8601 np. 2026-01-03T13:45:00+00:00.")]
         public DateTime From { get; set; }
 
         [CommandOption("--to")]
-        [Description("End date for the query (yyyy-MM-dd)")]
+        [Description("Data końcowa zakresu w formacie ISO-8601 np. 2026-01-03T13:45:00+00:00.")]
         public DateTime To { get; set; }
 
         [CommandOption("--date-type")]
