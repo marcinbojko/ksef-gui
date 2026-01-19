@@ -4,3 +4,4 @@
 [submodule "thirdparty/ksef-client-csharp"]
 	path = thirdparty/ksef-client-csharp
 	url = https://github.com/CIRFMF/ksef-client-csharp
+

@@ -1,21 +1,20 @@
+<?xml version="1.0"?>
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.2" /> <!-- Added CommandLine package -->
-    <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
-    <PackageReference Include="System.CommandLine.NamingConventionBinder" Version="2.0.0-beta5.25306.1" />
-    <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client/KSeF.Client.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002" />
-    <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.Core/KSeF.Client.Core.csproj" NoWarn="CA1805" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.2"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.2"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="10.0.2"/>
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1"/>
+    <PackageReference Include="System.CommandLine.NamingConventionBinder" Version="2.0.0-beta5.25306.1"/>
+    <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client/KSeF.Client.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002"/>
+    <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.Core/KSeF.Client.Core.csproj" NoWarn="CA1805"/>
+    <PackageReference Include="CommandLineParser" Version="2.6.0" />
   </ItemGroup>
-
 </Project>

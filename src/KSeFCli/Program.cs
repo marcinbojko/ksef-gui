@@ -1,102 +1,70 @@
-using Spectre.Console;
-using Spectre.Console.Cli;
-using KSeFCli.Commands.Auth;
-using KSeFCli.Commands.Faktura;
-using KSeFCli.Config;
-using KSeFCli.Services;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using KSeF.Client.DI;
-using KSeF.Client.Core.Interfaces.Clients;
-using KSeF.Client.Clients; // For OnlineSessionClient, etc.
 using System;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.CommandLine;
 
-namespace KSeFCli
-{
-    public static class Program
-    {
-        public static async Task<int> Main(string[] args)
-        {
-            var appConfig = ConfigLoader.LoadConfig(args);
-            var serviceCollection = new ServiceCollection();
-            serviceCollection.AddSingleton(appConfig);
-            serviceCollection.AddSingleton<TokenStore>();
-            
-            // Add KSeF Client services
-            serviceCollection.AddKSeFClient(options =>
-            {
-                options.BaseUrl = appConfig.KsefApi.BaseUrl;
-                options.BaseQRUrl = appConfig.KsefApi.BaseUrl; // Assuming QR base URL is same as API base URL for now
-            });
-            serviceCollection.AddCryptographyClient(); // Required for signing operations
+using System;
+using System.Collections.Generic;
+using CommandLine;
 
-            // Register application services
-            serviceCollection.AddTransient<AuthService>();
-            serviceCollection.AddTransient<InvoiceService>(); // Add InvoiceService
+namespace KSeFCli {
+class Program {
+  class GlobalOptions {
+    [Option("token", Default = null, HelpText = "KSeF API token")]
+    public string Token { get; set; } =
+        Environment.GetEnvironmentVariable("KSEF_TOKEN") ??
+        throw new InvalidOperationException("KSEF_TOKEN not set");
 
-            var app = new CommandApp(new DependencyInjectionRegistrar(serviceCollection));
-            app.Configure(config =>
-            {
-                config.AddBranch("auth", auth =>
-                {
-                    auth.SetDescription("Manage KSeF authorization and tokens.");
-                    auth.AddCommand<TokenRefreshCommand>("token").WithDescription("Refresh authentication token.");
-                });
-                config.AddBranch("faktura", faktura =>
-                {
-                    faktura.SetDescription("Manage KSeF invoices (upload, download, search).");
-                    // Add wyslij and ls commands here later
-                });
-            });
-            return await app.RunAsync(args);
-        }
-    }
+    [Option("base-url", Default = null, HelpText = "KSeF base URL")]
+    public string BaseUrl { get; set; } =
+        Environment.GetEnvironmentVariable("KSEF_URL") ??
+        throw new InvalidOperationException("KSEF_URL not set");
+  }
 
-    // Implementing Spectre.Console.Cli's ITypeRegistrar for Microsoft.Extensions.DependencyInjection
-    public sealed class DependencyInjectionRegistrar : ITypeRegistrar
-    {
-        private readonly IServiceCollection _serviceCollection;
+  [Verb("get-invoice", HelpText = "Get a single invoice by KSeF number")]
+  class GetInvoiceOptions : GlobalOptions {
+    [Option('k', "ksef-number", Required = true,
+            HelpText = "KSeF invoice number")]
+    public string KsefNumber { get; set; } = null!;
+  }
 
-        public DependencyInjectionRegistrar(IServiceCollection serviceCollection)
-        {
-            _serviceCollection = serviceCollection;
-        }
+  [Verb("query-metadata", HelpText = "Query invoice metadata")]
+  class QueryMetadataOptions : GlobalOptions {
+    [Option('s', "subject-type", Required = true,
+            HelpText = "Invoice subject type")]
+    public string SubjectType { get; set; } = null!;
+  }
 
-        public ITypeResolver Build()
-        {
-            return new DependencyInjectionResolver(_serviceCollection.BuildServiceProvider());
-        }
+  static int Main(string[] args) {
+    return Parser.Default
+        .ParseArguments<GetInvoiceOptions, QueryMetadataOptions>(args)
+        .MapResult((GetInvoiceOptions opts) => RunGetInvoice(opts),
+                   (QueryMetadataOptions opts) => RunQueryMetadata(opts),
+                   errs => 1);
+  }
 
-        public void Register(Type service, Type implementation)
-        {
-            _serviceCollection.AddTransient(service, implementation);
-        }
+  static int RunGetInvoice(GetInvoiceOptions opts) {
+    Console.WriteLine($"Using token: {opts.Token}");
+    Console.WriteLine($"Using base URL: {opts.BaseUrl}");
+    Console.WriteLine($"Fetching invoice: {opts.KsefNumber}");
 
-        public void RegisterInstance(Type service, object implementation)
-        {
-            _serviceCollection.AddSingleton(service, implementation);
-        }
+    // Call KSeF.Client here, e.g.
+    // var client = new KSeFClient(opts.BaseUrl);
+    // var invoice = client.GetInvoiceAsync(opts.KsefNumber, opts.Token);
 
-        public void RegisterLazy(Type service, Func<object> factory)
-        {
-            _serviceCollection.AddSingleton(service, (provider) => factory());
-        }
-    }
+    return 0;
+  }
 
-    // Implementing Spectre.Console.Cli's ITypeResolver for Microsoft.Extensions.DependencyInjection
-    public sealed class DependencyInjectionResolver : ITypeResolver
-    {
-        private readonly IServiceProvider _serviceProvider;
+  static int RunQueryMetadata(QueryMetadataOptions opts) {
+    Console.WriteLine($"Using token: {opts.Token}");
+    Console.WriteLine($"Using base URL: {opts.BaseUrl}");
+    Console.WriteLine($"Querying metadata for subject: {opts.SubjectType}");
 
-        public DependencyInjectionResolver(IServiceProvider serviceProvider)
-        {
-            _serviceProvider = serviceProvider;
-        }
+    // Call KSeF.Client here for metadata query
 
-        public object? Resolve(Type? type)
-        {
-            if (type == null) return null;
-            return _serviceProvider.GetService(type);
-        }
-    }
+    return 0;
+  }
+}
 }
