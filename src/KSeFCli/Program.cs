@@ -62,7 +62,11 @@ namespace KSeFCli
         public DateTime To { get; set; }
 
         [CommandOption("--date-type")]
-        [Description("Date type for the query (Issue, Invoicing, Acquisition)")]
+        [Description("Typ daty, według której ma być zastosowany zakres.\n" +
+                     "Dostępne wartości:\n" +
+                     "  \"Issue\" - Data wystawienia faktury.\n" +
+                     "  \"Invoicing\" - Data przyjęcia faktury w systemie KSeF (do dalszego przetwarzania).\n" +
+                     "  \"PermanentStorage\" - Data trwałego zapisu faktury w repozytorium systemu KSeF.")]
         [DefaultValue("Issue")]
         public string DateType { get; set; } = "Issue";
 
@@ -88,7 +92,11 @@ namespace KSeFCli
         public DateTime To { get; set; }
 
         [CommandOption("--date-type")]
-        [Description("Date type for the query (Issue, Invoicing, Acquisition)")]
+        [Description("Typ daty, według której ma być zastosowany zakres.\n" +
+                     "Dostępne wartości:\n" +
+                     "  \"Issue\" - Data wystawienia faktury.\n" +
+                     "  \"Invoicing\" - Data przyjęcia faktury w systemie KSeF (do dalszego przetwarzania).\n" +
+                     "  \"PermanentStorage\" - Data trwałego zapisu faktury w repozytorium systemu KSeF.")]
         [DefaultValue("Issue")]
         public string DateType { get; set; } = "Issue";
 
