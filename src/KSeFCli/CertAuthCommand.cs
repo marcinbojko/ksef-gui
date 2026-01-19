@@ -25,10 +25,6 @@ public class CertAuthCommand : AsyncCommand<CertAuthCommand.Settings> {
         [Description("Password for the certificate file")]
         public string? CertificatePassword { get; set; }
 
-        [CommandOption("--nip")]
-        [Description("NIP of the owner for authentication context")]
-        public string Nip { get; set; } = null!;
-
         [CommandOption("--subject-identifier-type")]
         [Description("Type of subject identifier (e.g., CertificateSubject, CertificateFingerprint)")]
         public AuthenticationTokenSubjectIdentifierTypeEnum SubjectIdentifierType { get; set; }

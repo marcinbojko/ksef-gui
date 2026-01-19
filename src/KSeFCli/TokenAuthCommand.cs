@@ -10,20 +10,21 @@ using KSeF.Client.Clients;
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Http;
 using Spectre.Console.Cli;
-
+using System.Diagnostics;
 
 
 namespace KSeFCli;
 
 public class TokenAuthCommand : AsyncCommand<TokenAuthCommand.Settings> {
     public class Settings : GlobalSettings {
-        [CommandOption("--nip")]
-        public string Nip { get; set; } = null!;
     }
 
     public override async Task<int> ExecuteAsync(CommandContext context, Settings settings) {
         IKSeFClient ksefClient = KSeFClientFactory.CreateKSeFClient(settings, false);
 
+        Console.WriteLine("1. Getting challenge");
+        AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
+        long timestampMs = challenge.Timestamp.ToUnixTimeMilliseconds();
 
         string ksefToken = settings.Token;
         Console.WriteLine("1. Przygotowanie i szyfrowanie tokena");
@@ -34,15 +35,12 @@ public class TokenAuthCommand : AsyncCommand<TokenAuthCommand.Settings> {
         CryptographyClient a = new CryptographyClient(r);
         DefaultCertificateFetcher i = new DefaultCertificateFetcher(a);
         CryptographyService crypto = new CryptographyService(i);
-        await crypto.WarmupAsync();
+        await crypto.WarmupAsync().ConfigureAwait(false);
         byte[] encrypted = crypto.EncryptKsefTokenWithRSAUsingPublicKey(tokenBytes);
         string encryptedTokenB64 = Convert.ToBase64String(encrypted);
 
-        Console.WriteLine("1. Getting challenge");
-        AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
-        long timestampMs = challenge.Timestamp.ToUnixTimeMilliseconds();
-
         Console.WriteLine("2. Wysłanie żądania uwierzytelnienia tokenem KSeF");
+        Trace.Assert(!string.IsNullOrEmpty(settings.Nip), "--nip jest empty");
         AuthenticationKsefTokenRequest request = new AuthenticationKsefTokenRequest {
             Challenge = challenge.Challenge,
             ContextIdentifier = new AuthenticationTokenContextIdentifier {
