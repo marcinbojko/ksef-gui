@@ -32,7 +32,7 @@ namespace KSeFCli
         [Description("KSeF API token")]
         public string Token { get; set; } = Environment.GetEnvironmentVariable("KSEF_TOKEN") ?? string.Empty;
 
-        [CommandOption("--base-url", EnvVar = "KSEF_URL")]
+        [CommandOption("--base-url")]
         [Description("KSeF base URL")]
         [DefaultValue("https://api-test.ksef.mf.gov.pl/v2")]
         public string BaseUrl { get; set; } = string.Empty;
@@ -265,7 +265,15 @@ namespace KSeFCli
                     .WithDescription("Checks the status of an asynchronous export operation");
             });
 
-            return app.Run(args);
+            try
+            {
+                return app.Run(args);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.ToString());
+                return 1;
+            }
         }
     }
 }
