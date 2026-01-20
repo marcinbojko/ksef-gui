@@ -26,7 +26,6 @@ build:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    # Build the final image and push it
     - docker build -t $IMAGE_TAG -t $IMAGE_LATEST_TAG .
     - docker push $IMAGE_TAG
     - docker push $IMAGE_LATEST_TAG
@@ -45,16 +44,22 @@ build:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-release:
-  stage: release
-  image: docker:latest
-  services:
-    - docker:dind
+build-rootless:
+  image:
+    name: moby/buildkit:rootless
+    entrypoint: [""]
+  stage: build
+  variables:
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - mkdir -p ~/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > ~/.docker/config.json
   script:
-    - docker pull $IMAGE_TAG
-    - docker tag $IMAGE_TAG $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-  rules:
-    - if: $CI_COMMIT_TAG
+    - |-
+      buildctl-daemonless.sh build \
+        --frontend dockerfile.v0 \
+        --local context=. \
+        --local dockerfile=. \
+        --output type=image,name=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA,push=true
+
+release:
