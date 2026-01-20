@@ -12,7 +12,7 @@ namespace KSeFCli;
 
 internal class Program
 {
-    public static int Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
         IServiceCollection services = new ServiceCollection();
 
@@ -21,10 +21,15 @@ internal class Program
             options.BaseUrl = KsefEnvironmentsUris.TEST;
         });
 
-        // UWAGA! w testach nie używamy AddCryptographyClient tylko rejestrujemy ręcznie, bo on uruchamia HostedService w tle
         services.AddSingleton<ICryptographyClient, CryptographyClient>();
         services.AddSingleton<ICertificateFetcher, DefaultCertificateFetcher>();
-        services.AddSingleton<ICryptographyService, CryptographyService>();
+        services.AddSingleton<ICryptographyService>(sp =>
+        {
+            ICertificateFetcher fetcher = sp.GetRequiredService<ICertificateFetcher>();
+            var service = new CryptographyService(fetcher);
+            service.WarmupAsync().GetAwaiter().GetResult();
+            return service;
+        });
 
         ITypeRegistrar registrar = new DependencyInjectionRegistrar(services);
         CommandApp app = new CommandApp(registrar);
@@ -39,6 +44,6 @@ internal class Program
             config.AddCommand<TokenRefreshCommand>("TokenRefresh");
             config.AddCommand<CertAuthCommand>("CertAuth");
         });
-        return app.Run(args);
+        return await app.RunAsync(args).ConfigureAwait(false);
     }
 }
