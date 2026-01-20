@@ -70,3 +70,5 @@ Desktop.ini
 
 # Prompt file
 prompt.md.env
+
+.env
