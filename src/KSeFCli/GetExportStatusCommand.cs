@@ -22,8 +22,7 @@ public class GetExportStatusCommand : AsyncCommand<GetExportStatusCommand.GetExp
                 settings.Token).ConfigureAwait(false);
 
             Console.WriteLine(JsonSerializer.Serialize(new { Status = "Success", ExportStatus = exportStatus }));
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             Console.Error.WriteLine(JsonSerializer.Serialize(new { Status = "Error", Message = ex.Message }));
             return 1;
         }

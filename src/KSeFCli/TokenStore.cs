@@ -52,8 +52,7 @@ public class TokenStore {
                 fs.ReadExactly(data);
                 tokens = JsonSerializer.Deserialize<Dictionary<Key, Data>>(data)
                          ?? new Dictionary<Key, Data>();
-            }
-            else {
+            } else {
                 tokens = new Dictionary<Key, Data>();
             }
 
@@ -70,26 +69,20 @@ public class TokenStore {
 
     }
 
-    public bool RemoveToken(string nip, string url)
-    {
+    public bool RemoveToken(string nip, string url) {
         // wyłączny dostęp do pliku przy zapisie, aby chronić przed współbieżnym dostępem.
-        using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
-        {
+        using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {
             Dictionary<Key, Data> tokens;
-            if (fs.Length > 0)
-            {
+            if (fs.Length > 0) {
                 byte[] data = new byte[fs.Length];
                 fs.ReadExactly(data);
                 tokens = JsonSerializer.Deserialize<Dictionary<Key, Data>>(data)
                          ?? new Dictionary<Key, Data>();
-            }
-            else
-            {
+            } else {
                 return false; // File is empty, nothing to remove
             }
 
-            if (tokens.Remove(new Key(nip, url)))
-            {
+            if (tokens.Remove(new Key(nip, url))) {
                 // Zapisz zmieniony stan
                 fs.Seek(0, SeekOrigin.Begin);
                 fs.SetLength(0);

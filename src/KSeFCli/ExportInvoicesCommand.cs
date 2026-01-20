@@ -68,8 +68,7 @@ public class ExportInvoicesCommand : AsyncCommand<ExportInvoicesCommand.ExportIn
         X509Certificate2 certificate;
         try {
             certificate = X509CertificateLoader.LoadPkcs12FromFile(settings.CertificatePath, settings.CertificatePassword);
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             Console.Error.WriteLine(JsonSerializer.Serialize(new { Status = "Error", Message = $"Failed to load certificate: {ex.Message}" }));
             return 1;
         }
