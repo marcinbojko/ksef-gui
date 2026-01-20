@@ -23,7 +23,7 @@ run: build
 	dotnet run --project $(S) --
 test: format build
 	dotnet run --project $(S) -- --help
-	. .git/.env && ./cli TokenAuth | jq . >/dev/null
+	./cli -c .git/ksefcli.yaml TokenAuth | jq . >/dev/null
 	echo SUCCESS
 clean:
 	dotnet clean $(S)
