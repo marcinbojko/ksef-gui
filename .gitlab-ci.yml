@@ -1,5 +1,8 @@
 ---
 
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
 workflow:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
