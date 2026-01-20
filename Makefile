@@ -11,9 +11,8 @@ run: build
 format:
 	dotnet format src/KSeFCli
 
-test: build
+test: format build
 	dotnet run --project src/KSeFCli -- --help
-	dotnet format src/KSeFCli --verify-no-changes
 
 clean:
 	dotnet clean src/KSeFCli
