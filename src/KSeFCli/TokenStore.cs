@@ -8,7 +8,7 @@ public class TokenStore
 {
     public class Data : AuthenticationOperationStatusResponse;
 
-    public record Key(string Nip, string Url);
+    public record Key(string Nazwa, string Nip, string Environment);
 
     private readonly string _path;
 
@@ -26,7 +26,7 @@ public class TokenStore
         return new TokenStore(defaultPath);
     }
 
-    public Data? GetToken(string nip, string url)
+    public Data? GetToken(Key key)
     {
         if (!File.Exists(_path))
         {
@@ -39,11 +39,11 @@ public class TokenStore
 
         Dictionary<Key, Data> tokens = JsonSerializer.Deserialize<Dictionary<Key, Data>>(data)
                     ?? new Dictionary<Key, Data>();
-        tokens.TryGetValue(new Key(nip, url), out Data? token);
+        tokens.TryGetValue(key, out Data? token);
         return token;
     }
 
-    public void SetToken(string nip, string url, Data token)
+    public void SetToken(Key key, Data token)
     {
         // wyłączny dostęp do pliku przy zapisie, aby chronić przed współbieżnym dostępem.
         using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
@@ -63,7 +63,7 @@ public class TokenStore
             }
 
             // modyfikacja
-            tokens[new Key(nip, url)] = token;
+            tokens[key] = token;
 
             // zapis
             fs.Seek(0, SeekOrigin.Begin);
@@ -75,7 +75,7 @@ public class TokenStore
 
     }
 
-    public bool RemoveToken(string nip, string url)
+    public bool RemoveToken(Key key)
     {
         // wyłączny dostęp do pliku przy zapisie, aby chronić przed współbieżnym dostępem.
         using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
@@ -93,7 +93,7 @@ public class TokenStore
                 return false; // File is empty, nothing to remove
             }
 
-            if (tokens.Remove(new Key(nip, url)))
+            if (tokens.Remove(key))
             {
                 // Zapisz zmieniony stan
                 fs.Seek(0, SeekOrigin.Begin);

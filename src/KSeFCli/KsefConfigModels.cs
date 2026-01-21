@@ -21,7 +21,7 @@ public sealed class CertificateConfig
 {
     public string Private_Key { get; set; } = null!;
     public string Certificate { get; set; } = null!;
-    public string Password_Env { get; set; } = null!;
+    public string Password { get; set; } = null!;
 }
 
 public enum AuthMethod

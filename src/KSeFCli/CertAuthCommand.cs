@@ -34,6 +34,12 @@ public class CertAuthCommand : GlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
+        var config = Config();
+        if (config.AuthMethod != AuthMethod.Xades)
+        {
+            throw new InvalidOperationException("This command requires certificate authentication.");
+        }
+
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         ICryptographyService cryptoService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
@@ -41,7 +47,7 @@ public class CertAuthCommand : GlobalCommand
         ILogger<Program> logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
 
-        X509Certificate2 certificate = X509CertificateLoader.LoadPkcs12FromFile(CertificatePath, CertificatePassword);
+        X509Certificate2 certificate = X509CertificateLoader.LoadPkcs12FromFile(config.Certificate!.Certificate, config.Certificate!.Password);
 
         // 1. Get Auth Challenge
         Console.WriteLine("[2] Pobieranie wyzwania (challenge) z KSeF...");
@@ -52,7 +58,7 @@ public class CertAuthCommand : GlobalCommand
         AuthenticationTokenRequest authTokenRequest = AuthTokenRequestBuilder
             .Create()
             .WithChallenge(challengeResponse.Challenge)
-            .WithContext(AuthenticationTokenContextIdentifierType.Nip, Nip)
+            .WithContext(AuthenticationTokenContextIdentifierType.Nip, config.Nip)
             .WithIdentifierType(SubjectIdentifierType)
             .Build();
         // 4) Serializacja do XML

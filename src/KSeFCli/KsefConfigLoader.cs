@@ -79,10 +79,9 @@ public static class KsefConfigLoader
                 throw new FileNotFoundException($"Certificate not found: {profile.Certificate.Certificate}");
             }
 
-            if (string.IsNullOrEmpty(
-                Environment.GetEnvironmentVariable(profile.Certificate.Password_Env)))
+            if (string.IsNullOrEmpty(profile.Certificate.Password))
             {
-                throw new InvalidOperationException($"Certificate password ENV not set: {profile.Certificate.Password_Env}");
+                throw new InvalidOperationException($"Certificate password ENV not set: {profile.Certificate.Password}");
             }
         }
     }

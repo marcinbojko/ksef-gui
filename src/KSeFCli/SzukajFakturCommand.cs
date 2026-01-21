@@ -30,6 +30,7 @@ public class SzukajFakturCommand : GlobalCommand
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
 
     {
+        var config = Config();
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         SzukajFakturCommand settings = this;
@@ -57,7 +58,7 @@ public class SzukajFakturCommand : GlobalCommand
         };
         PagedInvoiceResponse pagedInvoicesResponse = await ksefClient.QueryInvoiceMetadataAsync(
             invoiceQueryFilters,
-            settings.Token,
+            config.Token,
             pageOffset: settings.PageOffset,
             pageSize: settings.PageSize,
             cancellationToken: CancellationToken.None).ConfigureAwait(false);

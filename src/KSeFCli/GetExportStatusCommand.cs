@@ -14,10 +14,11 @@ public class GetExportStatusCommand : GlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
+        var config = Config();
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
-        InvoiceExportStatusResponse exportStatus = await ksefClient.GetInvoiceExportStatusAsync(ReferenceNumber, Token, cancellationToken).ConfigureAwait(false);
+        InvoiceExportStatusResponse exportStatus = await ksefClient.GetInvoiceExportStatusAsync(ReferenceNumber, config.Token, cancellationToken).ConfigureAwait(false);
         Console.WriteLine(JsonSerializer.Serialize(exportStatus));
         return 0;
     }

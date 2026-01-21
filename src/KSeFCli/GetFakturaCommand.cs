@@ -13,9 +13,10 @@ public class GetFakturaCommand : GlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
+        var config = Config();
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        string invoice = await ksefClient.GetInvoiceAsync(KsefNumber, Token, cancellationToken).ConfigureAwait(false);
+        string invoice = await ksefClient.GetInvoiceAsync(KsefNumber, config.Token, cancellationToken).ConfigureAwait(false);
         Console.WriteLine(JsonSerializer.Serialize(new { Invoice = invoice }));
         return 0;
     }

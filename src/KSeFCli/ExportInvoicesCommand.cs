@@ -25,14 +25,9 @@ public class ExportInvoicesCommand : GlobalCommand
     [Option('s', "subject-type", Required = true, HelpText = "Invoice subject type")]
     public string SubjectType { get; set; }
 
-    [Option("certificate-path", Required = true, HelpText = "Path to the certificate file (.pfx)")]
-    public string CertificatePath { get; set; }
-
-    [Option("certificate-password", HelpText = "Password for the certificate file")]
-    public string CertificatePassword { get; set; }
-
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
+        var config = Config();
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
@@ -49,8 +44,6 @@ public class ExportInvoicesCommand : GlobalCommand
             Console.Error.WriteLine($"Invalid DateType: {DateType}");
             return 1;
         }
-
-        X509Certificate2 certificate = X509CertificateLoader.LoadPkcs12FromFile(CertificatePath, CertificatePassword);
 
         EncryptionData encryptionData = cryptographyService.GetEncryptionData();
 
@@ -73,7 +66,7 @@ public class ExportInvoicesCommand : GlobalCommand
 
         OperationResponse exportInvoicesResponse = await ksefClient.ExportInvoicesAsync(
             invoiceExportRequest,
-            Token,
+            config.Token,
             cancellationToken).ConfigureAwait(false);
 
         Console.WriteLine(JsonSerializer.Serialize(new { ReferenceNumber = exportInvoicesResponse.ReferenceNumber }));

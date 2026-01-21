@@ -15,6 +15,10 @@ public class TokenAuthCommand : GlobalCommand
 {
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
+        var config = Config();
+        if (config.AuthMethod != AuthMethod.KsefToken)
+            throw new InvalidOperationException("This command requires token authentication.");
+
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
@@ -23,7 +27,7 @@ public class TokenAuthCommand : GlobalCommand
         logger.LogInformation("1. Getting challenge");
         AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
         long timestampMs = challenge.Timestamp.ToUnixTimeMilliseconds();
-        string ksefToken = Token;
+        string ksefToken = config.Token ?? throw new InvalidOperationException("KSeF token is missing");
         logger.LogInformation("1. Przygotowanie i szyfrowanie tokena");
         // Przygotuj "token|timestamp" i zaszyfruj RSA-OAEP SHA-256 zgodnie z wymaganiem API
         string tokenWithTimestamp = $"{ksefToken}|{timestampMs}";
@@ -31,14 +35,14 @@ public class TokenAuthCommand : GlobalCommand
         byte[] encrypted = cryptographyService.EncryptKsefTokenWithRSAUsingPublicKey(tokenBytes);
         string encryptedTokenB64 = Convert.ToBase64String(encrypted);
         logger.LogInformation("2. Wysłanie żądania uwierzytelnienia tokenem KSeF");
-        Trace.Assert(!string.IsNullOrEmpty(Nip), "--nip jest empty");
+        Trace.Assert(!string.IsNullOrEmpty(config.Nip), "--nip jest empty");
         AuthenticationKsefTokenRequest request = new AuthenticationKsefTokenRequest
         {
             Challenge = challenge.Challenge,
             ContextIdentifier = new AuthenticationTokenContextIdentifier
             {
                 Type = AuthenticationTokenContextIdentifierType.Nip,
-                Value = Nip
+                Value = config.Nip
             },
             EncryptedToken = encryptedTokenB64,
             AuthorizationPolicy = null
