@@ -3,6 +3,11 @@
 include:
   - template: Jobs/Secret-Detection.gitlab-ci.yml
 
+default:
+  interruptible: true
+  timeout: 5min
+  tags: [nomad]
+
 workflow:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
