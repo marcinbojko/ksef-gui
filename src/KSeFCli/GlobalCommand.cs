@@ -1,6 +1,7 @@
 using CommandLine;
 using KSeF.Client.Api.Services;
 using KSeF.Client.Api.Services.Internal;
+using KSeF.Client.ClientFactory;
 using KSeF.Client.Clients;
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Interfaces.Services;
@@ -10,23 +11,32 @@ using Microsoft.Extensions.Logging;
 
 namespace KSeFCli;
 
-public class GlobalCommand
+public abstract class GlobalCommand
 {
-    [Option('t', "token", HelpText = "Session token")]
-    public string Token { get; set; } = Environment.GetEnvironmentVariable("KSEF_TOKEN") ?? string.Empty;
+    [Option('c', "config", HelpText = "Path to config file", Required = true)]
+    public string ConfigFile { get; set; } = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".config", "ksefcli", "ksefcli.yaml");
 
-    [Option('s', "server", HelpText = "KSeF server address")]
-    public string Server { get; set; } = Environment.GetEnvironmentVariable("KSEF_URL") ?? string.Empty;
+    [Option('a', "active", HelpText = "Active profile name")]
+    public string ActiveProfile { get; set; } = "";
 
-    [Option('n', "nip", HelpText = "Tax Identification Number (NIP)")]
-    public string Nip { get; set; } = Environment.GetEnvironmentVariable("KSEF_NIP") ?? string.Empty;
+    private readonly Lazy<ProfileConfig> _cachedProfile;
 
-    public virtual Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public GlobalCommand()
     {
-        return Task.FromResult(0);
+        _cachedProfile = new Lazy<ProfileConfig>(() =>
+        {
+            var config = KsefConfigLoader.Load(ConfigFile, ActiveProfile);
+            return config.Profiles[config.ActiveProfile];
+        });
     }
+
+    public abstract Task<int> ExecuteAsync(CancellationToken cancellationToken);
+
+    public ProfileConfig Config() => _cachedProfile.Value;
+
     public IServiceScope GetScope()
     {
+        ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();
         services.AddLogging(builder =>
         {
@@ -43,10 +53,28 @@ public class GlobalCommand
                        options.TimestampFormat = "HH:mm:ss ";
                    });
         });
+
+        KSeF.Client.ClientFactory.Environment environment = config.Environment.ToUpper() switch
+        {
+            "PROD" => KSeF.Client.ClientFactory.Environment.Prod,
+            "DEMO" => KSeF.Client.ClientFactory.Environment.Demo,
+            "TEST" => KSeF.Client.ClientFactory.Environment.Test,
+            _ => throw new Exception($"Invalid environment in profile: {config.Environment}")
+        };
+
+        services.Configure<ProfileConfig>(options =>
+        {
+            options.Nip = config.Nip;
+            options.Token = config.Token;
+            options.Environment = config.Environment;
+            options.Certificate = config.Certificate;
+        });
+
         services.AddKSeFClient(options =>
         {
-            options.BaseUrl = Server ?? KsefEnvironmentsUris.TEST;
+            options.BaseUrl = KsefEnvironmentConfig.BaseUrls[environment];
         });
+
         services.AddSingleton<ICryptographyClient, CryptographyClient>();
         services.AddSingleton<ICertificateFetcher, DefaultCertificateFetcher>();
         services.AddSingleton<ICryptographyService, CryptographyService>();

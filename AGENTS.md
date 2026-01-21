@@ -20,7 +20,8 @@ W thirdparty/ksef-client-csharp jest zależność.
 
 ## Best Practices C# / .NET
 
-Nie używaj var
+Nie używam `var`. Preferuję typy.
+
 Używaj przestrzeni nazw zadeklarowanych w pliku (`file-scoped namespaces`) zamiast w blokach.
 
 ## Parser Argumentów CLI: CommandLineParser

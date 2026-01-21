@@ -1,16 +1,12 @@
 using System.Text;
 using System.Text.Json;
+using KSeF.Client.Core.Models.Authorization;
 
 namespace KSeFCli;
 
 public class TokenStore
 {
-    public record Data(
-        string AccessToken,
-        DateTime AccessTokenValidUntil,
-        string RefreshToken,
-        DateTime RefreshTokenValidUntil
-    );
+    public class Data : AuthenticationOperationStatusResponse;
 
     public record Key(string Nip, string Url);
 
