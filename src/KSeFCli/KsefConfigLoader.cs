@@ -5,7 +5,7 @@ namespace KSeFCli;
 
 public static class KsefConfigLoader
 {
-    public static KsefConfig Load(string configPath, string? activeProfileNameOverride)
+    public static KsefCliConfig Load(string configPath, string? activeProfileNameOverride)
     {
         if (!File.Exists(configPath))
         {
@@ -17,7 +17,7 @@ public static class KsefConfigLoader
             .IgnoreUnmatchedProperties()
             .Build();
 
-        KsefConfig config = deserializer.Deserialize<KsefConfig>(
+        KsefCliConfig config = deserializer.Deserialize<KsefCliConfig>(
             File.ReadAllText(configPath)
         );
 

@@ -1,6 +1,8 @@
+using KSeF.Client.Core.Models.Authorization;
+
 namespace KSeFCli;
 
-public sealed class KsefConfig
+public sealed class KsefCliConfig
 {
     public string ActiveProfile { get; set; } = null!;
     public Dictionary<string, ProfileConfig> Profiles { get; set; } = new();
@@ -22,6 +24,7 @@ public sealed class CertificateConfig
     public string Private_Key { get; set; } = null!;
     public string Certificate { get; set; } = null!;
     public string Password { get; set; } = null!;
+    public AuthenticationTokenSubjectIdentifierTypeEnum SubjectIdentifierType => AuthenticationTokenSubjectIdentifierTypeEnum.CertificateSubject;
 }
 
 public enum AuthMethod
