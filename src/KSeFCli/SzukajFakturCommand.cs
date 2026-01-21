@@ -1,7 +1,10 @@
 using System.Text.Json;
+
 using CommandLine;
+
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Models.Invoices;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KSeFCli;
@@ -9,7 +12,7 @@ namespace KSeFCli;
 [Verb("SzukajFaktur", HelpText = "Query invoice metadata")]
 public class SzukajFakturCommand : GlobalCommand
 {
-    [Option('s', "subject-type", Required = true, HelpText = "Subject type (Subject1, Subject2, etc.)")]
+    [Option('s', "subject-type", Default = "Subject1", HelpText = "Subject type (Subject1, Subject2, etc.)")]
     public string SubjectType { get; set; }
 
     [Option("from", Required = true, HelpText = "Start date in ISO-8601 format")]
@@ -41,7 +44,6 @@ public class SzukajFakturCommand : GlobalCommand
         }
         if (!Enum.TryParse(settings.DateType, true, out DateType dateType))
         {
-
             Console.Error.WriteLine($"Invalid DateType: {settings.DateType}");
             return 1;
         }
@@ -55,12 +57,14 @@ public class SzukajFakturCommand : GlobalCommand
                 DateType = dateType
             }
         };
+
+        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
         PagedInvoiceResponse pagedInvoicesResponse = await ksefClient.QueryInvoiceMetadataAsync(
             invoiceQueryFilters,
-            await GetAccessToken(cancellationToken).ConfigureAwait(false),
+            accessToken,
             pageOffset: settings.PageOffset,
             pageSize: settings.PageSize,
-            cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         Console.WriteLine(JsonSerializer.Serialize(pagedInvoicesResponse));
         return 0;
     }
