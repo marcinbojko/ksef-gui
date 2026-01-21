@@ -36,6 +36,9 @@ test-format:
 
 ###############################################################################
 
-static-from-docker:
-	docker build .
-	
+GITLAB_BUILD_CMD := $(shell sed -n 's/.*- \(dotnet publish\)/\1/p' .gitlab-ci.yml)
+build-static:
+	$(GITLAB_BUILD_CMD)
+docker-build-static:
+	docker run -ti --rm -u "$(shell id -u):$(shell id -g)" -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+		mcr.microsoft.com/dotnet/sdk:10.0 $(GITLAB_BUILD_CMD)
