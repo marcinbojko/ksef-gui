@@ -13,19 +13,19 @@ namespace KSeFCli;
 public class GlobalCommand
 {
     [Option('t', "token", HelpText = "Session token")]
-    public string Token { get; set; }
+    public string Token { get; set; } = Environment.GetEnvironmentVariable("KSEF_TOKEN") ?? string.Empty;
 
     [Option('s', "server", HelpText = "KSeF server address")]
-    public string Server { get; set; }
+    public string Server { get; set; } = Environment.GetEnvironmentVariable("KSEF_URL") ?? string.Empty;
 
     [Option('n', "nip", HelpText = "Tax Identification Number (NIP)")]
-    public string Nip { get; set; }
+    public string Nip { get; set; } = Environment.GetEnvironmentVariable("KSEF_NIP") ?? string.Empty;
 
     public virtual Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult(0);
     }
-    public ServiceProvider GetServiceProvider()
+    public IServiceScope GetScope()
     {
         IServiceCollection services = new ServiceCollection();
         services.AddLogging(builder =>
@@ -49,13 +49,19 @@ public class GlobalCommand
         });
         services.AddSingleton<ICryptographyClient, CryptographyClient>();
         services.AddSingleton<ICertificateFetcher, DefaultCertificateFetcher>();
-        services.AddSingleton<ICryptographyService>(sp =>
-        {
-            ICertificateFetcher fetcher = sp.GetRequiredService<ICertificateFetcher>();
-            CryptographyService service = new CryptographyService(fetcher);
-            service.WarmupAsync().GetAwaiter().GetResult();
-            return service;
-        });
-        return services.BuildServiceProvider();
+        services.AddSingleton<ICryptographyService, CryptographyService>();
+        // Rejestracja usługi hostowanej (Hosted Service) jako singleton na potrzeby testów
+        services.AddSingleton<CryptographyWarmupHostedService>();
+
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        IServiceScope scope = provider.CreateScope();
+
+        // opcjonalne: inicjalizacja lub inne czynności startowe
+        // Uruchomienie usługi hostowanej w trybie blokującym (domyślnym) na potrzeby testów
+        scope.ServiceProvider.GetRequiredService<CryptographyWarmupHostedService>()
+                   .StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        return scope;
     }
 }

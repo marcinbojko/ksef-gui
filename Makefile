@@ -1,4 +1,8 @@
 .PHONY: all build clean run
+null  :=
+space := $(null) #
+comma := ,
+join_comma = $(subst $(space),$(comma),$(1))
 
 all: build
 
@@ -10,7 +14,7 @@ $(B)/build: $(SOURCES)
 	dotnet build $(S)
 	@mkdir -p $(dir $@) && touch $@
 $(B)/format: $(SOURCES)
-	dotnet format $(S)
+	dotnet format $(S) -v d --include $(call join_comma,$(SOURCES))
 	@mkdir -p $(dir $@) && touch $@
 ###############################################################################
 

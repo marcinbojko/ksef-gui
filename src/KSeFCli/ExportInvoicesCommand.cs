@@ -1,15 +1,12 @@
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using CommandLine;
-using KSeF.Client.Clients;
+using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Interfaces.Services;
 using KSeF.Client.Core.Models;
 using KSeF.Client.Core.Models.Invoices;
 using KSeF.Client.Core.Models.Sessions;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.ComponentModel;
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace KSeFCli;
 
@@ -21,7 +18,7 @@ public class ExportInvoicesCommand : GlobalCommand
 
     [Option("to", Required = true, HelpText = "End date in ISO-8601 format")]
     public DateTime To { get; set; }
-    
+
     [Option("date-type", Default = "Issue", HelpText = "Date type (Issue, Invoicing, PermanentStorage)")]
     public string DateType { get; set; }
 
@@ -36,10 +33,9 @@ public class ExportInvoicesCommand : GlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var serviceProvider = GetServiceProvider();
-        var ksefClient = serviceProvider.GetRequiredService<KSeFClient>();
-        var cryptographyService = serviceProvider.GetRequiredService<ICryptographyService>();
-
+        using IServiceScope scope = GetScope();
+        IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+        ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
 
 
         if (!Enum.TryParse(SubjectType, true, out InvoiceSubjectType subjectType))

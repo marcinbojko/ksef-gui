@@ -1,8 +1,7 @@
-using CommandLine;
-using KSeF.Client.Clients;
-using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
-using System.Threading.Tasks;
+using CommandLine;
+using KSeF.Client.Core.Interfaces.Clients;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace KSeFCli;
 
@@ -14,10 +13,8 @@ public class GetFakturaCommand : GlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var serviceProvider = GetServiceProvider();
-        var ksefClient = serviceProvider.GetRequiredService<KSeFClient>();
-
-
+        using IServiceScope scope = GetScope();
+        IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         string invoice = await ksefClient.GetInvoiceAsync(KsefNumber, Token, cancellationToken).ConfigureAwait(false);
         Console.WriteLine(JsonSerializer.Serialize(new { Invoice = invoice }));
         return 0;

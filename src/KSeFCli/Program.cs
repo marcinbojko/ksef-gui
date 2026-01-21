@@ -6,11 +6,11 @@ internal class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        var parser = new Parser(with => with.HelpWriter = Console.Error);
+        Parser parser = new Parser(with => with.HelpWriter = Console.Error);
 
-        var result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, ExportInvoicesCommand, GetExportStatusCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand>(args);
+        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, ExportInvoicesCommand, GetExportStatusCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand>(args);
 
-        var cts = new CancellationTokenSource();
+        CancellationTokenSource cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
         {
             Console.WriteLine("Canceling...");
@@ -19,7 +19,7 @@ internal class Program
         };
 
         return await result.MapResult(
-            async (GlobalCommand cmd) => await cmd.ExecuteAsync(cts.Token),
-            errs => Task.FromResult(1));
+            async (GlobalCommand cmd) => await cmd.ExecuteAsync(cts.Token).ConfigureAwait(false),
+            errs => Task.FromResult(1)).ConfigureAwait(false);
     }
 }

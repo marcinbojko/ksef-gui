@@ -1,9 +1,8 @@
+using System.Text.Json;
 using CommandLine;
-using KSeF.Client.Clients;
+using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Models.Invoices;
 using Microsoft.Extensions.DependencyInjection;
-using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace KSeFCli;
 
@@ -15,8 +14,8 @@ public class GetExportStatusCommand : GlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var serviceProvider = GetServiceProvider();
-        var ksefClient = serviceProvider.GetRequiredService<KSeFClient>();
+        using IServiceScope scope = GetScope();
+        IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
         InvoiceExportStatusResponse exportStatus = await ksefClient.GetInvoiceExportStatusAsync(ReferenceNumber, Token, cancellationToken).ConfigureAwait(false);
         Console.WriteLine(JsonSerializer.Serialize(exportStatus));

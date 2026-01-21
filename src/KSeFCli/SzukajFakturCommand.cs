@@ -1,11 +1,8 @@
+using System.Text.Json;
 using CommandLine;
-using KSeF.Client.Clients;
+using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Models.Invoices;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.ComponentModel;
-using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace KSeFCli;
 
@@ -33,66 +30,38 @@ public class SzukajFakturCommand : GlobalCommand
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
 
     {
+        using IServiceScope scope = GetScope();
+        IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+        SzukajFakturCommand settings = this;
 
-        var serviceProvider = GetServiceProvider();
-
-        var ksefClient = serviceProvider.GetRequiredService<KSeFClient>();
-
-
-
-
-
-        if (!Enum.TryParse(SubjectType, true, out InvoiceSubjectType subjectType))
-
+        if (!Enum.TryParse(settings.SubjectType, true, out InvoiceSubjectType subjectType))
         {
-
-            Console.Error.WriteLine($"Invalid SubjectType: {SubjectType}");
-
+            Console.Error.WriteLine($"Invalid SubjectType: {settings.SubjectType}");
             return 1;
-
         }
-
-
-
-        if (!Enum.TryParse(DateType, true, out DateType dateType))
-
+        if (!Enum.TryParse(settings.DateType, true, out DateType dateType))
         {
 
-            Console.Error.WriteLine($"Invalid DateType: {DateType}");
-
+            Console.Error.WriteLine($"Invalid DateType: {settings.DateType}");
             return 1;
-
         }
-
-
-
-        var queryFilters = new InvoiceQueryFilters
-
+        InvoiceQueryFilters invoiceQueryFilters = new InvoiceQueryFilters
         {
-
             SubjectType = subjectType,
-
             DateRange = new DateRange
-
             {
-
-                From = From,
-
-                To = To,
-
+                From = settings.From,
+                To = settings.To,
                 DateType = dateType
-
             }
-
         };
-
-
-
-        var response = await ksefClient.QueryInvoiceMetadataAsync(queryFilters, Token, PageOffset, PageSize, KSeF.Client.Core.Models.Invoices.SortOrder.Asc, cancellationToken);
-
-        Console.WriteLine(JsonSerializer.Serialize(response));
-
+        PagedInvoiceResponse pagedInvoicesResponse = await ksefClient.QueryInvoiceMetadataAsync(
+            invoiceQueryFilters,
+            settings.Token,
+            pageOffset: settings.PageOffset,
+            pageSize: settings.PageSize,
+            cancellationToken: CancellationToken.None).ConfigureAwait(false);
+        Console.WriteLine(JsonSerializer.Serialize(pagedInvoicesResponse));
         return 0;
-
     }
 }
