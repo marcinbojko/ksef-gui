@@ -88,65 +88,77 @@ Ogólna składnia poleceń `ksefcli` jest następująca:
 ksefcli <polecenie> [opcje]
 ```
 
+### Opcje Globalne
+
+Wszystkie polecenia akceptują następujące opcje globalne:
+
+*   `-c`, `--config`: Ścieżka do pliku konfiguracyjnego `ksefcli.yaml`. Domyślnie: `$HOME/.config/ksefcli/ksefcli.yaml`.
+*   `-a`, `--active`: Nazwa profilu do użycia, nadpisuje `active_profile` z pliku konfiguracyjnego.
+*   `--cache`: Ścieżka do pliku cache'u tokenów. Domyślnie: `$HOME/.cache/ksefcli/ksefcli.json`.
+*   `-v`, `--verbose`: Włącza szczegółowe logowanie (poziom DEBUG).
+*   `-q`, `--quiet`: Włącza tryb cichy (wyświetla tylko ostrzeżenia i błędy).
+
 ### Dostępne Polecenia
 
 #### `Auth`
 
-Uwierzytelnia użytkownika przy użyciu skonfigurowanej metody (token lub certyfikat).
+Uwierzytelnia użytkownika na podstawie metody zdefiniowanej w aktywnym profilu (token lub certyfikat) i zwraca token dostępowy.
 
 ```bash
-ksefcli Auth
+ksefcli -a moj_profil Auth
 ```
 
 #### `TokenAuth`
 
-Uwierzytelnia za pomocą tokena.
+Wymusza uwierzytelnienie za pomocą tokena sesyjnego, używając konfiguracji z aktywnego profilu. Profil musi zawierać klucz `token`.
 
-*   `--token`: Token autoryzacyjny.
+```bash
+ksefcli -a profil_z_tokenem TokenAuth
+```
 
 #### `CertAuth`
 
-Uwierzytelnianie za pomocą certyfikatu.
+Wymusza uwierzytelnienie za pomocą certyfikatu kwalifikowanego, używając konfiguracji z aktywnego profilu. Profil musi zawierać sekcję `certificate`.
 
-*   `--private-key`: Ścieżka do klucza prywatnego.
-*   `--certificate`: Ścieżka do certyfikatu.
-*   `--password-env`: Zmienna środowiskowa z hasłem.
+```bash
+ksefcli -a profil_z_certyfikatem CertAuth
+```
 
 #### `TokenRefresh`
 
-Odświeża token autoryzacyjny.
+Odświeża token autoryzacyjny. *To polecenie jest w trakcie implementacji.*
 
 #### `SzukajFaktur`
 
-Wyszukuje metadane faktur.
+Wyszukuje faktury na podstawie podanych kryteriów. Odpowiada endpointowi `GET /online/Query/Invoice/Sync`.
 
-*   `-s`, `--subject-type`: Typ podmiotu (`Subject1`, `Subject2`, etc.).
-*   `--from`: Data początkowa w formacie ISO-8601.
-*   `--to`: Data końcowa w formacie ISO-8601.
-*   `--date-type`: Typ daty (`Issue`, `Invoicing`, `PermanentStorage`). Domyślnie `Issue`.
-*   `--page-offset`: Przesunięcie strony dla paginacji. Domyślnie `0`.
-*   `--page-size`: Rozmiar strony dla paginacji. Domyślnie `10`.
+*   `-s`, `--subject-type` (wymagane): Typ podmiotu (`Subject1`, `Subject2`, `Subject3`).
+*   `--from` (wymagane): Data początkowa zakresu w formacie ISO-8601 (np. `2024-01-01T00:00:00Z`).
+*   `--to` (wymagane): Data końcowa zakresu w formacie ISO-8601.
+*   `--date-type`: Typ daty filtrowania (`invoicing`, `issue`, `payment`). Domyślnie: `issue`.
+*   `--page-offset`: Numer strony wyników. Domyślnie: `0`.
+*   `--page-size`: Liczba wyników na stronie. Domyślnie: `100`.
 
 #### `ExportInvoices`
 
 Inicjuje asynchroniczny eksport faktur.
 
-*   `--from`: Data początkowa w formacie ISO-8601.
-*   `--to`: Data końcowa w formacie ISO-8601.
-*   `--date-type`: Typ daty (`Issue`, `Invoicing`, `PermanentStorage`). Domyślnie `Issue`.
-*   `-s`, `--subject-type`: Typ podmiotu faktury.
+*   `--from` (wymagane): Data początkowa w formacie ISO-8601.
+*   `--to` (wymagane): Data końcowa w formacie ISO-8601.
+*   `--date-type`: Typ daty (`invoicing`, `issue`, `payment`). Domyślnie: `issue`.
+*   `-s`, `--subject-type` (wymagane): Typ podmiotu (`Subject1`, `Subject2`, `Subject3`).
 
 #### `GetExportStatusCommand`
 
-Sprawdza status eksportu faktur.
+Sprawdza status zleconego eksportu faktur.
 
-*   `--reference-number`: Numer referencyjny eksportu.
+*   `--reference-number` (wymagane): Numer referencyjny eksportu, uzyskany z polecenia `ExportInvoices`.
 
 #### `GetFaktura`
 
-Pobiera pojedynczą fakturę.
+Pobiera pojedynczą fakturę w formacie XML.
 
-*   `--ksef-id`: Numer KSeF faktury.
+*   `--ksef-id` (wymagane): Numer KSeF faktury.
 
 ## Cache Tokenów
 

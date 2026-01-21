@@ -31,6 +31,8 @@ test: format build
 	echo SUCCESS
 clean:
 	dotnet clean $(S)
+test-format:
+	dotnet format $(S) -v d --include $(call join_comma,$(SOURCES)) --verify-no-changes
 
 ###############################################################################
 

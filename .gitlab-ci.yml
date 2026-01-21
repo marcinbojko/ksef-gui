@@ -8,46 +8,51 @@ workflow:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_MERGE_REQUEST_IID
 
-default:
-  tags: [nomad]
-  interruptible: true
-  timeout: 5min
+stages:
+  - build
+  - test
 
-.build:
-  image:
-    name: moby/buildkit:rootless
-    entrypoint: [""]
+secret_detection:
   stage: build
+
+.build_base:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    ARGS:
-    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
-    CACHE_IMAGE: $CI_REGISTRY_IMAGE:cache
-  before_script:
-    - mkdir -p ~/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > ~/.docker/config.json
+  cache:
+    key:
+      files:
+        - src/KSeFCli/KSeFCli.csproj
+    paths:
+      - .nuget/packages
   script:
-    - buildctl-daemonless.sh build
-        --frontend dockerfile.v0
-        --local context=.
-        --local dockerfile=.
-        --export-cache type=registry,ref=$CACHE_IMAGE
-        --import-cache type=registry,ref=$CACHE_IMAGE
-        --output type=local,dest=bin/,include=/app/ksefcli
-        --output type=image,name=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA,push=true
-        ${ARGS}
+    - dotnet publish "src/KSeFCli/KSeFCli.csproj" -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:EnableCompressionInSingleFile=true -p:InvariantGlobalization=true
   artifacts:
     paths:
-      - bin/ksefcli
-    expire_in: 1 week
+      - "bin/Release/net10.0/linux-x64/publish/ksefcli"
 
-build-release:
-  variables:
-    ARGS: --output type=image,name=$CI_REGISTRY_IMAGE:latest,push=true
-  extends: [.build]
+build-main:
+  extends: .build_base
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-build-test:
-  extends: [.build]
+  artifacts:
+    expire_in: never
+
+build-mr:
+  extends: .build_base
   rules:
+    - if: $CI_MERGE_REQUEST_IID
+  artifacts:
+    expire_in: 1 week
+
+format_check:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+  script:
+    - dotnet format src/KSeFCli -v d --include "$(find src -name *.cs | paste -sd,)" --verify-no-changes
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_MERGE_REQUEST_IID
