@@ -7,7 +7,7 @@
 Możesz pobrać statycznie linkowaną binarkę `ksefcli` bezpośrednio z artefaktów GitLab CI/CD, a następnie umieścić ją w katalogu znajdującym się w `PATH` (np. `/usr/local/bin`).
 
 ```bash
-curl -LsS https://gitlab.com/kamcuk/ksefcli/builds/artifacts/main/download?job=build-main | zcat > ksefcli
+curl -LsS https://gitlab.com/firma3/ksefcli/builds/artifacts/main/download?job=build-main | zcat > ksefcli
 chmod +x ksefcli
 sudo mv ksefcli /usr/local/bin/
 ```
@@ -17,7 +17,7 @@ sudo mv ksefcli /usr/local/bin/
 Wyszukiwanie numeru KSeF dla faktury o konkretnym numerze:
 ```bash
 $ ksefcli SzukajFaktur -q -c ksefcli.yaml --from "$(date -d -1week -u --iso-8601=seconds)" --invoiceNumber '0004/26' | jq -r '.Invoices[0].KsefNumber'
-5260215591-20260117-XXXXXXXXXXXX-5C
+12312312312-20260117-XXXXXXXXXXXX-5C
 ```
 
 Przesyłanie faktury z użyciem konkretnego profilu:
@@ -60,7 +60,7 @@ profiles:
 
 *   `active_profile`: (Opcjonalnie) Nazwa profilu, który będzie używany domyślnie, jeśli nie zostanie podany za pomocą opcji `--profile`. Jeśli zdefiniowany jest tylko jeden profil, `active_profile` jest ignorowane.
 *   `profiles`: Mapa profili konfiguracyjnych.
-    *   `<nazwa_profilu>`: Dowolna nazwa identyfikująca profil (np. `dyzio`, `firma_xyz_test`).
+    *   `<nazwa_profilu>`: Dowolna nazwa identyfikująca profil (np. `firma1`, `firma_xyz_test`).
         *   `environment`: Środowisko KSeF (`test`, `demo`, `prod`).
         *   `nip`: Numer Identyfikacji Podatkowej (NIP) podmiotu, którego dotyczy profil.
         *   Należy zdefiniować **jedną** z poniższych metod uwierzytelniania:
@@ -76,19 +76,19 @@ Poniższy przykład demonstruje konfigurację z wieloma profilami dla różnych 
 
 ```yaml
 ---
-active_profile: dyzio
+active_profile: firma1
 profiles:
-  dyzio:
+  firma1:
     environment: test
-    nip: '5260215591'
+    nip: '12312312312'
     token: fdsafa
-  dyzio2:
-    environment: test
-    nip: '5260215591'
+  firma2:
+    environment: demo
+    nip: '12312312312'
     token: fdsfa
-  kamcuk:
-    environment: test
-    nip: '5223217667'
+  firma3:
+    environment: prod
+    nip: '23434545676'
     token: fdasfa
   cert_auth_example:
     environment: prod
@@ -101,8 +101,8 @@ profiles:
 ```
 
 W tym przykładzie:
-- Domyślnym profilem jest `dyzio`.
-- Zdefiniowano trzy profile (`dyzio`, `dyzio2`, `kamcuk`) używające uwierzytelniania tokenem na środowisku testowym dla dwóch różnych NIP-ów.
+- Domyślnym profilem jest `firma1`.
+- Zdefiniowano trzy profile (`firma1`, `firma2`, `firma3`) używające uwierzytelniania tokenem na środowisku testowym dla dwóch różnych NIP-ów.
 - Profil `cert_auth_example` używa uwierzytelniania certyfikatem na środowisku produkcyjnym. Hasło do certyfikatu zostanie odczytane ze zmiennej środowiskowej `KSEF_CERT_PASSWORD`.
 
 ## Użycie
