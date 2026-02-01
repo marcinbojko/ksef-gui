@@ -12,7 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace KSeFCli;
 
 [Verb("QRDoFaktury", HelpText = "Generate a QR code for an invoice and save it to a file")]
-public class QRDoFakturyCommand : GlobalCommand
+public class QRDoFakturyCommand : IWithConfigCommand
 {
     [Value(0, Required = true, HelpText = "KSeF invoice number")]
     public string KsefNumber { get; set; }

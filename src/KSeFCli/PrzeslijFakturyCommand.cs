@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace KSeFCli;
 
 [Verb("PrzeslijFaktury", HelpText = "Upload invoices in XML format.")]
-public class PrzeslijFakturyCommand : GlobalCommand
+public class PrzeslijFakturyCommand : IWithConfigCommand
 {
     [Option('f', "files", Required = true, HelpText = "Paths to XML invoice files.")]
     public IEnumerable<string> Pliki { get; set; }

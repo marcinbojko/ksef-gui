@@ -1,75 +1,56 @@
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+
 using CommandLine;
+
 using KSeF.Client.Core.Interfaces.Clients;
-using KSeF.Client.Core.Interfaces.Services;
-using KSeF.Client.Core.Models;
-using KSeF.Client.Core.Models.Invoices;
-using KSeF.Client.Core.Models.Sessions;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KSeFCli;
 
-[Verb("PobierzFaktury", HelpText = "Initialize an asynchronous invoice export")]
-public class PobierzFakturyCommand : GlobalCommand
+[Verb("PobierzFaktury", HelpText = "Download invoices based on search criteria.")]
+public class PobierzFakturyCommand : SzukajFakturCommand
 {
-    [Option("from", Required = true, HelpText = "Start date in ISO-8601 format")]
-    public DateTime From { get; set; }
+    [Option('o', "outputdir", Required = true, HelpText = "Output directory to save files to.")]
+    public required string OutputDir { get; set; }
 
-    [Option("to", Required = true, HelpText = "End date in ISO-8601 format")]
-    public DateTime To { get; set; }
+    [Option('p', "pdf", HelpText = "Save also pdf files.")]
+    public bool Pdf { get; set; }
 
-    [Option("date-type", Default = "Issue", HelpText = "Date type (Issue, Invoicing, PermanentStorage)")]
-    public string DateType { get; set; }
-
-    [Option('s', "subject-type", Required = true, HelpText = "Invoice subject type")]
-    public string SubjectType { get; set; }
+    [Option("useInvoiceNumber", HelpText = "Use InvoiceNumber instead of KsefNumber for the filename to save invoices.")]
+    public bool UseInvoiceNumber { get; set; }
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var config = Config();
+        Directory.CreateDirectory(OutputDir);
+
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
 
+        var invoices = await base.SzukajFaktury(ksefClient, cancellationToken).ConfigureAwait(false);
 
-        if (!Enum.TryParse(SubjectType, true, out InvoiceSubjectType subjectType))
+        foreach (var invoiceSummary in invoices)
         {
-            Console.Error.WriteLine($"Invalid SubjectType: {SubjectType}");
-            return 1;
-        }
+            var fileName = UseInvoiceNumber ? invoiceSummary.InvoiceNumber : invoiceSummary.KsefNumber;
+            var jsonFilePath = Path.Combine(OutputDir, $"{fileName}.json");
+            var xmlFilePath = Path.Combine(OutputDir, $"{fileName}.xml");
 
-        if (!Enum.TryParse(DateType, true, out DateType dateType))
-        {
-            Console.Error.WriteLine($"Invalid DateType: {DateType}");
-            return 1;
-        }
+            await File.WriteAllTextAsync(jsonFilePath, JsonSerializer.Serialize(invoiceSummary), cancellationToken).ConfigureAwait(false);
 
-        EncryptionData encryptionData = cryptographyService.GetEncryptionData();
+            string invoiceXml = await ksefClient.GetInvoiceAsync(invoiceSummary.KsefNumber, await GetAccessToken(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(xmlFilePath, invoiceXml, cancellationToken).ConfigureAwait(false);
 
-        InvoiceQueryFilters queryFilters = new InvoiceQueryFilters
-        {
-            DateRange = new DateRange
+            Console.WriteLine($"Saved invoice {invoiceSummary.KsefNumber} to {xmlFilePath}");
+
+            if (Pdf)
             {
-                From = From,
-                To = To,
-                DateType = dateType
-            },
-            SubjectType = subjectType
-        };
+                byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, cancellationToken).ConfigureAwait(false);
+                string outputPdfPath = Path.ChangeExtension(xmlFilePath, ".pdf");
+                await File.WriteAllBytesAsync(outputPdfPath, pdfContent, cancellationToken).ConfigureAwait(false);
+                Console.WriteLine($"Saved PDF for {xmlFilePath} to {outputPdfPath}");
+            }
+        }
 
-        InvoiceExportRequest invoiceExportRequest = new InvoiceExportRequest
-        {
-            Encryption = encryptionData.EncryptionInfo,
-            Filters = queryFilters
-        };
-
-        OperationResponse exportInvoicesResponse = await ksefClient.ExportInvoicesAsync(
-            invoiceExportRequest,
-            config.Token,
-            cancellationToken).ConfigureAwait(false);
-
-        Console.WriteLine(JsonSerializer.Serialize(new { ReferenceNumber = exportInvoicesResponse.ReferenceNumber }));
         return 0;
     }
 }

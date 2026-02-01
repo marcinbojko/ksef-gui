@@ -12,16 +12,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace KSeFCli;
 
 [Verb("SzukajFaktur", HelpText = "Query invoice metadata")]
-public class SzukajFakturCommand : GlobalCommand
+public class SzukajFakturCommand : IWithConfigCommand
 {
     [Option('s', "subjectType", Default = "Subject1", HelpText = """
     Typ podmiotu, którego dotyczą kryteria filtrowania metadanych faktur. Określa kontekst, w jakim przeszukiwane są dane.
-    Wartość           | Opis
-    ------------------|-------------------------
-    Subject1          | Podmiot 1 - sprzedawca
-    Subject2, 2, nabywca | Podmiot 2 - nabywca
-    Subject3, 3       | Podmiot 3
-    SubjectAuthorized | Podmiot upoważniony
+    Wartość                 | Opis
+    ------------------------|-------------------------
+    Subject1, 1, sprzedawca | Podmiot 1 - sprzedawca
+    Subject2, 2, nabywca    | Podmiot 2 - nabywca
+    Subject3, 3             | Podmiot 3
+    SubjectAuthorized, 4    | Podmiot upoważniony
     """)]
     public required string SubjectType { get; set; }
 
@@ -146,7 +146,7 @@ public class SzukajFakturCommand : GlobalCommand
         return 0;
     }
 
-    private async Task<List<InvoiceSummary>> SzukajFaktury(
+    protected async Task<List<InvoiceSummary>> SzukajFaktury(
         IKSeFClient ksefClient,
         CancellationToken cancellationToken)
     {
@@ -156,8 +156,10 @@ public class SzukajFakturCommand : GlobalCommand
         {
             subjectType = settings.SubjectType.ToLowerInvariant() switch
             {
+                "1" or "sprzedawca" => InvoiceSubjectType.Subject1,
                 "2" or "nabywca" => InvoiceSubjectType.Subject2,
                 "3" => InvoiceSubjectType.Subject3,
+                "4" => InvoiceSubjectType.SubjectAuthorized,
                 _ => throw new FormatException($"Invalid SubjectType: {settings.SubjectType}")
             };
         }

@@ -3,7 +3,7 @@ using CommandLine;
 namespace KSeFCli;
 
 [Verb("Auth", HelpText = "Authenticate using configured method")]
-public class AuthCommand : GlobalCommand
+public class AuthCommand : IWithConfigCommand
 {
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {

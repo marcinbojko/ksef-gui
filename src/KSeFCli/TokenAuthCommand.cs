@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace KSeFCli;
 
 [Verb("TokenAuth", HelpText = "Authenticate using a KSeF token")]
-public class TokenAuthCommand : GlobalCommand
+public class TokenAuthCommand : IWithConfigCommand
 {
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {

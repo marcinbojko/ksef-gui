@@ -10,7 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace KSeFCli;
 
 [Verb("LinkDoFaktury", HelpText = "Generate a link to an invoice")]
-public class LinkDoFakturyCommand : GlobalCommand
+public class LinkDoFakturyCommand : IWithConfigCommand
 {
     [Value(0, Required = true, HelpText = "KSeF invoice number")]
     public string KsefNumber { get; set; }

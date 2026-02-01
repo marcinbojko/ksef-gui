@@ -8,7 +8,7 @@ internal class Program
     {
         Parser parser = new Parser(with => with.HelpWriter = Console.Error);
 
-        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, ExportInvoicesCommand, GetExportStatusCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand>(args);
+        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, ExportInvoicesCommand, GetExportStatusCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand>(args);
 
         CancellationTokenSource cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
@@ -19,7 +19,7 @@ internal class Program
         };
 
         return await result.MapResult(
-            (GlobalCommand cmd) =>
+            (IWithConfigCommand cmd) =>
             {
                 try
                 {

@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace KSeFCli;
 
 [Verb("GetExportStatus", HelpText = "Checks the status of an asynchronous export operation")]
-public class GetExportStatusCommand : GlobalCommand
+public class GetExportStatusCommand : IWithConfigCommand
 {
     [Option('r', "reference-number", Required = true, HelpText = "Reference number of the export operation")]
     public string ReferenceNumber { get; set; }

@@ -1,11 +1,8 @@
-using System;
-using System.IO;
-
 public sealed class TemporaryFile : IDisposable
 {
     public string Path { get; }
 
-    public TemporaryFile(string? desiredPath, string prefix, string extension)
+    public TemporaryFile(string? desiredPath = null, string prefix = "", string extension = "")
     {
         if (!string.IsNullOrEmpty(desiredPath))
         {
@@ -19,6 +16,8 @@ public sealed class TemporaryFile : IDisposable
             using (File.Create(Path)) { }
         }
     }
+
+    public static implicit operator string(TemporaryFile tmp) => tmp.Path;
 
     public void Dispose()
     {

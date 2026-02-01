@@ -1,4 +1,6 @@
 #!/bin/bash
+# DO NOT MODIFY THIS FILE IT IS CORRECT
+# USE ./run.sh GetFaktura --options...
 set -euo pipefail
 case "${1:-}" in
   -f|--fast)

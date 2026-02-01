@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace KSeFCli;
 
 [Verb("ExportInvoices", HelpText = "Initialize an asynchronous invoice export")]
-public class ExportInvoicesCommand : GlobalCommand
+public class ExportInvoicesCommand : IWithConfigCommand
 {
     [Option("from", Required = true, HelpText = "Start date in ISO-8601 format")]
     public DateTime From { get; set; }

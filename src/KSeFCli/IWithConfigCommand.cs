@@ -19,7 +19,7 @@ using Microsoft.Extensions.Logging;
 
 namespace KSeFCli;
 
-public abstract class GlobalCommand
+public abstract class IWithConfigCommand : IGlobalCommand
 {
     [Option('c', "config", HelpText = "Path to config file", Required = true)]
     public string ConfigFile { get; set; } = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".config", "ksefcli", "ksefcli.yaml");
@@ -30,18 +30,15 @@ public abstract class GlobalCommand
     [Option("cache", HelpText = "Active profile name")]
     public string TokenCache { get; set; } = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".cache", "ksefcli", "ksefcli.json");
 
-    [Option('v', "verbose", HelpText = "Enable verbose logging")]
-    public bool Verbose { get; set; }
 
-    [Option('q', "quiet", HelpText = "Enable quiet mode (warnings and errors only)")]
-    public bool Quiet { get; set; }
 
+    private static AuthenticationOperationStatusResponse? _cachedAuthResponse;
 
     private readonly Lazy<ProfileConfig> _cachedProfile;
     private readonly Lazy<KsefCliConfig> _cachedConfig;
     private readonly Lazy<TokenStore> _tokenStore;
 
-    public GlobalCommand()
+    public IWithConfigCommand()
     {
         _cachedConfig = new Lazy<KsefCliConfig>(() =>
         {
@@ -54,8 +51,6 @@ public abstract class GlobalCommand
         });
         _tokenStore = new Lazy<TokenStore>(() => new TokenStore(TokenCache));
     }
-
-    public abstract Task<int> ExecuteAsync(CancellationToken cancellationToken);
 
     protected TokenStore GetTokenStore() => _tokenStore.Value;
 
@@ -218,44 +213,20 @@ public abstract class GlobalCommand
 
     public async Task<string> GetAccessToken(CancellationToken cancellationToken)
     {
-        AuthenticationOperationStatusResponse data = await Auth(cancellationToken).ConfigureAwait(false);
-        return data.AccessToken.Token;
+        if (_cachedAuthResponse != null && _cachedAuthResponse.AccessToken.ValidUntil > DateTime.UtcNow.AddMinutes(5))
+        {
+            return _cachedAuthResponse.AccessToken.Token;
+        }
+
+        _cachedAuthResponse = await Auth(cancellationToken).ConfigureAwait(false);
+        return _cachedAuthResponse.AccessToken.Token;
     }
 
     public IServiceScope GetScope()
     {
+        ConfigureLogging();
         ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();
-        services.AddLogging(builder =>
-        {
-            LogLevel KsefCliLogLevel = LogLevel.Information;
-            LogLevel MicrosoftLogLevel = LogLevel.Warning;
-            LogLevel SystemLogLevel = LogLevel.Warning;
-
-            if (Verbose)
-            {
-                KsefCliLogLevel = LogLevel.Debug;
-                MicrosoftLogLevel = LogLevel.Debug;
-                SystemLogLevel = LogLevel.Debug;
-            }
-            if (Quiet)
-            {
-                KsefCliLogLevel = LogLevel.Warning;
-            }
-
-            builder.AddFilter("KSeFCli", KsefCliLogLevel)
-                   .AddFilter("Microsoft", MicrosoftLogLevel)
-                   .AddFilter("System", SystemLogLevel)
-                   .AddConsole(options =>
-                   {
-                       options.LogToStandardErrorThreshold = LogLevel.Trace;
-                   })
-                   .AddSimpleConsole(options =>
-                   {
-                       options.SingleLine = true;
-                       options.TimestampFormat = "HH:mm:ss ";
-                   });
-        });
 
         KSeF.Client.ClientFactory.Environment environment = config.Environment.ToUpper() switch
         {

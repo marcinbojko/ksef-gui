@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace KSeFCli;
 
 [Verb("CertAuth", HelpText = "Authenticate using a certificate")]
-public class CertAuthCommand : GlobalCommand
+public class CertAuthCommand : IWithConfigCommand
 {
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
