@@ -35,7 +35,7 @@ public static class ParseDate
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = "date",
-                Arguments = $"-d "{dateString}" +%s",
+                Arguments = $@"-d ""{dateString}"" +%s",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
