@@ -33,10 +33,14 @@ public class QRDoFakturyCommand : GlobalCommand
         string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, config.Token, cancellationToken).ConfigureAwait(false);
 
         XDocument xmlDoc = XDocument.Parse(invoiceXml);
+        if (xmlDoc.Root is null)
+            throw new InvalidDataException("Invoice XML is missing the root element.");
+
         XNamespace ns = xmlDoc.Root.GetDefaultNamespace();
 
-        string sellerNip = xmlDoc.Root.Element(ns + "Podmiot1").Element(ns + "DaneIdentyfikacyjne").Element(ns + "NIP").Value;
-        DateTime issueDate = DateTime.Parse(xmlDoc.Root.Element(ns + "Fa").Element(ns + "P_1").Value);
+        string sellerNip = xmlDoc.Root.Element(ns + "Podmiot1")?.Element(ns + "DaneIdentyfikacyjne")?.Element(ns + "NIP")?.Value ?? throw new InvalidDataException("Could not find seller NIP in invoice XML.");
+        string issueDateValue = xmlDoc.Root.Element(ns + "Fa")?.Element(ns + "P_1")?.Value ?? throw new InvalidDataException("Could not find issue date in invoice XML.");
+        DateTime issueDate = DateTime.Parse(issueDateValue);
 
         byte[] invoiceBytes = Encoding.UTF8.GetBytes(invoiceXml);
         byte[] hashBytes = SHA256.HashData(invoiceBytes);
