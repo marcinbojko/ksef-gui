@@ -1,3 +1,8 @@
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Xml.Linq;
+using CommandLine;
 using KSeF.Client.Api.Services;
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Interfaces.Services;
