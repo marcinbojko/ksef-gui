@@ -44,7 +44,11 @@ public static class ParseDate
             using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start date process.");
             await process.WaitForExitAsync().ConfigureAwait(false);
 
-            string output = await process.StandardOutput?.ReadToEndAsync().ConfigureAwait(false) ?? throw new InvalidOperationException("Failed to read output from date process.");
+            if (process.StandardOutput is null)
+            {
+                throw new InvalidOperationException("Failed to access StandardOutput from date process.");
+            }
+            string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
             if (long.TryParse(output.Trim(), out long unixTimestamp))
             {
                 DateTimeOffset dateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp);
