@@ -14,10 +14,10 @@ namespace KSeFCli;
 [Verb("QRDoFaktury", HelpText = "Generate a QR code for an invoice and save it to a file")]
 public class QRDoFakturyCommand : GlobalCommand
 {
-    [Option('k', "ksef-number", Required = true, HelpText = "KSeF invoice number")]
+    [Value(0, Required = true, HelpText = "KSeF invoice number")]
     public string KsefNumber { get; set; }
 
-    [Option('o', "output", Required = true, HelpText = "Output file path for the QR code (e.g., invoice.jpg)")]
+    [Value(1, Required = true, HelpText = "Output file path for the QR code (e.g., invoice.jpg)")]
     public string OutputPath { get; set; }
 
     [Option('p', "pixels", Default = 5, HelpText = "Pixels per module for the QR code")]
@@ -30,7 +30,8 @@ public class QRDoFakturyCommand : GlobalCommand
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         IVerificationLinkService linkSvc = scope.ServiceProvider.GetRequiredService<IVerificationLinkService>();
 
-        string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, config.Token, cancellationToken).ConfigureAwait(false);
+        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
+        string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, accessToken, cancellationToken).ConfigureAwait(false);
 
         XDocument xmlDoc = XDocument.Parse(invoiceXml);
         if (xmlDoc.Root is null)
