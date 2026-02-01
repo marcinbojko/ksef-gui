@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 using CommandLine;
 
@@ -24,11 +27,11 @@ public class SzukajFakturCommand : GlobalCommand
     """)]
     public required string SubjectType { get; set; }
 
-    [Option("from", Required = true, HelpText = "Start date in ISO-8601 format")]
-    public DateTime From { get; set; }
+    [Option("from", Required = true, HelpText = "Start date. Will be parsed using the 'date' shell command (e.g., -2days, 2023-01-01).")]
+    public string FromRaw { get; set; }
 
-    [Option("to", HelpText = "End date in ISO-8601 format")]
-    public DateTime? To { get; set; }
+    [Option("to", HelpText = "End date. Will be parsed using the 'date' shell command (e.g., -1day, 2023-01-31).")]
+    public string? ToRaw { get; set; }
 
     [Option("dateType", Default = "Issue", HelpText = """
     Typ daty, według której ma być zastosowany zakres.
@@ -150,13 +153,20 @@ public class SzukajFakturCommand : GlobalCommand
             return 1;
         }
 
+        DateTime parsedFromDate = await ParseDateString(settings.FromRaw).ConfigureAwait(false);
+        DateTime? parsedToDate = null;
+        if (settings.ToRaw is not null)
+        {
+            parsedToDate = await ParseDateString(settings.ToRaw).ConfigureAwait(false);
+        }
+
         InvoiceQueryFilters invoiceQueryFilters = new InvoiceQueryFilters
         {
             SubjectType = subjectType,
             DateRange = new DateRange
             {
-                From = settings.From,
-                To = settings.To,
+                From = parsedFromDate,
+                To = parsedToDate,
                 DateType = dateType,
                 RestrictToPermanentStorageHwmDate = settings.RestrictToPermanentStorageHwmDate
             },
@@ -266,5 +276,61 @@ public class SzukajFakturCommand : GlobalCommand
             cancellationToken: cancellationToken).ConfigureAwait(false);
         Console.WriteLine(JsonSerializer.Serialize(pagedInvoicesResponse));
         return 0;
+    }
+
+    private static async Task<DateTime> ParseDateString(string dateString)
+    {
+        // Try parsing using standard C# DateTime.Parse
+        if (DateTime.TryParse(dateString, out DateTime result))
+        {
+            return result;
+        }
+
+        // Try parsing with specific formats if standard parsing fails
+        string[] formats = {
+            "yyyy-MM-dd",
+            "yyyy-MM-dd HH:mm:ss",
+            "dd-MM-yyyy",
+            "dd-MM-yyyy HH:mm:ss",
+            "yyyy/MM/dd",
+            "yyyy/MM/dd HH:mm:ss"
+        };
+        if (DateTime.TryParseExact(dateString, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out result))
+        {
+            return result;
+        }
+
+        // If C# parsing fails, try using the 'date' shell command for relative dates
+        try
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "date",
+                Arguments = $@"-d ""{dateString}"" +%s",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start date process.");
+            await process.WaitForExitAsync().ConfigureAwait(false);
+
+            if (process.StandardOutput is null)
+            {
+                throw new InvalidOperationException("Failed to access StandardOutput from date process.");
+            }
+            string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+            if (long.TryParse(output.Trim(), out long unixTimestamp))
+            {
+                DateTimeOffset dateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp);
+                return dateTimeOffset.LocalDateTime; // Convert to local time
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error parsing date with shell command: {ex.Message}");
+        }
+
+        throw new FormatException($"Could not parse date string: {dateString}");
     }
 }
