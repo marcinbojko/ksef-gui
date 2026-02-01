@@ -19,8 +19,8 @@ public class SzukajFakturCommand : GlobalCommand
     Wartość           | Opis
     ------------------|-------------------------
     Subject1          | Podmiot 1 - sprzedawca
-    Subject2          | Podmiot 2 - nabywca
-    Subject3          | Podmiot 3
+    Subject2, 2, nabywca | Podmiot 2 - nabywca
+    Subject3, 3       | Podmiot 3
     SubjectAuthorized | Podmiot upoważniony
     """)]
     public required string SubjectType { get; set; }
@@ -141,8 +141,12 @@ public class SzukajFakturCommand : GlobalCommand
 
         if (!Enum.TryParse(settings.SubjectType, true, out InvoiceSubjectType subjectType))
         {
-            Console.Error.WriteLine($"Invalid SubjectType: {settings.SubjectType}");
-            return 1;
+            subjectType = settings.SubjectType.ToLowerInvariant() switch
+            {
+                "2" or "nabywca" => InvoiceSubjectType.Subject2,
+                "3" => InvoiceSubjectType.Subject3,
+                _ => throw new FormatException($"Invalid SubjectType: {settings.SubjectType}")
+            };
         }
 
         if (!Enum.TryParse(settings.DateType, true, out DateType dateType))
