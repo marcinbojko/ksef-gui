@@ -12,7 +12,7 @@ namespace KSeFCli;
 [Verb("LinkDoFaktury", HelpText = "Generate a link to an invoice")]
 public class LinkDoFakturyCommand : GlobalCommand
 {
-    [Option('k', "ksef-number", Required = true, HelpText = "KSeF invoice number")]
+    [Value(0, Required = true, HelpText = "KSeF invoice number")]
     public string KsefNumber { get; set; }
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
@@ -22,7 +22,8 @@ public class LinkDoFakturyCommand : GlobalCommand
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         IVerificationLinkService linkSvc = scope.ServiceProvider.GetRequiredService<IVerificationLinkService>();
 
-        string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, config.Token, cancellationToken).ConfigureAwait(false);
+        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
+        string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, accessToken, cancellationToken).ConfigureAwait(false);
 
         XDocument xmlDoc = XDocument.Parse(invoiceXml);
         if (xmlDoc.Root is null)
