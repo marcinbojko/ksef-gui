@@ -164,20 +164,6 @@ Wyszukuje faktury na podstawie podanych kryteriów. Odpowiada endpointowi `GET /
 *   `--page-offset`: Numer strony wyników. Domyślnie: `0`.
 *   `--page-size`: Liczba wyników na stronie. Domyślnie: `100`.
 
-#### `ExportInvoices`
-
-Inicjuje asynchroniczny eksport faktur.
-
-*   `--from` (wymagane): Data początkowa w formacie ISO-8601.
-*   `--to` (wymagane): Data końcowa w formacie ISO-8601.
-*   `--date-type`: Typ daty (`invoicing`, `issue`, `payment`). Domyślnie: `issue`.
-*   `-s`, `--subject-type` (wymagane): Typ podmiotu (`Subject1`, `Subject2`, `Subject3`).
-
-#### `GetExportStatusCommand`
-
-Sprawdza status zleconego eksportu faktur.
-
-*   `--reference-number` (wymagane): Numer referencyjny eksportu, uzyskany z polecenia `ExportInvoices`.
 
 #### `GetFaktura`
 
