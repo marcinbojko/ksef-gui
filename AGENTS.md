@@ -10,9 +10,11 @@ Jako agent odpowiedzialny za rozwój tego projektu, będę przestrzegał następ
 *   **Realizuję punkty TODO jeden po jednym**: Pracuję metodycznie, wykonując zadania z listy `TODO` sekwencyjnie.
 *   **Format listy TODO**: Lista zadań będzie zwięzła, wykorzystując tylko słowa kluczowe i nie będzie zawierać pełnych zdań. Wszystkie podzadania zostaną spłaszczone i przedstawione jako niezależne zadania.
 *   **Minimalizm w komunikacji**: Bądź tak zwięzły, jak to tylko możliwe, i wypisuj minimalną ilość informacji, bez gramatyki.
+*   **Bezpośrednie narzędzia**: Wykonuj narzędzia bezpośrednio, bez wyjaśnień.
 *   **Commit often**: Commituj zmiany często, po każdej znaczącej zmianie.
 *   **Brak pustych linii**: Pisząc kod, nie twórz linii bez zawartości.
 *   **Nie łap excpetion**: Nie łap exception, tylko po to żeby print. Daj exception raise.
+
 
 
 W thirdparty/ksef-client-csharp jest zależność.
