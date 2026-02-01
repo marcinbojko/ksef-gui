@@ -8,7 +8,7 @@ internal class Program
     {
         Parser parser = new Parser(with => with.HelpWriter = Console.Error);
 
-        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, ExportInvoicesCommand, GetExportStatusCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand>(args);
+        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, ExportInvoicesCommand, GetExportStatusCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand>(args);
 
         CancellationTokenSource cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
