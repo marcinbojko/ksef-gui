@@ -35,7 +35,6 @@ public class LinkDoFakturyCommand : GlobalCommand
         DateTime issueDate = DateTime.Parse(issueDateValue);
 
         byte[] invoiceBytes = Encoding.UTF8.GetBytes(invoiceXml);
-        byte...
         byte[] hashBytes = SHA256.HashData(invoiceBytes);
         string invoiceHash = Base64UrlEncoder.Encode(hashBytes);
 
