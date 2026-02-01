@@ -26,10 +26,10 @@ public class SzukajFakturCommand : GlobalCommand
     """)]
     public required string SubjectType { get; set; }
 
-    [Option("from", Required = true, HelpText = "Start date in ISO-8601 format or relative format (e.g., -2days)")]
+    [Option("from", Required = true, HelpText = "Start date. Will be parsed using the 'date' shell command (e.g., -2days, 2023-01-01).")]
     public string FromRaw { get; set; }
 
-    [Option("to", HelpText = "End date in ISO-8601 format or relative format (e.g., -1day)")]
+    [Option("to", HelpText = "End date. Will be parsed using the 'date' shell command (e.g., -1day, 2023-01-31).")]
     public string? ToRaw { get; set; }
 
     [Option("dateType", Default = "Issue", HelpText = """
