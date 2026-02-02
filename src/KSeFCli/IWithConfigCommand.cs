@@ -43,7 +43,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         });
         _cachedProfile = new Lazy<ProfileConfig>(() =>
         {
-            var config = _cachedConfig.Value;
+            KsefCliConfig config = _cachedConfig.Value;
             return config.Profiles[config.ActiveProfile];
         });
         _tokenStore = new Lazy<TokenStore>(() => new TokenStore(TokenCache));
@@ -55,8 +55,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public TokenStore.Key GetTokenStoreKey()
     {
-        var config = _cachedConfig.Value;
-        var profile = Config();
+        KsefCliConfig config = _cachedConfig.Value;
+        ProfileConfig profile = Config();
         return new TokenStore.Key(config.ActiveProfile, profile.Nip, profile.Environment);
     }
 
@@ -70,7 +70,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public async Task<AuthenticationOperationStatusResponse> Auth(CancellationToken cancellationToken)
     {
-        var config = Config();
+        ProfileConfig config = Config();
         using IServiceScope scope = GetScope();
         AuthenticationOperationStatusResponse response = config.AuthMethod switch
         {
@@ -84,7 +84,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public async Task<AuthenticationOperationStatusResponse> TokenAuth(CancellationToken cancellationToken)
     {
-        var config = Config();
+        ProfileConfig config = Config();
         if (config.AuthMethod != AuthMethod.KsefToken)
         {
             throw new InvalidOperationException("This command requires token authentication.");
@@ -144,7 +144,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public async Task<AuthenticationOperationStatusResponse> CertAuth(CancellationToken cancellationToken)
     {
-        var config = Config();
+        ProfileConfig config = Config();
         if (config.AuthMethod != AuthMethod.Xades)
         {
             throw new InvalidOperationException("This command requires certificate authentication.");
@@ -236,7 +236,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
     {
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        var response = await ksefClient.RefreshAccessTokenAsync(refreshToken.Token, cancellationToken).ConfigureAwait(false);
+        RefreshTokenResponse response = await ksefClient.RefreshAccessTokenAsync(refreshToken.Token, cancellationToken).ConfigureAwait(false);
         return new AuthenticationOperationStatusResponse
         {
             AccessToken = response.AccessToken,

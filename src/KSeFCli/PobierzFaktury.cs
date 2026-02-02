@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommandLine;
 
 using KSeF.Client.Core.Interfaces.Clients;
+using KSeF.Client.Core.Models.Invoices;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,9 +33,9 @@ public class PobierzFakturyCommand : SzukajFakturCommand
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
-        var invoices = await base.SzukajFaktury(ksefClient, cancellationToken).ConfigureAwait(false);
+        List<InvoiceSummary> invoices = await base.SzukajFaktury(ksefClient, cancellationToken).ConfigureAwait(false);
 
-        foreach (var invoiceSummary in invoices)
+        foreach (InvoiceSummary invoiceSummary in invoices)
         {
             string fileName = UseInvoiceNumber ? invoiceSummary.InvoiceNumber : invoiceSummary.KsefNumber;
             string jsonFilePath = Path.Combine(OutputDir, $"{fileName}.json");

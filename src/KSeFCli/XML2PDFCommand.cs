@@ -54,9 +54,9 @@ public class XML2PDFCommand : IGlobalCommand
     public static async Task<byte[]> XML2PDF(string xmlContent, bool quiet, CancellationToken cancellationToken)
     {
         AssertNpxExists();
-        using var tempXml = new TemporaryFile(extension: ".xml");
+        using TemporaryFile tempXml = new TemporaryFile(extension: ".xml");
         await File.WriteAllTextAsync(tempXml.Path, xmlContent, cancellationToken).ConfigureAwait(false);
-        using var tempPdf = new TemporaryFile(extension: ".pdf");
+        using TemporaryFile tempPdf = new TemporaryFile(extension: ".pdf");
         string scriptPath = Path.Combine(AppContext.BaseDirectory, "run-pdf-generator.mjs");
         Subprocess nodeScript = new(
             CommandAndArgs: new[] { "npx", "--yes", "github:kamilcuk/ksef-pdf-generator", "invoice", tempXml.Path, tempPdf.Path, },

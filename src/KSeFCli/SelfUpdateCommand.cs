@@ -43,16 +43,16 @@ public class SelfUpdateCommand : IGlobalCommand
         }
 
         string extension = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : string.Empty;
-        using var tempFile = new TemporaryFile(extension: extension);
+        using TemporaryFile tempFile = new TemporaryFile(extension: extension);
 
         try
         {
-            using (var httpClient = new HttpClient())
+            using (HttpClient httpClient = new HttpClient())
             {
                 Log.LogInformation($"Downloading new version from {downloadUrl}");
-                var response = await httpClient.GetAsync(downloadUrl, cancellationToken).ConfigureAwait(false);
+                HttpResponseMessage response = await httpClient.GetAsync(downloadUrl, cancellationToken).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
-                using (var fs = new FileStream(tempFile.Path, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (FileStream fs = new FileStream(tempFile.Path, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     await response.Content.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
                 }

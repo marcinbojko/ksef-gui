@@ -42,7 +42,7 @@ internal record Subprocess(
 
         if (Environment != null)
         {
-            foreach (var kvp in Environment)
+            foreach (KeyValuePair<string, string?> kvp in Environment)
             {
                 Log.LogDebug($"Setting environment variable: {kvp.Key}={kvp.Value}");
                 processStartInfo.Environment[kvp.Key] = kvp.Value;
@@ -53,7 +53,7 @@ internal record Subprocess(
             processStartInfo.ArgumentList.Add(arg);
         }
 
-        var process = Process.Start(processStartInfo)!;
+        Process process = Process.Start(processStartInfo)!;
         if (process == null)
         {
             throw new InvalidOperationException("Failed to start process");
@@ -113,7 +113,7 @@ internal record Subprocess(
             CreateNoWindow = true
         };
         using Process process = AddArgsAndEnvironmentToProcessStartInfoAndStart(processStartInfo);
-        using var ms = new MemoryStream();
+        using MemoryStream ms = new MemoryStream();
         await process.StandardOutput.BaseStream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
         await WaitAndCheck(process, cancellationToken).ConfigureAwait(false);
         return ms.ToArray();

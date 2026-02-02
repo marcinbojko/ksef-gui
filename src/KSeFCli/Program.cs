@@ -8,7 +8,7 @@ internal class Program
     public static async Task<int> Main(string[] args)
     {
         // https://github.com/commandlineparser/commandline/wiki/How-To
-        var helpWriter = new StringWriter();
+        StringWriter helpWriter = new StringWriter();
         Parser parser = new Parser(with =>
         {
             with.HelpWriter = helpWriter;
