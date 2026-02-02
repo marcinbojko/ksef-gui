@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # DO NOT MODIFY THIS FILE IT IS CORRECT
 # USE ./run.sh GetFaktura --options...
 set -euo pipefail
