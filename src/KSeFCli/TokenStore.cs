@@ -12,9 +12,13 @@ public class TokenStore
         public AuthenticationOperationStatusResponse response;
     }
 
-    public record Key(string Nazwa, string Nip, string Environment);
+    public record Key(string Nazwa, string Nip, string Environment)
+    {
+        public string ToCacheKey() => $"{Nip}_{Environment}_{Nazwa}";
+    }
 
     private readonly string _path;
+    private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
     public TokenStore(string path)
     {
@@ -41,68 +45,67 @@ public class TokenStore
         byte[] data = new byte[fs.Length];
         fs.ReadExactly(data);
 
-        Dictionary<Key, Data> tokens = JsonSerializer.Deserialize<Dictionary<Key, Data>>(data)
-                    ?? new Dictionary<Key, Data>();
-        tokens.TryGetValue(key, out Data? token);
-        return token;
+        try
+        {
+            var tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
+            tokens.TryGetValue(key.ToCacheKey(), out Data? token);
+            return token;
+        }
+        catch (JsonException)
+        {
+            Log.LogWarning($"Invalid JSON in token cache file: {_path}. Deleting the file.");
+            File.Delete(_path);
+            return null;
+        }
     }
 
     public void SetToken(Key key, Data token)
     {
-        // wyłączny dostęp do pliku przy zapisie, aby chronić przed współbieżnym dostępem.
         using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
-            Dictionary<Key, Data> tokens;
-            // odczyt aktualnego stanu
+            Dictionary<string, Data> tokens;
             if (fs.Length > 0)
             {
                 byte[] data = new byte[fs.Length];
                 fs.ReadExactly(data);
-                tokens = JsonSerializer.Deserialize<Dictionary<Key, Data>>(data)
-                         ?? new Dictionary<Key, Data>();
+                tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
             }
             else
             {
-                tokens = new Dictionary<Key, Data>();
+                tokens = new Dictionary<string, Data>();
             }
 
-            // modyfikacja
-            tokens[key] = token;
+            tokens[key.ToCacheKey()] = token;
 
-            // zapis
             fs.Seek(0, SeekOrigin.Begin);
             fs.SetLength(0);
-            byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, new JsonSerializerOptions { WriteIndented = true }));
+            byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
             fs.Write(newData, 0, newData.Length);
             fs.Flush(true);
         }
-
     }
 
     public bool RemoveToken(Key key)
     {
-        // wyłączny dostęp do pliku przy zapisie, aby chronić przed współbieżnym dostępem.
         using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
-            Dictionary<Key, Data> tokens;
+            Dictionary<string, Data> tokens;
             if (fs.Length > 0)
             {
                 byte[] data = new byte[fs.Length];
                 fs.ReadExactly(data);
-                tokens = JsonSerializer.Deserialize<Dictionary<Key, Data>>(data)
-                         ?? new Dictionary<Key, Data>();
+                tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
             }
             else
             {
-                return false; // File is empty, nothing to remove
+                return false;
             }
 
-            if (tokens.Remove(key))
+            if (tokens.Remove(key.ToCacheKey()))
             {
-                // Zapisz zmieniony stan
                 fs.Seek(0, SeekOrigin.Begin);
                 fs.SetLength(0);
-                byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, new JsonSerializerOptions { WriteIndented = true }));
+                byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
                 fs.Write(newData, 0, newData.Length);
                 fs.Flush(true);
                 return true;
