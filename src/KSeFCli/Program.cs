@@ -1,4 +1,5 @@
 using CommandLine;
+using CommandLine.Text;
 
 namespace KSeFCli;
 
@@ -6,7 +7,13 @@ internal class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Parser parser = new Parser(with => with.HelpWriter = Console.Error);
+        // https://github.com/commandlineparser/commandline/wiki/How-To
+        var helpWriter = new StringWriter();
+        Parser parser = new Parser(with =>
+        {
+            with.HelpWriter = helpWriter;
+            with.EnableDashDash = true;
+        });
 
         ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand>(args);
 
@@ -33,6 +40,15 @@ internal class Program
             },
             errs =>
             {
+                HelpText helpText = HelpText.AutoBuild(result, h =>
+                {
+                    h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code lisenced under GPLv3."; 
+                    // new CopyrightInfo("Kamil Cukrowski", 2026);
+                    h.AdditionalNewLineAfterOption = false;
+                    return h;
+                });
+                Console.WriteLine(helpText);
+
                 if (errs.Any(e => e is HelpRequestedError or HelpVerbRequestedError))
                     return Task.FromResult(0);
 
