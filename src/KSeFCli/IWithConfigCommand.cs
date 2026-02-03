@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 
 using CommandLine;
 
@@ -13,6 +14,7 @@ using KSeF.Client.Core.Interfaces.Services;
 using KSeF.Client.Core.Models;
 using KSeF.Client.Core.Models.Authorization;
 using KSeF.Client.DI;
+using KSeF.Client.Extensions;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,11 +22,11 @@ namespace KSeFCli;
 
 public abstract class IWithConfigCommand : IGlobalCommand
 {
-    [Option('c', "config", HelpText = "Path to config file", Required = true)]
-    public string ConfigFile { get; set; } = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".config", "ksefcli", "ksefcli.yaml");
+    [Option('c', "config", HelpText = "Path to config file")]
+    public string ConfigFile { get; set; } = System.Environment.GetEnvironmentVariable("KSEFCLI_CONFIG") ?? System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".config", "ksefcli", "ksefcli.yaml");
 
     [Option('a', "active", HelpText = "Active profile name")]
-    public string ActiveProfile { get; set; } = "";
+    public string ActiveProfile { get; set; } = System.Environment.GetEnvironmentVariable("KSEFCLI_ACTIVE") ?? "";
 
     [Option("cache", HelpText = "Active profile name")]
     public string TokenCache { get; set; } = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".cache", "ksefcli", "ksefcli.json");
@@ -39,7 +41,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
     {
         _cachedConfig = new Lazy<KsefCliConfig>(() =>
         {
-            return KsefConfigLoader.Load(ConfigFile, ActiveProfile);
+            return ConfigLoader.Load(ConfigFile, ActiveProfile);
         });
         _cachedProfile = new Lazy<ProfileConfig>(() =>
         {
@@ -60,11 +62,26 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return new TokenStore.Key(config.ActiveProfile, profile.Nip, profile.Environment);
     }
 
+    private static string StatusInfoToString(StatusInfo statusInfo)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"Code: {statusInfo.Code}, Description: {statusInfo.Description}");
+        if (statusInfo.Details != null && statusInfo.Details.Any())
+        {
+            sb.Append($", Details: [{string.Join(", ", statusInfo.Details)}]");
+        }
+        if (statusInfo.Extensions != null && statusInfo.Extensions.Any())
+        {
+            sb.Append($", Extensions: {{{string.Join(", ", statusInfo.Extensions.Select(kv => $"{kv.Key}: {kv.Value}"))}}}");
+        }
+        return sb.ToString();
+    }
+
     private static void PrintXmlToConsole(string xml, string title)
     {
-        Console.WriteLine($"----- {title} -----");
-        Console.WriteLine(xml);
-        Console.WriteLine($"----- KONIEC: {title} -----\n");
+        Log.LogInformation($"----- {title} -----");
+        Log.LogInformation(xml);
+        Log.LogInformation($"----- KONIEC: {title} -----\n");
     }
 
 
@@ -125,7 +142,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         do
         {
             status = await ksefClient.GetAuthStatusAsync(signature.ReferenceNumber, signature.AuthenticationToken.Token).ConfigureAwait(false);
-            Log.LogInformation($"      Status: {status.Status.Code} - {status.Status.Description} | upłynęło: {DateTime.UtcNow - startTime:mm\\:ss}");
+            Log.LogInformation($"      Status: {StatusInfoToString(status.Status)} | upłynęło: {DateTime.UtcNow - startTime:mm\\:ss}");
             if (status.Status.Code != 200)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
@@ -135,7 +152,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         while (status.Status.Code == 100 && (DateTime.UtcNow - startTime) < timeout);
         if (status.Status.Code != 200)
         {
-            throw new InvalidOperationException($"Uwierzytelnienie nie powiodło się lub przekroczono czas oczekiwania. Kod: {status.Status.Code}, Opis: {status.Status.Description}");
+            throw new InvalidOperationException($"Uwierzytelnienie nie powiodło się lub przekroczono czas oczekiwania. {StatusInfoToString(status.Status)}");
         }
         Log.LogInformation("4. Uzyskanie tokena dostępowego (accessToken)");
         AuthenticationOperationStatusResponse tokenResponse = await ksefClient.GetAccessTokenAsync(signature.AuthenticationToken.Token).ConfigureAwait(false);
@@ -153,17 +170,17 @@ public abstract class IWithConfigCommand : IGlobalCommand
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         ICryptographyService cryptoService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
-        SignatureService signatureService = scope.ServiceProvider.GetRequiredService<SignatureService>();
 
-
-        X509Certificate2 certificate = X509CertificateLoader.LoadPkcs12FromFile(config.Certificate!.Certificate, config.Certificate!.Password);
+        byte[] certBytes = Encoding.UTF8.GetBytes(config.Certificate!.Certificate!);
+        X509Certificate2 publicCert = certBytes.LoadCertificate();
+        X509Certificate2 certificate = publicCert.MergeWithPemKey(config.Certificate.Private_Key!, config.Certificate.Password);
 
         // 1. Get Auth Challenge
-        Console.WriteLine("[2] Pobieranie wyzwania (challenge) z KSeF...");
+        Log.LogInformation("[2] Pobieranie wyzwania (challenge) z KSeF...");
         AuthenticationChallengeResponse challengeResponse = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
-        Console.WriteLine($"    Challenge: {challengeResponse.Challenge}");
+        Log.LogInformation($"    Challenge: {challengeResponse.Challenge}");
         // 2. Prepare and Sign AuthTokenRequest
-        Console.WriteLine("[3] Budowanie AuthTokenRequest (builder)...");
+        Log.LogInformation("[3] Budowanie AuthTokenRequest (builder)...");
         AuthenticationTokenRequest authTokenRequest = AuthTokenRequestBuilder
             .Create()
             .WithChallenge(challengeResponse.Challenge)
@@ -171,26 +188,26 @@ public abstract class IWithConfigCommand : IGlobalCommand
             .WithIdentifierType(config.Certificate!.SubjectIdentifierType)
             .Build();
         // 4) Serializacja do XML
-        Console.WriteLine("[4] Serializacja żądania do XML (unsigned)...");
+        Log.LogInformation("[4] Serializacja żądania do XML (unsigned)...");
         string unsignedXml = AuthenticationTokenRequestSerializer.SerializeToXmlString(authTokenRequest);
         PrintXmlToConsole(unsignedXml, "XML przed podpisem");
-        Console.WriteLine("[6] Podpisywanie XML (XAdES)...");
+        Log.LogInformation("[6] Podpisywanie XML (XAdES)...");
 
         string signedXml = SignatureService.Sign(unsignedXml, certificate);
         PrintXmlToConsole(signedXml, "XML po podpisie (XAdES)");
         // 7) Przesłanie podpisanego XML do KSeF
-        Console.WriteLine("[7] Wysyłanie podpisanego XML do KSeF...");
+        Log.LogInformation("[7] Wysyłanie podpisanego XML do KSeF...");
         SignatureResponse submission = await ksefClient.SubmitXadesAuthRequestAsync(signedXml, verifyCertificateChain: false).ConfigureAwait(false);
-        Console.WriteLine($"    ReferenceNumber: {submission.ReferenceNumber}");
+        Log.LogInformation($"    ReferenceNumber: {submission.ReferenceNumber}");
         // 8) Odpytanie o status
-        Console.WriteLine("[8] Odpytanie o status operacji uwierzytelnienia...");
+        Log.LogInformation("[8] Odpytanie o status operacji uwierzytelnienia...");
         DateTime startTime = DateTime.UtcNow;
         TimeSpan timeout = TimeSpan.FromMinutes(2);
         AuthStatus status;
         do
         {
             status = await ksefClient.GetAuthStatusAsync(submission.ReferenceNumber, submission.AuthenticationToken.Token).ConfigureAwait(false);
-            Console.WriteLine($"      Status: {status.Status.Code} - {status.Status.Description} | upłynęło: {DateTime.UtcNow - startTime:mm\\:ss}");
+            Log.LogInformation($"      Status: {StatusInfoToString(status.Status)} | upłynęło: {DateTime.UtcNow - startTime:mm\\:ss}");
             if (status.Status.Code != 200)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
@@ -199,10 +216,10 @@ public abstract class IWithConfigCommand : IGlobalCommand
         while (status.Status.Code == 100 && (DateTime.UtcNow - startTime) < timeout);
         if (status.Status.Code != 200)
         {
-            throw new InvalidOperationException($"Uwierzytelnienie nie powiodło się lub przekroczono czas oczekiwania. Kod: {status.Status.Code}, Opis: {status.Status.Description}");
+            throw new InvalidOperationException($"Uwierzytelnienie nie powiodło się lub przekroczono czas oczekiwania. {StatusInfoToString(status.Status)}");
         }
         // 9) Pobranie access token
-        Console.WriteLine("[9] Pobieranie access token...");
+        Log.LogInformation("[9] Pobieranie access token...");
         AuthenticationOperationStatusResponse tokenResponse = await ksefClient.GetAccessTokenAsync(submission.AuthenticationToken.Token).ConfigureAwait(false);
         return tokenResponse;
     }
@@ -248,7 +265,6 @@ public abstract class IWithConfigCommand : IGlobalCommand
     {
         ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();
-
         KSeF.Client.ClientFactory.Environment environment = config.Environment.ToUpper() switch
         {
             "PROD" => KSeF.Client.ClientFactory.Environment.Prod,
@@ -256,35 +272,14 @@ public abstract class IWithConfigCommand : IGlobalCommand
             "TEST" => KSeF.Client.ClientFactory.Environment.Test,
             _ => throw new Exception($"Invalid environment in profile: {config.Environment}")
         };
-
-        services.Configure<ProfileConfig>(options =>
-        {
-            options.Nip = config.Nip;
-            options.Token = config.Token;
-            options.Environment = config.Environment;
-            options.Certificate = config.Certificate;
-        });
-
+        services.AddSingleton(config);
         services.AddKSeFClient(options =>
         {
             options.BaseUrl = KsefEnvironmentConfig.BaseUrls[environment];
         });
-
-        services.AddSingleton<ICryptographyClient, CryptographyClient>();
-        services.AddSingleton<ICertificateFetcher, DefaultCertificateFetcher>();
-        services.AddSingleton<ICryptographyService, CryptographyService>();
-        // Rejestracja usługi hostowanej (Hosted Service) jako singleton na potrzeby testów
-        services.AddSingleton<CryptographyWarmupHostedService>();
-
+        ServiceCollectionExtensions.AddCryptographyClient(services, CryptographyServiceWarmupMode.NonBlocking);
         ServiceProvider provider = services.BuildServiceProvider();
-
         IServiceScope scope = provider.CreateScope();
-
-        // opcjonalne: inicjalizacja lub inne czynności startowe
-        // Uruchomienie usługi hostowanej w trybie blokującym (domyślnym) na potrzeby testów
-        scope.ServiceProvider.GetRequiredService<CryptographyWarmupHostedService>()
-                   .StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         return scope;
     }
 }
