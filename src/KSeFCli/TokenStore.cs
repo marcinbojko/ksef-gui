@@ -65,15 +65,9 @@ public class TokenStore
 
         if (tokens.TryGetValue(key.ToCacheKey(), out Data? token))
         {
-            string invalidReason = "";
-            if (token?.Response is null)
-            {
-                invalidReason = "Response is null";
-            }
-            else if (token.Response.RefreshToken is null)
-            {
-                invalidReason = "RefreshToken is null";
-            }
+            string invalidReason = token?.Response is null ? "Response is null" :
+                                   token.Response.RefreshToken is null ? "RefreshToken is null" :
+                                   token.Response.AccessToken is null ? "AccessToken is null" : "";
             
             if (!string.IsNullOrEmpty(invalidReason))
             {
