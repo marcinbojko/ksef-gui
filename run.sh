@@ -41,7 +41,7 @@ cli_run_with_config() {
 }
 
 resolve_fast() {
-  exe=$(find ./src/KSeFCli/bin/ -type f -executable -name ksefcli -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d' ' -f2)
+  exe=$(find ./src/KSeFCli/bin/ -type f -executable -name ksefcli -exec stat -c '%Y %n' {} + | sort -n | tail -n 1 | cut -d' ' -f2-)
   if [[ ! -f "$exe" ]]; then
     fatal "no exe files found"
   fi
@@ -49,8 +49,8 @@ resolve_fast() {
 }
 
 run_tests() {
-  cli_run version || :
   resolve_fast
+  cli_run version || :
   cli_run --help
 }
 
