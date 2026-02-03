@@ -1,0 +1,35 @@
+active_profile: cert_test
+profiles:
+  cert_test:
+    environment: test
+    nip: '1234567890'
+    certificate:
+      private_key_file: './my_private_key.pem'
+      certificate_file: './my_certificate.pem'
+      password_file: './password.txt'
+  token_test:
+    environment: test
+    nip: '9876543210'
+    token: 'test_token_value'
+  cert_env_password_test:
+    environment: test
+    nip: '1122334455'
+    certificate:
+      private_key_file: './my_private_key.pem'
+      certificate_file: './my_certificate.pem'
+      password_env: 'KSEF_TEST_PASSWORD_ENV'
+  cert_inline_test:
+    environment: test
+    nip: '2233445566'
+    certificate:
+      private_key: |-
+        -----BEGIN PRIVATE KEY-----
+        MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAKV1pQ3Vn+1Xb+0f
+        ...
+        -----END PRIVATE KEY-----
+      certificate: |-
+        -----BEGIN CERTIFICATE-----
+        MIIDezCCAmOgAwIBAgIJAN3S3y+lq/VvMA0GCSqGSIb3DQEBCwUAMHExCzAJBgNV
+        ...
+        -----END CERTIFICATE-----
+      password: 'inline_password'

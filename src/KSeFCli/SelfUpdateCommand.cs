@@ -11,6 +11,9 @@ public class SelfUpdateCommand : IGlobalCommand
     [Option('d', "destination", HelpText = "Save the new version to the specified path instead of replacing the current executable.")]
     public string? Destination { get; set; }
 
+    [Option("url", HelpText = "Specify a custom URL for the update binary.")]
+    public string? Url { get; set; }
+
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         string? currentExecutablePath = null;
@@ -26,7 +29,13 @@ public class SelfUpdateCommand : IGlobalCommand
 
         string downloadUrl;
         string fileName;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+
+        if (!string.IsNullOrEmpty(Url))
+        {
+            downloadUrl = Url;
+            fileName = Path.GetFileName(new Uri(Url).LocalPath);
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             downloadUrl = "https://gitlab.com/kamcuk/ksefcli/-/jobs/artifacts/main/raw/ksefcli.exe?job=windows_build_main";
             fileName = "ksefcli.exe";
