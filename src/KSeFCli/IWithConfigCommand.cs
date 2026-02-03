@@ -110,6 +110,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
+        await cryptographyService.WarmupAsync(cancellationToken).ConfigureAwait(false);
 
         Log.LogInformation("1. Getting challenge");
         AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
