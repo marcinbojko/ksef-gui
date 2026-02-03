@@ -353,8 +353,15 @@ Aktualizuje narzędzie `ksefcli` do najnowszej stabilnej wersji, pobierając bin
 
 **Użycie:**
 ```bash
-ksefcli SelfUpdate
+ksefcli SelfUpdate [--url <adres-url-binarki>]
 ```
+
+**Opcje:**
+
+| Opcja            | Opis                                                                                   | Domyślnie |
+|------------------|----------------------------------------------------------------------------------------|-----------|
+| `-d`, `--destination` | Zapisuje nową wersję do określonej ścieżki zamiast zastępować bieżący plik wykonywalny. | Bieżący plik wykonywalny |
+| `--url`          | Określa niestandardowy adres URL do pobrania binarnego pliku aktualizacji.              | Automatycznie wykrywany na podstawie platformy |
 
 ---
 
