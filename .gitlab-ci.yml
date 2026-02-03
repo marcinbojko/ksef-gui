@@ -37,7 +37,7 @@ secret_detection:
     - ldd ksefcli
     - stat ksefcli
     # Run tests.
-    - ./test.sh ksefcli
+    - ./test.sh ./ksefcli
   artifacts:
     paths:
       - ksefcli
