@@ -15,16 +15,11 @@ Jako agent odpowiedzialny za rozwój tego projektu, będę przestrzegał następ
 *   **Brak pustych linii**: Pisząc kod, nie twórz linii bez zawartości.
 *   **Nie łap excpetion**: Nie łap exception, tylko po to żeby print. Daj exception raise.
 
-
-
 W thirdparty/ksef-client-csharp jest zależność.
-
 
 ## Best Practices C# / .NET
 
-Nie używam `var`. Preferuję typy.
-
-Używaj przestrzeni nazw zadeklarowanych w pliku (`file-scoped namespaces`) zamiast w blokach.
+Używaj przestrzeni nazw zadeklarowanych w pliku (`file-scoped namespaces`) zamiast w bloków.
 
 ## Parser Argumentów CLI: CommandLineParser
 

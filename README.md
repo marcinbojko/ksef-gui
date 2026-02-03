@@ -83,8 +83,11 @@ profiles:
     nip: <nip_podmiotu>
     token: <token_autoryzacyjny>
     certificate:
-      private_key: <sciezka_do_klucza_prywatnego>
-      certificate: <sciezka_do_certyfikatu_publicznego>
+      private_key: <zawartosc_klucza_prywatnego>
+      private_key_file: <sciezka_do_klucza_prywatnego>
+      certificate: <zawartosc_certyfikatu_publicznego>
+      certificate_file: <sciezka_do_certyfikatu_publicznego>
+      password: <haslo_do_klucza_prywatnego>
       password_env: <zmienna_srodowiskowa_z_haslem>
   <nazwa_profilu_2>:
     # ...
@@ -94,15 +97,19 @@ profiles:
 
 *   `active_profile`: (Opcjonalnie) Nazwa profilu, który będzie używany domyślnie, jeśli nie zostanie podany za pomocą opcji `--profile`. Jeśli zdefiniowany jest tylko jeden profil, `active_profile` jest ignorowane.
 *   `profiles`: Mapa profili konfiguracyjnych.
-    *   `<nazwa_profilu>`: Dowolna nazwa identyfikująca profil (np. `firma1`, `firma_xyz_test`).
+    *   `<nazwa_profilu>`: Dowolna nazwa identyfikująca profil (np. `dyzio`, `firma_xyz_test`).
         *   `environment`: Środowisko KSeF (`test`, `demo`, `prod`).
         *   `nip`: Numer Identyfikacji Podatkowej (NIP) podmiotu, którego dotyczy profil.
         *   Należy zdefiniować **jedną** z poniższych metod uwierzytelniania:
             *   `token`: Token autoryzacyjny sesji.
             *   `certificate`: Dane certyfikatu kwalifikowanego.
-                *   `private_key`: Ścieżka do klucza prywatnego (plik `.pem` lub `.pfx`). Można użyć `~` jako skrótu do katalogu domowego.
-                *   `certificate`: Ścieżka do certyfikatu publicznego. Można użyć `~` jako skrótu do katalogu domowego.
+                *   `private_key`: Zawartość klucza prywatnego.
+                *   `private_key_file`: Ścieżka do klucza prywatnego (plik `.pem` lub `.pfx`). Można użyć `~` jako skrótu do katalogu domowego.
+                *   `certificate`: Zawartość certyfikatu publicznego.
+                *   `certificate_file`: Ścieżka do certyfikatu publicznego. Można użyć `~` jako skrótu do katalogu domowego.
+                *   `password`: Hasło do klucza prywatnego.
                 *   `password_env`: Nazwa zmiennej środowiskowej, która przechowuje hasło do klucza prywatnego.
+                *   `password_file`: Ścieżka do pliku z hasłem do klucza prywatnego.
 
 ### Przykład Konfiguracji
 
@@ -128,11 +135,16 @@ profiles:
     environment: prod
     nip: '1234567890'
     certificate:
-      private_key: '~/certs/my_private_key.pem'
-      certificate: '~/certs/my_certificate.pem'
+      private_key_file: '~/certs/my_private_key.pem'
+      certificate_file: '~/certs/my_certificate.pem'
       password_env: 'KSEF_CERT_PASSWORD'
 
 ```
+
+W tym przykładzie:
+- Domyślnym profilem jest `firma1`.
+- Zdefiniowano trzy profile (`firma1`, `firma2`, `firma3`) używające uwierzytelniania tokenem na środowisku testowym dla dwóch różnych NIP-ów.
+- Profil `cert_auth_example` używa uwierzytelniania certyfikatem na środowisku produkcyjnym. Hasło do certyfikatu zostanie odczytane ze zmiennej środowiskowej `KSEF_CERT_PASSWORD`.
 
 ## Użycie
 
@@ -143,14 +155,6 @@ ksefcli <polecenie> [opcje]
 ```
 
 ### Opcje Globalne
-
-Wszystkie polecenia akceptują następujące opcje globalne:
-
-*   `-c`, `--config`: Ścieżka do pliku konfiguracyjnego `ksefcli.yaml`. Domyślnie: `$HOME/.config/ksefcli/ksefcli.yaml`.
-*   `-a`, `--active`: Nazwa profilu do użycia, nadpisuje `active_profile` z pliku konfiguracyjnego.
-*   `--cache`: Ścieżka do pliku cache'u tokenów. Domyślnie: `$HOME/.cache/ksefcli/ksefcli.json`.
-*   `-v`, `--verbose`: Włącza szczegółowe logowanie (poziom DEBUG).
-*   `-q`, `--quiet`: Włącza tryb cichy (wyświetla tylko ostrzeżenia i błędy).
 
 ### Dostępne Polecenia
 
@@ -164,6 +168,7 @@ Wszystkie polecenia akceptują następujące opcje globalne:
 *   `PrzeslijFaktury`: Wysyła faktury do KSeF.
 *   `LinkDoFaktury`: Generuje link weryfikacyjny dla faktury.
 *   `QRDoFaktury`: Generuje kod QR dla linku weryfikacyjnego faktury.
+*   `PrintConfig`: Prints the active configuration in YAML or JSON format.
 *   `SelfUpdate`: Aktualizuje narzędzie ksefcli do najnowszej wersji.
 *   `XML2PDF`: Konwertuje fakturę KSeF w formacie XML na format PDF.
 
@@ -344,6 +349,23 @@ ksefcli QRDoFaktury <ksef-numer> faktura-qr.png
 | Opcja            | Opis                                 | Domyślnie |
 |------------------|--------------------------------------|-----------|
 | `-p`, `--pixels` | Piksele na moduł dla kodu QR.        | `5`       |
+
+---
+
+### `PrintConfig`
+
+Wypisuje aktywną konfigurację w formacie YAML (domyślnie) lub JSON (z opcją `--json`).
+
+**Użycie:**
+```bash
+ksefcli PrintConfig [--json]
+```
+
+**Opcje:**
+
+| Opcja       | Opis                                | Domyślnie |
+|-------------|-------------------------------------|-----------|
+| `--json`    | Wypisuje konfigurację w formacie JSON. | `false`   |
 
 ---
 
