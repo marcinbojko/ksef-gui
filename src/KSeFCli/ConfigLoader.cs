@@ -52,19 +52,19 @@ public static class ConfigLoader
 
         string? configDir = Path.GetDirectoryName(absoluteConfigPath);
 
-        var resolvedProfiles = new Dictionary<string, ProfileConfig>();
-        foreach (var (profileName, profileConfig) in config.Profiles)
+        Dictionary<string, ProfileConfig> resolvedProfiles = new Dictionary<string, ProfileConfig>();
+        foreach ((string? profileName, ProfileConfig? profileConfig) in config.Profiles)
         {
             if (profileConfig.Certificate is not null && configDir is not null)
             {
-                var cert = profileConfig.Certificate;
+                CertificateConfig cert = profileConfig.Certificate;
                 string? resolvedPrivateKey = ResolveContent(cert.Private_Key, cert.Private_Key_File, configDir);
                 string? resolvedCertificate = ResolveContent(cert.Certificate, cert.Certificate_File, configDir);
                 string? resolvedPassword = cert.Password ??
                                            (cert.Password_Env is not null ? System.Environment.GetEnvironmentVariable(cert.Password_Env) : null) ??
                                            ResolveContent(null, cert.Password_File, configDir);
-                
-                var newCert = new CertificateConfig
+
+                CertificateConfig newCert = new CertificateConfig
                 {
                     Private_Key = resolvedPrivateKey,
                     Certificate = resolvedCertificate,
@@ -89,12 +89,12 @@ public static class ConfigLoader
             }
         }
 
-        var finalConfig = new KsefCliConfig
+        KsefCliConfig finalConfig = new KsefCliConfig
         {
             ActiveProfile = activeProfile,
             Profiles = resolvedProfiles,
         };
-        
+
         ValidateProfile(finalConfig.Profiles[finalConfig.ActiveProfile]);
 
         return finalConfig;

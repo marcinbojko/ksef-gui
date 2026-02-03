@@ -1,5 +1,7 @@
 using System.Text.Json;
+
 using CommandLine;
+
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -13,12 +15,12 @@ public class PrintConfigCommand : IWithConfigCommand
 
     public override Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var config = Config();
+        ProfileConfig config = Config();
 
         if (JsonOutput)
         {
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            var json = JsonSerializer.Serialize(config, options);
+            JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
+            string json = JsonSerializer.Serialize(config, options);
             Console.WriteLine(json);
         }
         else
@@ -26,7 +28,7 @@ public class PrintConfigCommand : IWithConfigCommand
             ISerializer serializer = new SerializerBuilder()
                 .WithNamingConvention(UnderscoredNamingConvention.Instance)
                 .Build();
-            var yaml = serializer.Serialize(config);
+            string yaml = serializer.Serialize(config);
             Console.WriteLine(yaml);
         }
 

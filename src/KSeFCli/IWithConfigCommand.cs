@@ -6,9 +6,7 @@ using CommandLine;
 
 using KSeF.Client.Api.Builders.Auth;
 using KSeF.Client.Api.Services;
-using KSeF.Client.Api.Services.Internal;
 using KSeF.Client.ClientFactory;
-using KSeF.Client.Clients;
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Interfaces.Services;
 using KSeF.Client.Core.Models;
@@ -64,7 +62,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     private static string StatusInfoToString(StatusInfo statusInfo)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.Append($"Code: {statusInfo.Code}, Description: {statusInfo.Description}");
         if (statusInfo.Details != null && statusInfo.Details.Any())
         {

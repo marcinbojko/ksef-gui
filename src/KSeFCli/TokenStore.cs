@@ -68,7 +68,7 @@ public class TokenStore
             string invalidReason = token?.Response is null ? "Response is null" :
                                    token.Response.RefreshToken is null ? "RefreshToken is null" :
                                    token.Response.AccessToken is null ? "AccessToken is null" : "";
-            
+
             if (!string.IsNullOrEmpty(invalidReason))
             {
                 Log.LogWarning($"Invalid token data found in cache for key: {key.ToCacheKey()} (reason: {invalidReason}). Deleting the entry.");
