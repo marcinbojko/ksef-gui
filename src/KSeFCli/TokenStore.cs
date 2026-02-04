@@ -7,7 +7,17 @@ namespace KSeFCli;
 
 public class TokenStore
 {
-    public record Data(AuthenticationOperationStatusResponse Response);
+    public record Data
+    {
+        public AuthenticationOperationStatusResponse Response { get; init; }
+        public Data(AuthenticationOperationStatusResponse Response)
+        {
+            System.Diagnostics.Trace.Assert(Response is not null, "Response is not null");
+            System.Diagnostics.Trace.Assert(Response.AccessToken is not null, "Response.AccessToken is not null");
+            System.Diagnostics.Trace.Assert(Response.RefreshToken is not null, "Response.RefreshToken is not null");
+            this.Response = Response;
+        }
+    }
 
     public record Key(string Nazwa, string Nip, string Environment)
     {
@@ -94,9 +104,6 @@ public class TokenStore
         using (LockedFileStream lockFile = new LockedFileStream(_path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
             var tokens = LoadTokens(lockFile);
-            System.Diagnostics.Trace.Assert(token.Response is not null, "token.response is not null");
-            System.Diagnostics.Trace.Assert(token.Response.AccessToken is not null, "token.response.AccessToken is not null");
-            System.Diagnostics.Trace.Assert(token.Response.RefreshToken is not null, "token.response.RefreshToken is not null");
             tokens[key.ToCacheKey()] = token;
             lockFile.Fs.Seek(0, SeekOrigin.Begin);
             lockFile.Fs.SetLength(0);
