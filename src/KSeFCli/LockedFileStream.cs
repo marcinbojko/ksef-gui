@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace KSeFCli;
 
 public class LockedFileStream : IDisposable

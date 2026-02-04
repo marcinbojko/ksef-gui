@@ -19,16 +19,19 @@ public class TokenStore
         }
     }
 
-    public record Key(string Nazwa, string Nip, string Environment, string ProfileJson)
+    public record Key(string Nazwa, ProfileConfig Profile)
     {
         public string ToCacheKey()
         {
             using (System.Security.Cryptography.SHA256 sha256 = System.Security.Cryptography.SHA256.Create())
             {
-                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(ProfileJson);
+                string profileJson = System.Text.Json.JsonSerializer.Serialize(Profile);
+                string nip = Profile.Nip;
+                string environment = Profile.Environment;
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(profileJson);
                 byte[] hash = sha256.ComputeHash(bytes);
                 string hashString = Convert.ToHexString(hash).ToLower();
-                return $"{Nip}_{Environment}_{Nazwa}_{hashString}";
+                return $"{Nazwa}_{environment}_{nip}_{hashString}";
             }
         }
     }
@@ -55,7 +58,7 @@ public class TokenStore
     {
         if (lockFile.Fs.Length == 0)
         {
-            var empty = new Dictionary<string, Data>();
+            Dictionary<string, Data> empty = new Dictionary<string, Data>();
             byte[] emptyData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(empty, _jsonOptions));
             lockFile.Fs.Write(emptyData, 0, emptyData.Length);
             lockFile.Fs.Flush(true);
@@ -73,7 +76,7 @@ public class TokenStore
             Log.LogWarning($"Invalid JSON in token cache file: {_path}. Overwriting with empty data.");
             lockFile.Fs.Seek(0, SeekOrigin.Begin);
             lockFile.Fs.SetLength(0);
-            var empty = new Dictionary<string, Data>();
+            Dictionary<string, Data> empty = new Dictionary<string, Data>();
             byte[] emptyData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(empty, _jsonOptions));
             lockFile.Fs.Write(emptyData, 0, emptyData.Length);
             lockFile.Fs.Flush(true);
@@ -85,7 +88,7 @@ public class TokenStore
     {
         using (LockedFileStream lockFile = new LockedFileStream(_path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
-            var tokens = LoadTokens(lockFile);
+            Dictionary<string, Data> tokens = LoadTokens(lockFile);
             if (tokens.TryGetValue(key.ToCacheKey(), out Data? token))
             {
                 string invalidReason = token?.Response is null ? "Response is null" :
@@ -112,7 +115,7 @@ public class TokenStore
     {
         using (LockedFileStream lockFile = new LockedFileStream(_path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
-            var tokens = LoadTokens(lockFile);
+            Dictionary<string, Data> tokens = LoadTokens(lockFile);
             tokens[key.ToCacheKey()] = token;
             lockFile.Fs.Seek(0, SeekOrigin.Begin);
             lockFile.Fs.SetLength(0);
@@ -126,7 +129,7 @@ public class TokenStore
     {
         using (LockedFileStream lockFile = new LockedFileStream(_path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
-            var tokens = LoadTokens(lockFile);
+            Dictionary<string, Data> tokens = LoadTokens(lockFile);
             if (tokens.Remove(key.ToCacheKey()))
             {
                 lockFile.Fs.Seek(0, SeekOrigin.Begin);
