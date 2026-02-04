@@ -40,7 +40,7 @@ public class TokenStore
         }
 
         byte[] data;
-        using (LockFile lockFile = new LockFile(_path, FileAccess.Read))
+        using (LockFile lockFile = new LockFile(_path, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             data = new byte[lockFile.Fs.Length];
             lockFile.Fs.ReadExactly(data);
@@ -54,7 +54,7 @@ public class TokenStore
         catch (JsonException)
         {
             Log.LogWarning($"Invalid JSON in token cache file: {_path}. Overwriting with empty data.");
-            using (LockFile lockFile = new LockFile(_path, FileAccess.Write))
+            using (LockFile lockFile = new LockFile(_path, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 byte[] emptyData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new Dictionary<string, Data>(), _jsonOptions));
                 lockFile.Fs.Write(emptyData, 0, emptyData.Length);
@@ -73,7 +73,7 @@ public class TokenStore
             {
                 Log.LogWarning($"Invalid token data found in cache for key: {key.ToCacheKey()} (reason: {invalidReason}). Deleting the entry.");
                 tokens.Remove(key.ToCacheKey());
-                using (LockFile lockFile = new LockFile(_path, FileAccess.Write))
+                using (LockFile lockFile = new LockFile(_path, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
                     lockFile.Fs.Write(newData, 0, newData.Length);
@@ -88,7 +88,7 @@ public class TokenStore
 
     public void SetToken(Key key, Data token)
     {
-        using (LockFile lockFile = new LockFile(_path, FileAccess.ReadWrite))
+        using (LockFile lockFile = new LockFile(_path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
             Dictionary<string, Data> tokens;
             if (lockFile.Fs.Length > 0)
@@ -117,7 +117,7 @@ public class TokenStore
 
     public bool RemoveToken(Key key)
     {
-        using (LockFile lockFile = new LockFile(_path, FileAccess.ReadWrite))
+        using (LockFile lockFile = new LockFile(_path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
         {
             Dictionary<string, Data> tokens;
             if (lockFile.Fs.Length > 0)
