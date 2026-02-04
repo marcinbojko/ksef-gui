@@ -39,11 +39,28 @@ public class TokenStore
             return null;
         }
 
-        byte[] data;
-        using (FileStream fs = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        byte[] data = Array.Empty<byte>();
+        bool locked = false;
+        while (true)
         {
-            data = new byte[fs.Length];
-            fs.ReadExactly(data);
+            try
+            {
+                using (FileStream fs = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    data = new byte[fs.Length];
+                    fs.ReadExactly(data);
+                }
+                break;
+            }
+            catch (IOException)
+            {
+                if (!locked)
+                {
+                    Log.LogInformation($"Waiting for lock on {_path}...");
+                    locked = true;
+                }
+                Thread.Sleep(1000);
+            }
         }
 
         Dictionary<string, Data> tokens;
@@ -54,11 +71,28 @@ public class TokenStore
         catch (JsonException)
         {
             Log.LogWarning($"Invalid JSON in token cache file: {_path}. Overwriting with empty data.");
-            using (FileStream fs = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None))
+            locked = false;
+            while (true)
             {
-                byte[] emptyData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new Dictionary<string, Data>(), _jsonOptions));
-                fs.Write(emptyData, 0, emptyData.Length);
-                fs.Flush(true);
+                try
+                {
+                    using (FileStream fs = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        byte[] emptyData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new Dictionary<string, Data>(), _jsonOptions));
+                        fs.Write(emptyData, 0, emptyData.Length);
+                        fs.Flush(true);
+                    }
+                    break;
+                }
+                catch (IOException)
+                {
+                    if (!locked)
+                    {
+                        Log.LogInformation($"Waiting for lock on {_path}...");
+                        locked = true;
+                    }
+                    Thread.Sleep(1000);
+                }
             }
             return null;
         }
@@ -73,11 +107,28 @@ public class TokenStore
             {
                 Log.LogWarning($"Invalid token data found in cache for key: {key.ToCacheKey()} (reason: {invalidReason}). Deleting the entry.");
                 tokens.Remove(key.ToCacheKey());
-                using (FileStream newFs = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None))
+                locked = false;
+                while (true)
                 {
-                    byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
-                    newFs.Write(newData, 0, newData.Length);
-                    newFs.Flush(true);
+                    try
+                    {
+                        using (FileStream newFs = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None))
+                        {
+                            byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
+                            newFs.Write(newData, 0, newData.Length);
+                            newFs.Flush(true);
+                        }
+                        break;
+                    }
+                    catch (IOException)
+                    {
+                        if (!locked)
+                        {
+                            Log.LogInformation($"Waiting for lock on {_path}...");
+                            locked = true;
+                        }
+                        Thread.Sleep(1000);
+                    }
                 }
                 return null;
             }
@@ -88,59 +139,92 @@ public class TokenStore
 
     public void SetToken(Key key, Data token)
     {
-        using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        bool locked = false;
+        while (true)
         {
-            Dictionary<string, Data> tokens;
-            if (fs.Length > 0)
+            try
             {
-                byte[] data = new byte[fs.Length];
-                fs.ReadExactly(data);
-                tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
+                using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                {
+                    Dictionary<string, Data> tokens;
+                    if (fs.Length > 0)
+                    {
+                        byte[] data = new byte[fs.Length];
+                        fs.ReadExactly(data);
+                        tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
+                    }
+                    else
+                    {
+                        tokens = new Dictionary<string, Data>();
+                    }
+
+                    System.Diagnostics.Trace.Assert(token.Response is not null, "token.response is not null");
+                    System.Diagnostics.Trace.Assert(token.Response.AccessToken is not null, "token.response.AccessToken is not null");
+                    System.Diagnostics.Trace.Assert(token.Response.RefreshToken is not null, "token.response.RefreshToken is not null");
+                    tokens[key.ToCacheKey()] = token;
+
+                    fs.Seek(0, SeekOrigin.Begin);
+                    fs.SetLength(0);
+                    byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
+                    fs.Write(newData, 0, newData.Length);
+                    fs.Flush(true);
+                }
+                break;
             }
-            else
+            catch (IOException)
             {
-                tokens = new Dictionary<string, Data>();
+                if (!locked)
+                {
+                    Log.LogInformation($"Waiting for lock on {_path}...");
+                    locked = true;
+                }
+                Thread.Sleep(1000);
             }
-
-            System.Diagnostics.Trace.Assert(token.Response is not null, "token.response is not null");
-            System.Diagnostics.Trace.Assert(token.Response.AccessToken is not null, "token.response.AccessToken is not null");
-            System.Diagnostics.Trace.Assert(token.Response.RefreshToken is not null, "token.response.RefreshToken is not null");
-            tokens[key.ToCacheKey()] = token;
-
-            fs.Seek(0, SeekOrigin.Begin);
-            fs.SetLength(0);
-            byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
-            fs.Write(newData, 0, newData.Length);
-            fs.Flush(true);
         }
     }
 
     public bool RemoveToken(Key key)
     {
-        using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        bool locked = false;
+        while (true)
         {
-            Dictionary<string, Data> tokens;
-            if (fs.Length > 0)
+            try
             {
-                byte[] data = new byte[fs.Length];
-                fs.ReadExactly(data);
-                tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
-            }
-            else
-            {
-                return false;
-            }
+                using (FileStream fs = new FileStream(this._path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                {
+                    Dictionary<string, Data> tokens;
+                    if (fs.Length > 0)
+                    {
+                        byte[] data = new byte[fs.Length];
+                        fs.ReadExactly(data);
+                        tokens = JsonSerializer.Deserialize<Dictionary<string, Data>>(data, _jsonOptions) ?? new Dictionary<string, Data>();
+                    }
+                    else
+                    {
+                        return false;
+                    }
 
-            if (tokens.Remove(key.ToCacheKey()))
-            {
-                fs.Seek(0, SeekOrigin.Begin);
-                fs.SetLength(0);
-                byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
-                fs.Write(newData, 0, newData.Length);
-                fs.Flush(true);
-                return true;
+                    if (tokens.Remove(key.ToCacheKey()))
+                    {
+                        fs.Seek(0, SeekOrigin.Begin);
+                        fs.SetLength(0);
+                        byte[] newData = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(tokens, _jsonOptions));
+                        fs.Write(newData, 0, newData.Length);
+                        fs.Flush(true);
+                        return true;
+                    }
+                    return false;
+                }
             }
-            return false;
+            catch (IOException)
+            {
+                if (!locked)
+                {
+                    Log.LogInformation($"Waiting for lock on {_path}...");
+                    locked = true;
+                }
+                Thread.Sleep(1000);
+            }
         }
     }
 }
