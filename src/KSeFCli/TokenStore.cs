@@ -19,9 +19,18 @@ public class TokenStore
         }
     }
 
-    public record Key(string Nazwa, string Nip, string Environment)
+    public record Key(string Nazwa, string Nip, string Environment, string ProfileJson)
     {
-        public string ToCacheKey() => $"{Nip}_{Environment}_{Nazwa}";
+        public string ToCacheKey()
+        {
+            using (System.Security.Cryptography.SHA256 sha256 = System.Security.Cryptography.SHA256.Create())
+            {
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(ProfileJson);
+                byte[] hash = sha256.ComputeHash(bytes);
+                string hashString = Convert.ToHexString(hash).ToLower();
+                return $"{Nip}_{Environment}_{Nazwa}_{hashString}";
+            }
+        }
     }
 
     private readonly string _path;

@@ -58,7 +58,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
     {
         KsefCliConfig config = _cachedConfig.Value;
         ProfileConfig profile = Config();
-        return new TokenStore.Key(config.ActiveProfile, profile.Nip, profile.Environment);
+        string profileJson = System.Text.Json.JsonSerializer.Serialize(profile);
+        return new TokenStore.Key(config.ActiveProfile, profile.Nip, profile.Environment, profileJson);
     }
 
     private static string StatusInfoToString(StatusInfo statusInfo)
