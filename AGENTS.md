@@ -1,26 +1,31 @@
-# Projekt ksefcli
+# ksefcli Project
 
-Projekt `ksefcli` to aplikacja CLI na system Linux, napisana w C#, służąca do interakcji z API Krajowego Systemu e-Faktur (KSeF) w Polsce. Wykorzystuje ona bibliotekę kliencką `ksef-client-csharp` do komunikacji z usługami KSeF.
+Project `ksefcli` is a CLI application for Linux, written in C#, used for interaction with the National System of e-Invoices (KSeF) API in Poland. It uses the client library `ksef-client-csharp` to communicate with KSeF services.
 
-## Zasady pracy agenta
+## Agent Guidelines
 
-Jako agent odpowiedzialny za rozwój tego projektu, będę przestrzegał następujących zasad:
+As an agent responsible for the development of this project, I will adhere to the following rules:
 
-*   **Generuję listę TODO**: Wszystkie zadania od użytkownika, dodaję do TODO przy użyciu narzędzia `write_todos`. Następnie kontynuuję wykonywanie zadań z listy TODO.
-*   **Realizuję punkty TODO jeden po jednym**: Pracuję metodycznie, wykonując zadania z listy `TODO` sekwencyjnie.
-*   **Format listy TODO**: Lista zadań będzie zwięzła, wykorzystując tylko słowa kluczowe i nie będzie zawierać pełnych zdań. Wszystkie podzadania zostaną spłaszczone i przedstawione jako niezależne zadania.
-*   **Minimalizm w komunikacji**: Bądź tak zwięzły, jak to tylko możliwe, i wypisuj minimalną ilość informacji, bez gramatyki.
-*   **Bezpośrednie narzędzia**: Wykonuj narzędzia bezpośrednio, bez wyjaśnień.
-*   **Commit often**: Commituj zmiany często, po każdej znaczącej zmianie.
-*   **Brak pustych linii**: Pisząc kod, nie twórz linii bez zawartości.
-*   **Nie łap excpetion**: Nie łap exception, tylko po to żeby print. Daj exception raise.
+*   **Generate TODO list**: Add all tasks from the user to TODO using the `write_todos` tool. Then proceed to execute tasks from the TODO list.
+*   **Execute TODO items one by one**: Work methodically, executing tasks from the `TODO` list sequentially.
+*   **TODO list format**: The task list will be concise, using only keywords and will not contain full sentences. All subtasks will be flattened and presented as independent tasks.
+*   **Communication Minimalism**:
+    *   SHUT UP.
+    *   BE CONCISE. SHORT.
+    *   NO GRAMMAR. NO SEMANTICS.
+    *   ROBOTIC MODE.
+    *   Output minimal info.
+*   **Direct Tools**: Execute tools directly, NO EXPLANATIONS.
+*   **Commit often**: Commit changes often, after each significant change.
+*   **No empty lines**: When writing code, do not create lines without content.
+*   **Do not catch exceptions**: Do not catch exceptions just to print. Raise exception.
 
-W thirdparty/ksef-client-csharp jest zależność.
+In thirdparty/ksef-client-csharp there is a dependency.
 
 ## Best Practices C# / .NET
 
-Używaj przestrzeni nazw zadeklarowanych w pliku (`file-scoped namespaces`) zamiast w bloków.
+Use `file-scoped namespaces` instead of blocks.
 
-## Parser Argumentów CLI: CommandLineParser
+## CLI Argument Parser: CommandLineParser
 
-Struktura CLI została zaimplementowana w `Program.cs`
+CLI structure implemented in `Program.cs`

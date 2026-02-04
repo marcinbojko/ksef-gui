@@ -26,10 +26,11 @@ public abstract class IWithConfigCommand : IGlobalCommand
     [Option('a', "active", HelpText = "Active profile name")]
     public string ActiveProfile { get; set; } = System.Environment.GetEnvironmentVariable("KSEFCLI_ACTIVE") ?? "";
 
-    [Option("cache", HelpText = "Active profile name")]
+    [Option("cache", HelpText = "Path to token cache file")]
     public string TokenCache { get; set; } = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".cache", "ksefcli", "ksefcli.json");
 
-
+    [Option("no-tokencache", HelpText = "Disable token cache usage")]
+    public bool NoTokenCache { get; set; }
 
     private readonly Lazy<ProfileConfig> _cachedProfile;
     private readonly Lazy<KsefCliConfig> _cachedConfig;
@@ -57,7 +58,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
     {
         KsefCliConfig config = _cachedConfig.Value;
         ProfileConfig profile = Config();
-        return new TokenStore.Key(config.ActiveProfile, profile.Nip, profile.Environment);
+        return new TokenStore.Key(config.ActiveProfile, profile);
     }
 
     private static string StatusInfoToString(StatusInfo statusInfo)
@@ -225,6 +226,13 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public async Task<string> GetAccessToken(CancellationToken cancellationToken)
     {
+        if (NoTokenCache)
+        {
+            Log.LogInformation("Token cache disabled, starting new auth");
+            AuthenticationOperationStatusResponse response = await Auth(cancellationToken).ConfigureAwait(false);
+            return response.AccessToken.Token;
+        }
+
         TokenStore tokenStore = GetTokenStore();
         TokenStore.Key key = GetTokenStoreKey();
         TokenStore.Data? storedToken = tokenStore.GetToken(key);

@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 using CommandLine;
@@ -19,7 +18,7 @@ public class SelfUpdateCommand : IGlobalCommand
         string? currentExecutablePath = null;
         if (string.IsNullOrEmpty(Destination))
         {
-            currentExecutablePath = Assembly.GetExecutingAssembly().Location;
+            currentExecutablePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
             if (string.IsNullOrEmpty(currentExecutablePath))
             {
                 Log.LogError("Error: Could not determine the location of the current executable.");
@@ -49,6 +48,11 @@ public class SelfUpdateCommand : IGlobalCommand
         {
             Log.LogError("Error: Self-update is only supported on Windows and Linux.");
             return 1;
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            fileName += ".exe";
         }
 
         string extension = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : string.Empty;
