@@ -233,7 +233,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         if (NoTokenCache)
         {
             Log.LogInformation("Token cache disabled, starting new auth");
-            AuthenticationOperationStatusResponse response = await Auth(cancellationToken).ConfigureAwait(false);
+            AuthenticationOperationStatusResponse response = await Auth(scope, cancellationToken).ConfigureAwait(false);
             return response.AccessToken.Token;
         }
 
