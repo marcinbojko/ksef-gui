@@ -21,7 +21,7 @@ public class PobierzFakturyCommand : SzukajFakturCommand
     [Option("useInvoiceNumber", HelpText = "Use InvoiceNumber instead of KsefNumber for the filename to save invoices.")]
     public bool UseInvoiceNumber { get; set; }
 
-    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         if (Pdf)
         {
@@ -30,10 +30,9 @@ public class PobierzFakturyCommand : SzukajFakturCommand
 
         Directory.CreateDirectory(OutputDir);
 
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
-        List<InvoiceSummary> invoices = await base.SzukajFaktury(ksefClient, cancellationToken).ConfigureAwait(false);
+        List<InvoiceSummary> invoices = await base.SzukajFaktury(scope, ksefClient, cancellationToken).ConfigureAwait(false);
 
         foreach (InvoiceSummary invoiceSummary in invoices)
         {
@@ -43,7 +42,7 @@ public class PobierzFakturyCommand : SzukajFakturCommand
 
             await File.WriteAllTextAsync(jsonFilePath, JsonSerializer.Serialize(invoiceSummary), cancellationToken).ConfigureAwait(false);
 
-            string invoiceXml = await ksefClient.GetInvoiceAsync(invoiceSummary.KsefNumber, await GetAccessToken(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+            string invoiceXml = await ksefClient.GetInvoiceAsync(invoiceSummary.KsefNumber, await GetAccessToken(scope, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(xmlFilePath, invoiceXml, cancellationToken).ConfigureAwait(false);
 
             Console.WriteLine($"Saved invoice {invoiceSummary.KsefNumber} to {xmlFilePath}");

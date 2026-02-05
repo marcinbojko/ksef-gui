@@ -13,10 +13,9 @@ namespace KSeFCli;
 [Verb("TokenRefresh", HelpText = "Refresh an existing session token")]
 public class TokenRefreshCommand : IWithConfigCommand
 {
-    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         if (string.IsNullOrEmpty(config.Token))
         {

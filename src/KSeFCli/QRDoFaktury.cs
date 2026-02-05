@@ -25,14 +25,13 @@ public class QRDoFakturyCommand : IWithConfigCommand
     [Option('p', "pixels", Default = 5, HelpText = "Pixels per module for the QR code")]
     public int PixelsPerModule { get; set; }
 
-    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         IVerificationLinkService linkSvc = scope.ServiceProvider.GetRequiredService<IVerificationLinkService>();
 
-        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
+        string accessToken = await GetAccessToken(scope, cancellationToken).ConfigureAwait(false);
         string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, accessToken, cancellationToken).ConfigureAwait(false);
 
         XDocument xmlDoc = XDocument.Parse(invoiceXml);

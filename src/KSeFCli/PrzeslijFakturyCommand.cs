@@ -95,14 +95,13 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
         while (continuationtoken != null);
     }
 
-    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         IEnumerable<(string FileName, byte[] Content)> invoices = GetFilesWithContent(Pliki);
 
-        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
-        using IServiceScope scope = GetScope();
+        string accessToken = await GetAccessToken(scope, cancellationToken).ConfigureAwait(false);
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
+        ICryptographyService cryptographyService = await GetCryptographicService(scope, cancellationToken).ConfigureAwait(false);
 
         OpenBatchSessionResult result = await PrepareAndOpenBatchSessionAsync(invoices, ksefClient, cryptographyService, accessToken).ConfigureAwait(false);
         string referenceNumber = result.ReferenceNumber;

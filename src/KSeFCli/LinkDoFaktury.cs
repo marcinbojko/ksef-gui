@@ -18,14 +18,13 @@ public class LinkDoFakturyCommand : IWithConfigCommand
     [Value(0, Required = true, HelpText = "KSeF invoice number")]
     public string KsefNumber { get; set; }
 
-    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         IVerificationLinkService linkSvc = scope.ServiceProvider.GetRequiredService<IVerificationLinkService>();
 
-        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
+        string accessToken = await GetAccessToken(scope, cancellationToken).ConfigureAwait(false);
         string invoiceXml = await ksefClient.GetInvoiceAsync(KsefNumber, accessToken, cancellationToken).ConfigureAwait(false);
 
         XDocument xmlDoc = XDocument.Parse(invoiceXml);

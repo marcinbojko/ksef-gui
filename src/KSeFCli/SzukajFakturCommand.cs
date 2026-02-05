@@ -133,13 +133,13 @@ public class SzukajFakturCommand : IWithConfigCommand
     [Option("hasAttachment", HelpText = "Czy faktura ma załącznik.")]
     public bool? HasAttachment { get; set; }
 
-    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
-        using IServiceScope scope = GetScope();
         Log.LogInformation("Szukanie faktur...");
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
         List<InvoiceSummary> invoices = await SzukajFaktury(
+            scope,
             ksefClient,
             cancellationToken).ConfigureAwait(false);
 
@@ -148,6 +148,7 @@ public class SzukajFakturCommand : IWithConfigCommand
     }
 
     protected async Task<List<InvoiceSummary>> SzukajFaktury(
+        IServiceScope scope,
         IKSeFClient ksefClient,
         CancellationToken cancellationToken)
     {
@@ -278,7 +279,7 @@ public class SzukajFakturCommand : IWithConfigCommand
             }
         }
 
-        string accessToken = await GetAccessToken(cancellationToken).ConfigureAwait(false);
+        string accessToken = await GetAccessToken(scope, cancellationToken).ConfigureAwait(false);
 
         List<InvoiceSummary> allInvoices = new List<InvoiceSummary>();
         PagedInvoiceResponse pagedInvoicesResponse;

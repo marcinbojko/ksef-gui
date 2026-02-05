@@ -84,21 +84,28 @@ public abstract class IWithConfigCommand : IGlobalCommand
     }
 
 
-    public async Task<AuthenticationOperationStatusResponse> Auth(CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    {
+        using var scope = GetScope();
+        return await ExecuteInScopeAsync(scope, cancellationToken).ConfigureAwait(false);
+    }
+
+    public abstract Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken);
+
+    public async Task<AuthenticationOperationStatusResponse> Auth(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
-        using IServiceScope scope = GetScope();
         AuthenticationOperationStatusResponse response = config.AuthMethod switch
         {
-            AuthMethod.KsefToken => await TokenAuth(cancellationToken).ConfigureAwait(false),
-            AuthMethod.Xades => await CertAuth(cancellationToken).ConfigureAwait(false),
+            AuthMethod.KsefToken => await TokenAuth(scope, cancellationToken).ConfigureAwait(false),
+            AuthMethod.Xades => await CertAuth(scope, cancellationToken).ConfigureAwait(false),
             _ => throw new Exception($"Invalid authmethod in profile: {config.Environment}")
         };
         Log.LogInformation($"Access token valid until: {response.AccessToken.ValidUntil} . Refresh token valid until: {response.RefreshToken.ValidUntil}");
         return response;
     }
 
-    public async Task<AuthenticationOperationStatusResponse> TokenAuth(CancellationToken cancellationToken)
+    public async Task<AuthenticationOperationStatusResponse> TokenAuth(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
         if (config.AuthMethod != AuthMethod.KsefToken)
@@ -106,10 +113,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
             throw new InvalidOperationException("This command requires token authentication.");
         }
 
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
-        await cryptographyService.WarmupAsync(cancellationToken).ConfigureAwait(false);
+        ICryptographyService cryptographyService = await GetCryptographicService(scope, cancellationToken).ConfigureAwait(false);
 
         Log.LogInformation("1. Getting challenge");
         AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
@@ -159,7 +164,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return tokenResponse;
     }
 
-    public async Task<AuthenticationOperationStatusResponse> CertAuth(CancellationToken cancellationToken)
+    public async Task<AuthenticationOperationStatusResponse> CertAuth(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
         if (config.AuthMethod != AuthMethod.Xades)
@@ -167,9 +172,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
             throw new InvalidOperationException("This command requires certificate authentication.");
         }
 
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        ICryptographyService cryptoService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
+        ICryptographyService cryptoService = await GetCryptographicService(scope, cancellationToken).ConfigureAwait(false);
 
         byte[] certBytes = Encoding.UTF8.GetBytes(config.Certificate!.Certificate!);
         X509Certificate2 publicCert = certBytes.LoadCertificate();
@@ -224,7 +228,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return tokenResponse;
     }
 
-    public async Task<string> GetAccessToken(CancellationToken cancellationToken)
+    public async Task<string> GetAccessToken(IServiceScope scope, CancellationToken cancellationToken)
     {
         if (NoTokenCache)
         {
@@ -240,7 +244,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         if (storedToken == null || storedToken.Response.RefreshToken.ValidUntil < DateTime.UtcNow.AddMinutes(1))
         {
             Log.LogInformation("No valid token found in store, starting new auth");
-            AuthenticationOperationStatusResponse response = await Auth(cancellationToken).ConfigureAwait(false);
+            AuthenticationOperationStatusResponse response = await Auth(scope, cancellationToken).ConfigureAwait(false);
             tokenStore.SetToken(key, new TokenStore.Data(response));
             return response.AccessToken.Token;
         }
@@ -248,7 +252,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         if (storedToken.Response.AccessToken.ValidUntil < DateTime.UtcNow.AddMinutes(10))
         {
             Log.LogInformation("Refreshing token");
-            AuthenticationOperationStatusResponse refreshedResponse = await TokenRefresh(storedToken.Response.RefreshToken, cancellationToken).ConfigureAwait(false);
+            AuthenticationOperationStatusResponse refreshedResponse = await TokenRefresh(scope, storedToken.Response.RefreshToken, cancellationToken).ConfigureAwait(false);
             tokenStore.SetToken(key, new TokenStore.Data(refreshedResponse));
             return refreshedResponse.AccessToken.Token;
         }
@@ -256,9 +260,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return storedToken.Response.AccessToken.Token;
     }
 
-    public async Task<AuthenticationOperationStatusResponse> TokenRefresh(TokenInfo refreshToken, CancellationToken cancellationToken)
+    public async Task<AuthenticationOperationStatusResponse> TokenRefresh(IServiceScope scope, TokenInfo refreshToken, CancellationToken cancellationToken)
     {
-        using IServiceScope scope = GetScope();
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         RefreshTokenResponse response = await ksefClient.RefreshAccessTokenAsync(refreshToken.Token, cancellationToken).ConfigureAwait(false);
         return new AuthenticationOperationStatusResponse
@@ -268,7 +271,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         };
     }
 
-    public IServiceScope GetScope()
+    private IServiceScope GetScope()
     {
         ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();
@@ -284,9 +287,17 @@ public abstract class IWithConfigCommand : IGlobalCommand
         {
             options.BaseUrl = KsefEnvironmentConfig.BaseUrls[environment];
         });
-        ServiceCollectionExtensions.AddCryptographyClient(services, CryptographyServiceWarmupMode.NonBlocking);
+        ServiceCollectionExtensions.AddCryptographyClient(services);
         ServiceProvider provider = services.BuildServiceProvider();
         IServiceScope scope = provider.CreateScope();
         return scope;
     }
+
+    public async Task<ICryptographyService> GetCryptographicService(IServiceScope scope, CancellationToken cancellationToken)
+    {
+        ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();
+        await cryptographyService.WarmupAsync(cancellationToken).ConfigureAwait(false);
+        return cryptographyService;
+    }
 }
+

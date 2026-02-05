@@ -2,6 +2,8 @@ using System.Text.Json;
 
 using CommandLine;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -13,7 +15,7 @@ public class PrintConfigCommand : IWithConfigCommand
     [Option("json", HelpText = "Output configuration in JSON format")]
     public bool JsonOutput { get; set; }
 
-    public override Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    public override Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         ProfileConfig config = Config();
 
