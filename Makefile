@@ -36,9 +36,15 @@ test-format:
 
 ###############################################################################
 
+DOTNET_PUBLISH = dotnet publish src/KSeFCli/KSeFCli.csproj -c Release --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:InvariantGlobalization=true
 GITLAB_BUILD_CMD := $(shell sed -n 's/.*- \(dotnet publish\)/\1/p' .gitlab-ci.yml)
 build-static:
 	$(GITLAB_BUILD_CMD)
 docker-build-static:
 	docker run -ti --rm -u "$(shell id -u):$(shell id -g)" -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
 		mcr.microsoft.com/dotnet/sdk:10.0 $(GITLAB_BUILD_CMD)
+build-osx-x64:
+	$(DOTNET_PUBLISH) -r osx-x64
+build-osx-arm64:
+	$(DOTNET_PUBLISH) -r osx-arm64
+build-osx: build-osx-x64 build-osx-arm64

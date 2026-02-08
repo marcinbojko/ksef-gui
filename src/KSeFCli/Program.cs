@@ -15,7 +15,7 @@ internal class Program
             with.EnableDashDash = true;
         });
 
-        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand, SelfUpdateCommand, PrintConfigCommand>(args);
+        ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand, SelfUpdateCommand, PrintConfigCommand, GuiCommand>(args);
 
         CancellationTokenSource cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>

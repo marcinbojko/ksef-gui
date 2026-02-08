@@ -7,6 +7,17 @@ public static class ParseDate
 {
     public static async Task<DateTime> Parse(string dateString)
     {
+        // Handle special keywords
+        switch (dateString.ToLowerInvariant())
+        {
+            case "thismonth":
+            case "this-month":
+                return new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            case "lastmonth":
+            case "last-month":
+                return new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1).AddMonths(-1);
+        }
+
         // Try parsing using standard C# DateTime.Parse
         if (DateTime.TryParse(dateString, out DateTime result))
         {

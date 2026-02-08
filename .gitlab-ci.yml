@@ -61,6 +61,44 @@ secret_detection:
     paths:
       - ksefcli.exe
 
+.build_osx_x64_base:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+  cache:
+    key:
+      files:
+        - src/KSeFCli/KSeFCli.csproj
+    paths:
+      - .nuget/packages
+  script:
+    - dotnet publish src/KSeFCli/KSeFCli.csproj -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:InvariantGlobalization=true
+    - mv -v src/KSeFCli/bin/Release/net10.0/osx-x64/publish/ksefcli ksefcli-osx-x64
+    - stat ksefcli-osx-x64
+  artifacts:
+    paths:
+      - ksefcli-osx-x64
+
+.build_osx_arm64_base:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+  cache:
+    key:
+      files:
+        - src/KSeFCli/KSeFCli.csproj
+    paths:
+      - .nuget/packages
+  script:
+    - dotnet publish src/KSeFCli/KSeFCli.csproj -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:InvariantGlobalization=true
+    - mv -v src/KSeFCli/bin/Release/net10.0/osx-arm64/publish/ksefcli ksefcli-osx-arm64
+    - stat ksefcli-osx-arm64
+  artifacts:
+    paths:
+      - ksefcli-osx-arm64
+
 linux_build_main:
   extends: [.build_linux_base, .build_main]
 
@@ -72,6 +110,18 @@ windows_build_main:
 
 windows_build_mr:
   extends: [.build_windows_base, .build_mr]
+
+osx_x64_build_main:
+  extends: [.build_osx_x64_base, .build_main]
+
+osx_x64_build_mr:
+  extends: [.build_osx_x64_base, .build_mr]
+
+osx_arm64_build_main:
+  extends: [.build_osx_arm64_base, .build_main]
+
+osx_arm64_build_mr:
+  extends: [.build_osx_arm64_base, .build_mr]
 
 .build_main:
   rules:
