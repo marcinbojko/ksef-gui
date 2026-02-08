@@ -57,9 +57,10 @@ public class XML2PDFCommand : IGlobalCommand
         using TemporaryFile tempXml = new TemporaryFile(extension: ".xml");
         await File.WriteAllTextAsync(tempXml.Path, xmlContent, cancellationToken).ConfigureAwait(false);
         using TemporaryFile tempPdf = new TemporaryFile(extension: ".pdf");
-        string scriptPath = Path.Combine(AppContext.BaseDirectory, "run-pdf-generator.mjs");
+        string shimPath = Path.Combine(AppContext.BaseDirectory, "navigator-shim.cjs");
         Subprocess nodeScript = new(
             CommandAndArgs: new[] { "npx", "--yes", "github:kamilcuk/ksef-pdf-generator", "invoice", tempXml.Path, tempPdf.Path, },
+            Environment: new Dictionary<string, string?> { { "NODE_OPTIONS", $"--require \"{shimPath}\"" } },
             Quiet: quiet
         );
         await nodeScript.CheckCallAsync(cancellationToken).ConfigureAwait(false);
