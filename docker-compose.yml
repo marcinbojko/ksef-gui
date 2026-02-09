@@ -1,0 +1,15 @@
+services:
+  ksefcli:
+    build: .
+    ports:
+      - "8150:8150"
+    volumes:
+      - ./output:/data
+      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro
+      - ksefcli-cache:/root/.cache/ksefcli
+    environment:
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+
+volumes:
+  ksefcli-cache:

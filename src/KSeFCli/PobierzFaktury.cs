@@ -25,7 +25,7 @@ public class PobierzFakturyCommand : SzukajFakturCommand
     {
         if (Pdf)
         {
-            XML2PDFCommand.AssertNpxExists();
+            XML2PDFCommand.AssertPdfGeneratorAvailable();
         }
 
         Directory.CreateDirectory(OutputDir);

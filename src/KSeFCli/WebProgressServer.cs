@@ -6,6 +6,7 @@ namespace KSeFCli;
 
 internal record SearchParams(string SubjectType, string From, string? To, string DateType);
 internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false);
+internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip);
 
 internal sealed class WebProgressServer : IDisposable
 {
@@ -26,6 +27,9 @@ internal sealed class WebProgressServer : IDisposable
 
     /// <summary>Called when user requests invoice details. Receives invoice index, returns JSON-serializable detail object.</summary>
     public Func<int, CancellationToken, Task<object>>? OnInvoiceDetails { get; set; }
+
+    /// <summary>Called to check which invoices already exist as files in the output directory.</summary>
+    public Func<CheckExistingParams, Task<object>>? OnCheckExisting { get; set; }
 
     /// <summary>Called when the user clicks "Zakoncz". Shuts down the server.</summary>
     public Action? OnQuit { get; set; }
@@ -270,6 +274,18 @@ internal sealed class WebProgressServer : IDisposable
                 return JsonSerializer.Serialize(details);
             }).ConfigureAwait(false);
         }
+        else if (path == "/check-existing" && method == "POST")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                if (OnCheckExisting == null) return "[]";
+                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                CheckExistingParams checkParams = JsonSerializer.Deserialize<CheckExistingParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new CheckExistingParams(".", false, false);
+                object result = await OnCheckExisting(checkParams).ConfigureAwait(false);
+                return JsonSerializer.Serialize(result);
+            }).ConfigureAwait(false);
+        }
         else if (path == "/token-status" && method == "GET")
         {
             await HandleAction(ctx, ct, async () =>
@@ -412,6 +428,32 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 .chip .chip-count{margin-left:.3rem;opacity:.7;font-size:.7rem}
 .btn-details{background:none;border:1px solid #bbb;border-radius:4px;padding:.15rem .4rem;font-size:.75rem;cursor:pointer;color:#666;white-space:nowrap}
 .btn-details:hover{border-color:#1976d2;color:#1976d2;background:#e3f2fd}
+.btn-preview{background:none;border:1px solid #bbb;border-radius:4px;padding:.15rem .4rem;font-size:.75rem;cursor:pointer;color:#666;white-space:nowrap}
+.btn-preview:hover{border-color:#2e7d32;color:#2e7d32;background:#e8f5e9}
+.badge{display:inline-block;padding:.1rem .3rem;border-radius:3px;font-size:.58rem;font-weight:700;letter-spacing:.3px;margin-right:.15rem;line-height:1.2}
+.badge-xml{background:#1976d2;color:#fff}
+.badge-pdf{background:#c62828;color:#fff}
+.badge-json{background:#e65100;color:#fff}
+tr.has-files>td{background:rgba(46,125,50,.05)}
+tr.has-files:hover>td{background:rgba(46,125,50,.1)}
+.preview-page{padding:2rem;max-width:800px;margin:0 auto;font-size:.85rem;line-height:1.5}
+.preview-title{text-align:center;font-size:1.1rem;font-weight:700;margin-bottom:.3rem}
+.preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:1.2rem}
+.preview-parties{display:flex;gap:1.5rem;margin-bottom:1.2rem}
+.preview-party{flex:1;border:1px solid #ddd;border-radius:6px;padding:.8rem}
+.preview-party h5{font-size:.75rem;text-transform:uppercase;color:#888;margin-bottom:.3rem;letter-spacing:.5px}
+.preview-party .name{font-weight:600;font-size:.9rem}
+.preview-party .nip{font-size:.8rem;color:#555}
+.preview-party .addr{font-size:.8rem;color:#666}
+.preview-items{width:100%;border-collapse:collapse;margin-bottom:1rem;font-size:.8rem}
+.preview-items th{background:#f5f5f5;padding:.4rem .6rem;text-align:left;border:1px solid #ddd;font-size:.75rem}
+.preview-items td{padding:.4rem .6rem;border:1px solid #ddd}
+.preview-totals{display:flex;justify-content:flex-end;margin-bottom:1rem}
+.preview-totals table{border-collapse:collapse;font-size:.85rem}
+.preview-totals td{padding:.3rem .8rem;border:1px solid #ddd}
+.preview-totals .label{font-weight:600;background:#f5f5f5}
+.preview-totals .total{font-weight:700;font-size:.95rem}
+.preview-meta{font-size:.75rem;color:#888;border-top:1px solid #eee;padding-top:.5rem;margin-top:1rem}
 .detail-overlay{display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;overflow-y:auto;padding:1rem}
 .detail-popover{position:relative;background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.25);width:600px;max-width:95vw;max-height:90vh;overflow-y:auto;padding:0;font-size:.82rem;margin:auto}
 .detail-popover .dp-header{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:#fafafa;border-bottom:1px solid #e0e0e0;border-radius:10px 10px 0 0;position:sticky;top:0;z-index:1}
@@ -446,6 +488,97 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 .modal-footer .new-dir{display:flex;gap:.3rem;align-items:center}
 .modal-footer .new-dir input{padding:.3rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.8rem;width:140px}
 .modal-footer .new-dir button{padding:.3rem .6rem;font-size:.8rem}
+/* --- Dark mode --- */
+body.dark{background:#121212;color:#e0e0e0}
+body.dark h1{color:#e0e0e0}
+body.dark .search-form{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+body.dark .field label{color:#aaa}
+body.dark .field select,body.dark .field input{background:#2a2a2a;border-color:#444;color:#e0e0e0}
+body.dark .prefs-panel{border-left-color:#78909c}
+body.dark .status.info{background:#0d2137;color:#64b5f6}
+body.dark .status.done{background:#1b3a1b;color:#81c784}
+body.dark .status.error{background:#3e1212;color:#ef9a9a}
+body.dark .status.idle{background:#1e1e1e;color:#888}
+body.dark .progress-wrap{background:#333}
+body.dark table{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+body.dark th{background:#252525;border-bottom-color:#444;color:#aaa}
+body.dark th:hover{background:#2a2a2a}
+body.dark td{border-bottom-color:#333}
+body.dark tr:hover td{background:#1a2638}
+body.dark tr.downloading td{background:#0d2137}
+body.dark tr.done td{background:#1b3a1b}
+body.dark tr.error td{background:#3e1212}
+body.dark .count{color:#888}
+body.dark .empty{color:#666}
+body.dark .sel-toolbar{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+body.dark .sel-count{color:#aaa}
+body.dark .btn-outline{background:#1e1e1e;color:#64b5f6;border-color:#64b5f6}
+body.dark .btn-outline:hover{background:#0d2137}
+body.dark .filter-bar{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+body.dark .filter-label{color:#aaa}
+body.dark .chip{background:#2a2a2a;border-color:#555;color:#ccc}
+body.dark .chip:hover{border-color:#888}
+body.dark .chip.active{background:#1565c0;color:#fff;border-color:#1565c0}
+body.dark .btn-details{border-color:#555;color:#aaa}
+body.dark .btn-details:hover{border-color:#64b5f6;color:#64b5f6;background:#0d2137}
+/* --- Preview dark mode (independent of GUI dark mode) --- */
+.detail-popover.preview-dark{background:#1e1e1e;color:#e0e0e0}
+.detail-popover.preview-dark .dp-header{background:#252525;border-bottom-color:#444}
+.detail-popover.preview-dark .dp-header h3{color:#e0e0e0}
+.detail-popover.preview-dark .dp-close{color:#888}
+.detail-popover.preview-dark .dp-close:hover{color:#e0e0e0}
+.detail-popover.preview-dark .preview-subtitle{color:#aaa}
+.detail-popover.preview-dark .preview-party{border-color:#444}
+.detail-popover.preview-dark .preview-party h5{color:#888}
+.detail-popover.preview-dark .preview-party .name{color:#e0e0e0}
+.detail-popover.preview-dark .preview-party .nip{color:#aaa}
+.detail-popover.preview-dark .preview-party .addr{color:#999}
+.detail-popover.preview-dark .preview-items th{background:#252525;border-color:#444;color:#aaa}
+.detail-popover.preview-dark .preview-items td{border-color:#444;color:#e0e0e0}
+.detail-popover.preview-dark .preview-totals td{border-color:#444;color:#e0e0e0}
+.detail-popover.preview-dark .preview-totals .label{background:#252525}
+.detail-popover.preview-dark .preview-meta{color:#666;border-top-color:#333}
+body.dark .btn-preview{border-color:#555;color:#aaa}
+body.dark .btn-preview:hover{border-color:#81c784;color:#81c784;background:#1b3a1b}
+body.dark tr.has-files>td{background:rgba(129,199,132,.06)}
+body.dark tr.has-files:hover>td{background:rgba(129,199,132,.12)}
+/* Force light styles on preview popover when preview-dark is off (overrides body.dark) */
+.detail-popover.preview-popover:not(.preview-dark){background:#fff;color:#333;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.detail-popover.preview-popover:not(.preview-dark) .dp-header{background:#fafafa;border-bottom-color:#e0e0e0}
+.detail-popover.preview-popover:not(.preview-dark) .dp-header h3{color:#333}
+.detail-popover.preview-popover:not(.preview-dark) .dp-close{color:#888}
+.detail-popover.preview-popover:not(.preview-dark) .dp-close:hover{color:#333}
+.detail-popover.preview-popover:not(.preview-dark) .preview-items{background:#fff;box-shadow:none}
+.detail-popover.preview-popover:not(.preview-dark) .preview-items th{background:#f5f5f5;border-color:#ddd;color:#333}
+.detail-popover.preview-popover:not(.preview-dark) .preview-items td{border-color:#ddd;color:#333}
+.detail-popover.preview-popover:not(.preview-dark) .preview-totals table{background:transparent;box-shadow:none}
+.detail-popover.preview-popover:not(.preview-dark) .preview-totals td{border-color:#ddd;color:#333}
+.detail-popover.preview-popover:not(.preview-dark) .preview-totals .label{background:#f5f5f5}
+.detail-popover.preview-popover:not(.preview-dark) .preview-meta{color:#888;border-top-color:#eee}
+body.dark .detail-popover{background:#1e1e1e;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+body.dark .detail-popover .dp-header{background:#252525;border-bottom-color:#444}
+body.dark .detail-popover .dp-header h3{color:#e0e0e0}
+body.dark .detail-popover .dp-close{color:#888}
+body.dark .detail-popover .dp-close:hover{color:#e0e0e0}
+body.dark .detail-popover .dp-section h4{color:#aaa;border-bottom-color:#333}
+body.dark .detail-popover .dp-label{color:#aaa}
+body.dark .detail-popover .dp-val{color:#e0e0e0}
+body.dark .detail-popover th{background:#252525;border-bottom-color:#444;color:#aaa}
+body.dark .detail-popover td{border-bottom-color:#333;color:#e0e0e0}
+body.dark .detail-popover .dp-loading{color:#666}
+body.dark .modal{background:#1e1e1e;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+body.dark .modal-header{background:#252525;border-bottom-color:#444}
+body.dark .modal-header h2{color:#e0e0e0}
+body.dark .modal-close{color:#888}
+body.dark .modal-close:hover{color:#e0e0e0}
+body.dark .modal-path{background:#1a1a1a;border-bottom-color:#333;color:#aaa}
+body.dark .dir-item{border-bottom-color:#2a2a2a;color:#e0e0e0}
+body.dark .dir-item:hover{background:#0d2137}
+body.dark .dir-item.parent{color:#64b5f6}
+body.dark .modal-footer{background:#252525;border-top-color:#444}
+body.dark .modal-footer .new-dir input{background:#2a2a2a;border-color:#444;color:#e0e0e0}
+body.dark .token-info{color:#888}
+body.dark .sort-arrow{color:#666}
 </style>
 </head>
 <body>
@@ -487,6 +620,9 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
   <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
 </div>
 <div class="search-form prefs-panel" id="prefsPanel" style="padding:.6rem 1rem;gap:.8rem;display:none;flex-wrap:wrap">
+  <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="darkMode" onchange="toggleDarkMode()"> Tryb ciemny</label>
+  <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="previewDarkMode" onchange="savePrefs()"> Podglad ciemny</label>
+  <span style="color:#ccc;margin:0 .3rem">|</span>
   <div class="field">
     <label>Katalog wyjsciowy</label>
     <div style="display:flex;gap:.3rem">
@@ -510,7 +646,7 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
     <span style="font-size:.7rem;color:#999">(restart)</span>
   </div>
   <span style="color:#ccc;margin:0 .3rem">|</span>
-  <button class="btn-sm btn-prefs" onclick="savePrefs()" style="padding:.3rem .8rem">Zapisz preferencje</button>
+  <button class="btn-sm btn-prefs" onclick="savePrefs();$('prefsPanel').style.display='none'" style="padding:.3rem .8rem">Zapisz preferencje</button>
 </div>
 <div class="status idle" id="status">Wprowadz kryteria i kliknij "Szukaj".</div>
 <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="bar"></div></div>
@@ -555,6 +691,7 @@ const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
 let activeCurrencies = new Set();
 let selectedInvoices = new Set();
+let fileStatus = [];
 
 // Set default month to current month
 (function initDates() {
@@ -581,6 +718,8 @@ let currentSessionProfile = '';
       if (p.customFilenames != null) $('customFilenames').checked = p.customFilenames;
       if (p.separateByNip != null) $('separateByNip').checked = p.separateByNip;
       if (p.lanPort) $('lanPort').value = p.lanPort;
+      if (p.darkMode) { $('darkMode').checked = true; document.body.classList.add('dark'); }
+      if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
       if (p.profileNip) $('profileNipLabel').textContent = p.profileNip;
       // Populate profile dropdown
       if (p.allProfiles) {
@@ -665,6 +804,8 @@ function savePrefs() {
     exportPdf: $('expPdf').checked,
     customFilenames: $('customFilenames').checked,
     separateByNip: $('separateByNip').checked,
+    darkMode: $('darkMode').checked,
+    previewDarkMode: $('previewDarkMode').checked,
     selectedProfile: $('profileSelect').value,
     lanPort: parseInt($('lanPort').value) || 8150
   };
@@ -683,6 +824,11 @@ function togglePrefs() {
   const panel = $('prefsPanel');
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'flex';
+}
+
+function toggleDarkMode() {
+  document.body.classList.toggle('dark', $('darkMode').checked);
+  savePrefs();
 }
 
 function setStatus(text, cls) { status.textContent = text; status.className = 'status ' + cls; }
@@ -747,6 +893,8 @@ function renderTable() {
   html += '<th style="width:2rem"><input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"></th>';
   html += '<th style="width:2rem"></th>';
   html += '<th style="width:3rem"></th>';
+  html += '<th style="width:3rem"></th>';
+  html += '<th style="width:5rem">Pliki</th>';
   for (const c of cols) {
     const arrow = sortCol === c.key ? (sortAsc ? ' &#9650;' : ' &#9660;') : '';
     html += '<th data-col="' + c.key + '" onclick="sortBy(\'' + c.key + '\')">' + c.label + '<span class="sort-arrow">' + arrow + '</span></th>';
@@ -757,10 +905,18 @@ function renderTable() {
     const idx = inv._idx;
     const date = inv.issueDate ? inv.issueDate.substring(0,10) : '';
     const chk = selectedInvoices.has(idx) ? ' checked' : '';
-    html += '<tr id="row-' + idx + '">';
+    const fs = fileStatus[idx] || {};
+    const hasFiles = fs.xml || fs.pdf || fs.json;
+    let badges = '';
+    if (fs.xml) badges += '<span class="badge badge-xml">XML</span>';
+    if (fs.pdf) badges += '<span class="badge badge-pdf">PDF</span>';
+    if (fs.json) badges += '<span class="badge badge-json">JSON</span>';
+    html += '<tr id="row-' + idx + '"' + (hasFiles ? ' class="has-files"' : '') + '>';
     html += '<td><input type="checkbox" data-idx="' + idx + '" onchange="toggleSelect(' + idx + ', this.checked)"' + chk + '></td>';
     html += '<td class="dl-icon" id="icon-' + idx + '"></td>';
     html += '<td><button class="btn-details" onclick="showDetails(' + idx + ', event)" title="Szczegoly faktury">&#128269;</button></td>';
+    html += '<td><button class="btn-preview" onclick="showPreview(' + idx + ')" title="Podglad faktury">&#128196;</button></td>';
+    html += '<td>' + badges + '</td>';
     html += '<td class="col-ksef" title="' + (inv.ksefNumber||'') + '">' + (inv.ksefNumber||'') + '</td>';
     html += '<td>' + (inv.invoiceNumber||'') + '</td>';
     html += '<td>' + date + '</td>';
@@ -842,6 +998,7 @@ function connectSSE() {
         bar.style.width = '100%'; bar.textContent = '100%';
         btnSearch.disabled = false; btnDownload.disabled = false;
         btnDownloadSel.disabled = selectedInvoices.size === 0;
+        checkExisting();
         break;
       case 'error': {
         const row = document.getElementById('row-' + d.current);
@@ -909,6 +1066,7 @@ async function doSearch() {
   invoices = []; total = 0; completed = 0; sortCol = null;
   activeCurrencies = new Set();
   selectedInvoices = new Set();
+  fileStatus = [];
   filterBar.classList.remove('visible');
 
   try {
@@ -931,6 +1089,7 @@ async function doSearch() {
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
     btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true;
+    checkExisting();
   } catch (err) {
     setStatus('Blad: ' + err.message, 'error');
     btnSearch.disabled = false;
@@ -1126,6 +1285,114 @@ function renderDetails(pop, d) {
 function dpRow(label, value) {
   if (!value && value !== 0) return '';
   return '<div class="dp-row"><span class="dp-label">' + label + '</span><span class="dp-val">' + value + '</span></div>';
+}
+
+// --- Invoice Preview ---
+async function showPreview(idx) {
+  closeDetails();
+  const inv = invoices.find(i => i._idx === idx) || {};
+
+  const overlay = document.createElement('div');
+  overlay.className = 'detail-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDetails(); });
+
+  const pop = document.createElement('div');
+  pop.className = 'detail-popover preview-popover' + ($('previewDarkMode').checked ? ' preview-dark' : '');
+  pop.style.width = '800px';
+  pop.innerHTML = '<div class="dp-header"><h3>Podglad faktury</h3><button class="dp-close" onclick="closeDetails()">&times;</button></div><div class="dp-body"><div class="dp-loading"><span class="spinner">&#8635;</span> Pobieranie...</div></div>';
+  overlay.appendChild(pop);
+  document.body.appendChild(overlay);
+  detailOverlay = overlay;
+
+  try {
+    let data = detailCache[idx];
+    if (!data) {
+      const res = await fetch('/invoice-details?idx=' + idx);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed'); }
+      data = await res.json();
+      detailCache[idx] = data;
+    }
+    if (detailOverlay !== overlay) return;
+    renderPreview(pop, data, inv);
+  } catch (err) {
+    if (detailOverlay === overlay) {
+      pop.querySelector('.dp-body').innerHTML = '<div style="color:#c62828;padding:1rem">Blad: ' + escHtml(err.message) + '</div>';
+    }
+  }
+}
+
+function renderPreview(pop, d, inv) {
+  let html = '<div class="preview-page">';
+  html += '<div class="preview-title">Faktura ' + escHtml(inv.invoiceNumber || '') + '</div>';
+  html += '<div class="preview-subtitle">KSeF: ' + escHtml(inv.ksefNumber || '') + ' | Data: ' + (inv.issueDate ? inv.issueDate.substring(0,10) : '');
+  if (d.invoiceType) html += ' | Typ: ' + escHtml(d.invoiceType);
+  if (d.currency) html += ' | Waluta: ' + escHtml(d.currency);
+  html += '</div>';
+
+  html += '<div class="preview-parties">';
+  html += '<div class="preview-party"><h5>Sprzedawca</h5>';
+  html += '<div class="name">' + escHtml(inv.sellerName || '') + '</div>';
+  if (inv.sellerNip) html += '<div class="nip">NIP: ' + escHtml(inv.sellerNip) + '</div>';
+  if (d.sellerAddress) html += '<div class="addr">' + escHtml(d.sellerAddress) + '</div>';
+  html += '</div>';
+  html += '<div class="preview-party"><h5>Nabywca</h5>';
+  html += '<div class="name">' + escHtml(inv.buyerName || '') + '</div>';
+  if (d.buyerAddress) html += '<div class="addr">' + escHtml(d.buyerAddress) + '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  if (d.lineItems && d.lineItems.length > 0) {
+    const hasRate = d.lineItems.some(l => l.exchangeRate);
+    html += '<table class="preview-items"><thead><tr><th>#</th><th>Nazwa</th><th>J.m.</th><th>Ilosc</th><th>Cena j.</th><th class="amount">Netto</th><th class="amount">Brutto</th><th>VAT%</th>';
+    if (hasRate) html += '<th>Kurs</th>';
+    html += '</tr></thead><tbody>';
+    for (const l of d.lineItems) {
+      html += '<tr><td>' + (l.nr||'') + '</td><td>' + escHtml(l.name||'') + '</td><td>' + (l.unit||'') + '</td><td>' + (l.qty||'') + '</td><td class="amount">' + (l.unitPrice||'') + '</td><td class="amount">' + (l.netAmount||'') + '</td><td class="amount">' + (l.grossAmount||'') + '</td><td>' + (l.vatRate||'') + '</td>';
+      if (hasRate) html += '<td>' + (l.exchangeRate||'') + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+  }
+
+  html += '<div class="preview-totals"><table>';
+  if (d.netTotal) html += '<tr><td class="label">Netto</td><td class="amount">' + d.netTotal + ' ' + (d.currency||'') + '</td></tr>';
+  if (d.vatTotal) html += '<tr><td class="label">VAT</td><td class="amount">' + d.vatTotal + ' ' + (d.currency||'') + (d.vatTotalCurrency ? ' (wal.: ' + d.vatTotalCurrency + ')' : '') + '</td></tr>';
+  if (d.grossTotal) html += '<tr><td class="label total">Brutto</td><td class="amount total">' + d.grossTotal + ' ' + (d.currency||'') + '</td></tr>';
+  html += '</table></div>';
+
+  if (d.additionalDescriptions && d.additionalDescriptions.length > 0) {
+    html += '<div class="preview-meta"><strong>Dodatkowe informacje:</strong><br>';
+    for (const ad of d.additionalDescriptions) {
+      html += escHtml(ad.key || '') + ': ' + escHtml(ad.value || '') + '<br>';
+    }
+    html += '</div>';
+  }
+
+  html += '<div class="preview-meta">';
+  if (d.periodFrom || d.periodTo) html += 'Okres: ' + (d.periodFrom||'?') + ' \u2014 ' + (d.periodTo||'?') + '<br>';
+  if (d.createdAt) html += 'Utworzono: ' + d.createdAt + '<br>';
+  if (d.systemInfo) html += 'System: ' + escHtml(d.systemInfo) + '<br>';
+  if (d.formCode) html += 'Formularz: ' + d.formCode + (d.schemaVersion ? ' v' + d.schemaVersion : '');
+  html += '</div>';
+
+  html += '</div>';
+  pop.querySelector('.dp-body').innerHTML = html;
+}
+
+// --- Check existing files ---
+async function checkExisting() {
+  if (!invoices.length) return;
+  try {
+    const body = {
+      outputDir: $('outputDir').value || '.',
+      customFilenames: $('customFilenames').checked,
+      separateByNip: $('separateByNip').checked
+    };
+    const res = await fetch('/check-existing', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!res.ok) return;
+    fileStatus = await res.json();
+    renderTable();
+  } catch {}
 }
 
 // --- Quit ---

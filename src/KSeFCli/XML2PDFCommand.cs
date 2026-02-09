@@ -51,28 +51,54 @@ public class XML2PDFCommand : IGlobalCommand
         return 0;
     }
 
-    public static async Task<byte[]> XML2PDF(string xmlContent, bool quiet, CancellationToken cancellationToken)
+    private static string[] GetPdfCommand(string inputXml, string outputPdf)
     {
-        AssertNpxExists();
-        using TemporaryFile tempXml = new TemporaryFile(extension: ".xml");
-        await File.WriteAllTextAsync(tempXml.Path, xmlContent, cancellationToken).ConfigureAwait(false);
-        using TemporaryFile tempPdf = new TemporaryFile(extension: ".pdf");
-        string shimPath = Path.Combine(AppContext.BaseDirectory, "navigator-shim.cjs");
-        Subprocess nodeScript = new(
-            CommandAndArgs: new[] { "npx", "--yes", "github:kamilcuk/ksef-pdf-generator", "invoice", tempXml.Path, tempPdf.Path, },
-            Environment: new Dictionary<string, string?> { { "NODE_OPTIONS", $"--require \"{shimPath}\"" } },
-            Quiet: quiet
-        );
-        await nodeScript.CheckCallAsync(cancellationToken).ConfigureAwait(false);
-        byte[] pdfBytes = await File.ReadAllBytesAsync(tempPdf.Path, cancellationToken).ConfigureAwait(false);
-        return pdfBytes;
+        // 1. Check for bundled SEA binary alongside ksefcli
+        string ext = OperatingSystem.IsWindows() ? ".exe" : "";
+        string bundledPath = Path.Combine(AppContext.BaseDirectory, $"ksef-pdf-generator{ext}");
+        if (File.Exists(bundledPath))
+            return [bundledPath, "invoice", inputXml, outputPdf];
+
+        // 2. Check for ksef-pdf-generator in PATH
+        if (Subprocess.CheckCommandExists("ksef-pdf-generator"))
+            return ["ksef-pdf-generator", "invoice", inputXml, outputPdf];
+
+        // 3. Fallback to npx
+        if (!Subprocess.CheckCommandExists("npx"))
+            throw new InvalidOperationException(
+                "ksef-pdf-generator not found. Either place it alongside ksefcli, install Node.js (npx), or disable PDF export.");
+        return ["npx", "--yes", "github:kamilcuk/ksef-pdf-generator", "invoice", inputXml, outputPdf];
     }
 
-    public static void AssertNpxExists()
+    public static async Task<byte[]> XML2PDF(string xmlContent, bool quiet, CancellationToken cancellationToken)
     {
-        if (!Subprocess.CheckCommandExists("npx"))
-        {
-            throw new InvalidOperationException("Command `npx` not found. Please install Node.js and npm to use this functionality.");
-        }
+        using TemporaryFile tempXml = new(extension: ".xml");
+        await File.WriteAllTextAsync(tempXml.Path, xmlContent, cancellationToken).ConfigureAwait(false);
+        using TemporaryFile tempPdf = new(extension: ".pdf");
+
+        string[] cmd = GetPdfCommand(tempXml.Path, tempPdf.Path);
+        bool usesNpx = cmd[0] == "npx";
+
+        // navigator-shim only needed for npx path (SEA binary has it bundled)
+        var env = usesNpx
+            ? new Dictionary<string, string?> {
+                { "NODE_OPTIONS", $"--require \"{Path.Combine(AppContext.BaseDirectory, "navigator-shim.cjs")}\"" }
+              }
+            : null;
+
+        Subprocess proc = new(CommandAndArgs: cmd, Environment: env, Quiet: quiet);
+        await proc.CheckCallAsync(cancellationToken).ConfigureAwait(false);
+        return await File.ReadAllBytesAsync(tempPdf.Path, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static void AssertPdfGeneratorAvailable()
+    {
+        string ext = OperatingSystem.IsWindows() ? ".exe" : "";
+        string bundledPath = Path.Combine(AppContext.BaseDirectory, $"ksef-pdf-generator{ext}");
+        if (File.Exists(bundledPath)) return;
+        if (Subprocess.CheckCommandExists("ksef-pdf-generator")) return;
+        if (Subprocess.CheckCommandExists("npx")) return;
+        throw new InvalidOperationException(
+            "PDF generation requires ksef-pdf-generator binary or Node.js (npx). Neither found.");
     }
 }

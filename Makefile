@@ -48,3 +48,21 @@ build-osx-x64:
 build-osx-arm64:
 	$(DOTNET_PUBLISH) -r osx-arm64
 build-osx: build-osx-x64 build-osx-arm64
+
+DOCKER_TAG ?= ksefcli:latest
+docker-build-all:
+	docker build -t $(DOCKER_TAG) .
+docker-extract: docker-build-all
+	@mkdir -p dist
+	docker create --name ksefcli-extract $(DOCKER_TAG) 2>/dev/null || true
+	docker cp ksefcli-extract:/output/linux-x64/ksefcli dist/ksefcli
+	docker cp ksefcli-extract:/output/linux-x64/ksef-pdf-generator dist/ksef-pdf-generator
+	docker cp ksefcli-extract:/output/win-x64/ksefcli.exe dist/ksefcli.exe
+	docker cp ksefcli-extract:/output/win-x64/ksef-pdf-generator.exe dist/ksef-pdf-generator.exe
+	docker cp ksefcli-extract:/output/osx-x64/ksefcli dist/ksefcli-osx-x64
+	docker cp ksefcli-extract:/output/osx-x64/ksef-pdf-generator dist/ksef-pdf-generator-osx-x64
+	docker cp ksefcli-extract:/output/osx-arm64/ksefcli dist/ksefcli-osx-arm64
+	docker cp ksefcli-extract:/output/osx-arm64/ksef-pdf-generator dist/ksef-pdf-generator-osx-arm64
+	docker rm ksefcli-extract
+	@echo "Binaries extracted to dist/"
+	@ls -lh dist/
