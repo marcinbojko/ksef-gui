@@ -63,7 +63,7 @@ public class XML2PDFCommand : IGlobalCommand
         if (Subprocess.CheckCommandExists("ksef-pdf-generator"))
             return ["ksef-pdf-generator", "invoice", inputXml, outputPdf];
 
-        // 3. Fallback to npx
+        // 3. Fallback to npx (requires git to be installed)
         if (!Subprocess.CheckCommandExists("npx"))
             throw new InvalidOperationException(
                 "ksef-pdf-generator not found. Either place it alongside ksefcli, install Node.js (npx), or disable PDF export.");
@@ -77,16 +77,12 @@ public class XML2PDFCommand : IGlobalCommand
         using TemporaryFile tempPdf = new(extension: ".pdf");
 
         string[] cmd = GetPdfCommand(tempXml.Path, tempPdf.Path);
-        bool usesNpx = cmd[0] == "npx";
 
-        // navigator-shim only needed for npx path (SEA binary has it bundled)
-        var env = usesNpx
-            ? new Dictionary<string, string?> {
-                { "NODE_OPTIONS", $"--require \"{Path.Combine(AppContext.BaseDirectory, "navigator-shim.cjs")}\"" }
-              }
-            : null;
+        // No environment needed:
+        // - npx uses upstream package which has its own jsdom setup
+        // - SEA binary has navigator polyfills bundled
 
-        Subprocess proc = new(CommandAndArgs: cmd, Environment: env, Quiet: quiet);
+        Subprocess proc = new(CommandAndArgs: cmd, Environment: null, Quiet: quiet);
         await proc.CheckCallAsync(cancellationToken).ConfigureAwait(false);
         return await File.ReadAllBytesAsync(tempPdf.Path, cancellationToken).ConfigureAwait(false);
     }

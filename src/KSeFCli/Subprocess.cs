@@ -9,28 +9,49 @@ internal record Subprocess(
     bool Quiet = false
 )
 {
-    public static bool CheckCommandExists(string command)
+    /// <summary>
+    /// Find the full path to a command in PATH, or null if not found
+    /// </summary>
+    public static string? FindCommandInPath(string command)
     {
         string[] paths = System.Environment.GetEnvironmentVariable("PATH")!.Split(Path.PathSeparator);
-        string commandName = command;
+
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
         {
-            if (!commandName.EndsWith(".exe"))
+            // On Windows, check for .exe, .cmd, .bat, .ps1
+            string[] extensions = command.Contains('.') ? [""] : [".exe", ".cmd", ".bat", ".ps1"];
+            foreach (string ext in extensions)
             {
-                commandName += ".exe";
+                string commandName = command + ext;
+                foreach (string path in paths)
+                {
+                    string fullPath = Path.Combine(path, commandName);
+                    if (File.Exists(fullPath))
+                    {
+                        return fullPath;
+                    }
+                }
             }
+            return null;
         }
-
-        foreach (string path in paths)
+        else
         {
-            string fullPath = Path.Combine(path, commandName);
-            if (File.Exists(fullPath))
+            // Unix-like: check as-is
+            foreach (string path in paths)
             {
-                return true;
+                string fullPath = Path.Combine(path, command);
+                if (File.Exists(fullPath))
+                {
+                    return fullPath;
+                }
             }
+            return null;
         }
+    }
 
-        return false;
+    public static bool CheckCommandExists(string command)
+    {
+        return FindCommandInPath(command) != null;
     }
 
     private Process AddArgsAndEnvironmentToProcessStartInfoAndStart(ProcessStartInfo processStartInfo)
@@ -62,13 +83,17 @@ internal record Subprocess(
         return process;
     }
 
-    private async Task WaitAndCheck(Process process, CancellationToken cancellationToken)
+    private async Task WaitAndCheck(Process process, CancellationToken cancellationToken, string? stderr = null)
     {
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(
-                $"Command `{string.Join(" ", CommandAndArgs)}` failed with exit code {process.ExitCode}");
+            string errorMsg = $"Command `{string.Join(" ", CommandAndArgs)}` failed with exit code {process.ExitCode}";
+            if (!string.IsNullOrEmpty(stderr))
+            {
+                errorMsg += $"\nStderr: {stderr}";
+            }
+            throw new InvalidOperationException(errorMsg);
         }
     }
 
@@ -86,15 +111,28 @@ internal record Subprocess(
             Log.LogInformation($"Executing: {string.Join(" ", CommandAndArgs)}");
         }
 
+        // Resolve command to full path if it's just a command name (not a path)
+        string command = CommandAndArgs.First();
+        if (!Path.IsPathRooted(command) && !command.Contains(Path.DirectorySeparatorChar))
+        {
+            string? fullPath = FindCommandInPath(command);
+            if (fullPath != null)
+            {
+                command = fullPath;
+            }
+        }
+
         ProcessStartInfo processStartInfo = new()
         {
-            FileName = CommandAndArgs.First(),
+            FileName = command,
             WorkingDirectory = WorkingDir,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardError = true
         };
         using Process process = AddArgsAndEnvironmentToProcessStartInfoAndStart(processStartInfo);
-        await WaitAndCheck(process, cancellationToken).ConfigureAwait(false);
+        string stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        await WaitAndCheck(process, cancellationToken, stderr).ConfigureAwait(false);
     }
 
     public async Task<byte[]> CheckOutputAsync(CancellationToken cancellationToken = default)
@@ -104,9 +142,20 @@ internal record Subprocess(
             Log.LogInformation($"Executing (capturing output): {string.Join(" ", CommandAndArgs.Select(a => $"\"{a}\""))}");
         }
 
+        // Resolve command to full path if it's just a command name (not a path)
+        string command = CommandAndArgs.First();
+        if (!Path.IsPathRooted(command) && !command.Contains(Path.DirectorySeparatorChar))
+        {
+            string? fullPath = FindCommandInPath(command);
+            if (fullPath != null)
+            {
+                command = fullPath;
+            }
+        }
+
         ProcessStartInfo processStartInfo = new ProcessStartInfo
         {
-            FileName = CommandAndArgs.First(),
+            FileName = command,
             WorkingDirectory = WorkingDir,
             RedirectStandardOutput = true,
             UseShellExecute = false,
