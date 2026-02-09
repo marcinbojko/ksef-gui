@@ -6,12 +6,54 @@ namespace KSeFCli;
 
 public static class ConfigLoader
 {
+    private static void EnsureConfigExists(string configPath)
+    {
+        // Create directory if it doesn't exist
+        string? directory = Path.GetDirectoryName(configPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+            Console.WriteLine($"Created config directory: {directory}");
+        }
+
+        // Create template config file
+        string templateConfig = @"# KSeFCli Configuration File
+#
+# This is a template configuration file. You need to configure at least one profile.
+# For more information, see the documentation.
+
+# active_profile: default
+
+profiles:
+  default:
+    nip: ""1234567890""
+    environment: test  # or 'prod' for production
+
+    # Option 1: Use a long-term token (recommended)
+    token: ""YOUR_TOKEN_HERE""
+
+    # Option 2: Use certificate-based authentication
+    # certificate:
+    #   private_key_file: ~/path/to/private.key
+    #   certificate_file: ~/path/to/certificate.pem
+    #   password: ""certificate_password""
+    #   # Or use environment variable for password:
+    #   # password_env: KSEF_CERT_PASSWORD
+";
+        File.WriteAllText(configPath, templateConfig);
+        Console.WriteLine($"Created template config file: {configPath}");
+        Console.WriteLine("Please edit the config file and configure your profile with NIP and authentication (token or certificate).");
+
+        throw new InvalidOperationException(
+            $"Template configuration created at {configPath}. Please edit it with your credentials and try again.");
+    }
+
     public static KsefCliConfig Load(string configPath, string? activeProfileNameOverride)
     {
         string absoluteConfigPath = Path.GetFullPath(configPath);
         if (!File.Exists(absoluteConfigPath))
         {
-            throw new FileNotFoundException($"Configuration file not found at {absoluteConfigPath}");
+            EnsureConfigExists(absoluteConfigPath);
         }
 
         IDeserializer deserializer = new DeserializerBuilder()

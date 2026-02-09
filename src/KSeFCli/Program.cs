@@ -7,6 +7,12 @@ internal class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        // Default to GUI mode if no arguments provided (for double-click on Windows)
+        if (args.Length == 0)
+        {
+            args = ["Gui"];
+        }
+
         // https://github.com/commandlineparser/commandline/wiki/How-To
         StringWriter helpWriter = new StringWriter();
         Parser parser = new Parser(with =>
