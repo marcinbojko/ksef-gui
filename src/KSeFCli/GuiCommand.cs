@@ -49,7 +49,9 @@ public class GuiCommand : IWithConfigCommand
         bool? CustomFilenames = null,
         bool? SeparateByNip = null,
         string? SelectedProfile = null,
-        int? LanPort = null);
+        int? LanPort = null,
+        bool? DarkMode = null,
+        bool? PreviewDarkMode = null);
 
     private static GuiPrefs LoadPrefs()
     {
@@ -103,7 +105,7 @@ public class GuiCommand : IWithConfigCommand
 
         if (Pdf)
         {
-            XML2PDFCommand.AssertNpxExists();
+            XML2PDFCommand.AssertPdfGeneratorAvailable();
         }
 
         Directory.CreateDirectory(OutputDir);
@@ -139,6 +141,8 @@ public class GuiCommand : IWithConfigCommand
                 selectedProfile = ActiveProfile,
                 allProfiles = _allProfiles,
                 lanPort = prefs.LanPort ?? DefaultLanPort,
+                darkMode = prefs.DarkMode ?? false,
+                previewDarkMode = prefs.PreviewDarkMode ?? false,
             });
         };
         server.OnSavePrefs = (json) =>
@@ -153,9 +157,37 @@ public class GuiCommand : IWithConfigCommand
                 CustomFilenames: root.TryGetProperty("customFilenames", out JsonElement cf) ? cf.GetBoolean() : null,
                 SeparateByNip: root.TryGetProperty("separateByNip", out JsonElement sn) ? sn.GetBoolean() : null,
                 SelectedProfile: root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null,
-                LanPort: root.TryGetProperty("lanPort", out JsonElement lp) ? lp.GetInt32() : null
+                LanPort: root.TryGetProperty("lanPort", out JsonElement lp) ? lp.GetInt32() : null,
+                DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
+                PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null
             ));
             return Task.CompletedTask;
+        };
+        server.OnCheckExisting = (checkParams) =>
+        {
+            if (_cachedInvoices == null)
+                return Task.FromResult<object>(Array.Empty<object>());
+
+            string outputDir = string.IsNullOrWhiteSpace(checkParams.OutputDir) ? OutputDir : checkParams.OutputDir;
+            if (checkParams.SeparateByNip)
+            {
+                string nip = Config().Nip;
+                if (!string.IsNullOrEmpty(nip))
+                    outputDir = Path.Combine(outputDir, nip);
+            }
+
+            var result = _cachedInvoices.Select(inv =>
+            {
+                string fileName = BuildFileName(inv, checkParams.CustomFilenames);
+                return new
+                {
+                    xml = File.Exists(Path.Combine(outputDir, $"{fileName}.xml")),
+                    pdf = File.Exists(Path.Combine(outputDir, $"{fileName}.pdf")),
+                    json = File.Exists(Path.Combine(outputDir, $"{fileName}.json")),
+                };
+            }).ToArray();
+
+            return Task.FromResult<object>(result);
         };
         server.OnTokenStatus = () =>
         {

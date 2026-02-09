@@ -68,6 +68,9 @@ Desktop.ini
 .fuse_hidden*
 .nfs*
 
+# Build output
+dist/
+
 # Prompt file
 prompt.md.env
 
