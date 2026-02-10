@@ -43,6 +43,12 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called to persist GUI preferences (receives JSON string with all prefs).</summary>
     public Func<string, Task>? OnSavePrefs { get; set; }
 
+    /// <summary>Called to load the current config file for the editor. Returns ConfigEditorData.</summary>
+    public Func<Task<object>>? OnLoadConfig { get; set; }
+
+    /// <summary>Called to save modified config. Receives JSON string, returns empty string on success or error message.</summary>
+    public Func<string, Task<string>>? OnSaveConfig { get; set; }
+
     public bool Lan { get; }
 
     public WebProgressServer(bool lan = false, int port = 0)
@@ -295,6 +301,28 @@ internal sealed class WebProgressServer : IDisposable
                 return JsonSerializer.Serialize(status);
             }).ConfigureAwait(false);
         }
+        else if (path == "/config-editor" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                if (OnLoadConfig == null) return JsonSerializer.Serialize(new { });
+                object data = await OnLoadConfig().ConfigureAwait(false);
+                return JsonSerializer.Serialize(data, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/config-editor" && method == "POST")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                string error = OnSaveConfig != null
+                    ? await OnSaveConfig(body).ConfigureAwait(false)
+                    : "";
+                return string.IsNullOrEmpty(error)
+                    ? JsonSerializer.Serialize(new { ok = true })
+                    : JsonSerializer.Serialize(new { ok = false, error });
+            }).ConfigureAwait(false);
+        }
         else if (path == "/quit" && method == "POST")
         {
             ctx.Response.StatusCode = 200;
@@ -383,6 +411,19 @@ button:disabled{opacity:.4;cursor:default}
 .token-info{font-size:.72rem;color:#888;margin-left:-.2rem;white-space:nowrap}
 .btn-prefs{background:#546e7a;color:#fff}
 .btn-prefs:hover:not(:disabled){background:#37474f}
+.btn-config{background:#4527a0;color:#fff}
+.btn-config:hover:not(:disabled){background:#311b92}
+.cfg-modal{width:600px;max-height:85vh}
+.cfg-profile-card{border:1px solid #ddd;border-radius:8px;padding:.8rem 1rem;margin-bottom:.8rem;position:relative}
+.cfg-profile-card .cfg-card-title{font-weight:600;font-size:.9rem;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem}
+.cfg-field{display:flex;flex-direction:column;margin-bottom:.5rem}
+.cfg-field label{font-size:.75rem;color:#666;margin-bottom:.2rem}
+.cfg-field input,.cfg-field select{padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem}
+.cfg-del{position:absolute;top:.5rem;right:.6rem;background:none;border:none;color:#c62828;cursor:pointer;font-size:1rem;line-height:1}
+.cfg-del:hover{color:#b71c1c}
+.cfg-pw-wrap{display:flex;gap:.3rem}
+.cfg-pw-wrap input{flex:1}
+.cfg-pw-wrap button{padding:.3rem .5rem;font-size:.8rem}
 .btn-danger{background:#c62828;color:#fff}
 .btn-danger:hover:not(:disabled){background:#b71c1c}
 .prefs-panel{border-left:3px solid #546e7a}
@@ -577,6 +618,9 @@ body.dark .dir-item:hover{background:#0d2137}
 body.dark .dir-item.parent{color:#64b5f6}
 body.dark .modal-footer{background:#252525;border-top-color:#444}
 body.dark .modal-footer .new-dir input{background:#2a2a2a;border-color:#444;color:#e0e0e0}
+body.dark .cfg-profile-card{border-color:#444}
+body.dark .cfg-field label{color:#aaa}
+body.dark .cfg-field input,body.dark .cfg-field select{background:#2a2a2a;border-color:#444;color:#e0e0e0}
 body.dark .token-info{color:#888}
 body.dark .sort-arrow{color:#666}
 </style>
@@ -617,6 +661,7 @@ body.dark .sort-arrow{color:#666}
   <button class="btn-auth auth-unknown" id="btnAuth" onclick="doAuth()" title="Odswierz token KSeF">&#128274; Autoryzuj</button>
   <span class="token-info" id="tokenInfo"></span>
   <button class="btn-prefs" id="btnPrefs" onclick="togglePrefs()" title="Preferencje">&#9881; Preferencje</button>
+  <button class="btn-config" id="btnConfig" onclick="openConfigEditor()" title="Edytor konfiguracji">&#9998; Konfiguracja</button>
   <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
 </div>
 <div class="search-form prefs-panel" id="prefsPanel" style="padding:.6rem 1rem;gap:.8rem;display:none;flex-wrap:wrap">
@@ -647,6 +692,11 @@ body.dark .sort-arrow{color:#666}
   </div>
   <span style="color:#ccc;margin:0 .3rem">|</span>
   <button class="btn-sm btn-prefs" onclick="savePrefs();$('prefsPanel').style.display='none'" style="padding:.3rem .8rem">Zapisz preferencje</button>
+</div>
+<div id="setupBanner" style="display:none;align-items:center;gap:.8rem;background:#fff3e0;border:1px solid #ffb300;border-radius:8px;padding:.7rem 1rem;margin-bottom:.5rem;font-size:.9rem;color:#6d4c00">
+  <span>&#9888;</span>
+  <span>Brak konfiguracji. Skonfiguruj profil w edytorze, aby korzystac z aplikacji.</span>
+  <button class="btn-config" onclick="openConfigEditor()" style="margin-left:auto;padding:.3rem .8rem;font-size:.82rem">&#9998; Otwórz edytor</button>
 </div>
 <div class="status idle" id="status">Wprowadz kryteria i kliknij "Szukaj".</div>
 <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="bar"></div></div>
@@ -681,6 +731,24 @@ body.dark .sort-arrow{color:#666}
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="configModal" onclick="onConfigModalOverlayClick(event)">
+  <div class="modal cfg-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>&#9998; Konfiguracja</h2>
+      <button class="modal-close" onclick="closeConfigEditor()">&times;</button>
+    </div>
+    <div class="modal-path" id="cfgFilePath" style="font-family:monospace;font-size:.78rem"></div>
+    <div style="overflow-y:auto;flex:1;padding:.8rem 1rem" id="cfgBody">
+      <div style="text-align:center;color:#999;padding:2rem">Wczytywanie...</div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;gap:.5rem">
+      <span id="cfgSaveMsg" style="font-size:.8rem;color:#2e7d32;display:none"></span>
+      <span id="cfgErrMsg" style="font-size:.8rem;color:#c62828;display:none"></span>
+      <button class="btn-sm btn-outline" onclick="addProfile()">+ Dodaj profil</button>
+      <button class="btn-success" onclick="saveConfigEditor()" style="padding:.4rem 1.2rem">Zapisz</button>
+    </div>
+  </div>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
@@ -706,7 +774,7 @@ let fileStatus = [];
 
 // Load saved preferences
 let currentSessionProfile = '';
-(async function loadPrefs() {
+async function loadPrefs() {
   try {
     const res = await fetch('/prefs');
     if (res.ok) {
@@ -736,9 +804,19 @@ let currentSessionProfile = '';
         currentSessionProfile = p.selectedProfile || '';
         if (entries.length <= 1) sel.disabled = true;
       }
+      applySetupMode(!!p.setupRequired);
     }
   } catch {}
-})();
+}
+loadPrefs();
+
+function applySetupMode(required) {
+  const banner = $('setupBanner');
+  if (banner) banner.style.display = required ? 'flex' : 'none';
+  const blocked = [btnSearch, btnDownload, btnDownloadSel, $('btnAuth')];
+  for (const b of blocked) { if (b) b.disabled = required; }
+  if (required) setTimeout(() => openConfigEditor(), 400);
+}
 
 // --- Token status ---
 let tokenExpiry = null; // Date object for access token expiry
@@ -815,15 +893,205 @@ function savePrefs() {
 function onProfileChange() {
   const chosen = $('profileSelect').value;
   savePrefs();
-  if (currentSessionProfile && chosen !== currentSessionProfile) {
-    setStatus('Profil "' + chosen + '" zostanie uzyty po restarcie GUI (Ctrl+C i uruchom ponownie).', 'info');
-  }
+  // Clear all results and token status immediately on profile switch
+  tableWrap.innerHTML = '';
+  invoices = []; total = 0; completed = 0; sortCol = null;
+  activeCurrencies = new Set();
+  selectedInvoices = new Set();
+  fileStatus = [];
+  filterBar.classList.remove('visible');
+  selToolbar.classList.remove('visible');
+  downloadBar.style.display = 'none';
+  progressWrap.classList.remove('visible');
+  countLabel.textContent = '';
+  setStatus('Profil zmieniony na "' + chosen + '".', 'idle');
+  fetchTokenStatus();
 }
 
 function togglePrefs() {
   const panel = $('prefsPanel');
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'flex';
+}
+
+// ---- Config editor ----
+let cfgData = null;
+
+async function openConfigEditor() {
+  $('configModal').classList.add('visible');
+  $('cfgBody').innerHTML = '<div style="text-align:center;color:#999;padding:2rem">Wczytywanie...</div>';
+  $('cfgSaveMsg').style.display = 'none';
+  $('cfgErrMsg').style.display = 'none';
+  try {
+    const res = await fetch('/config-editor');
+    cfgData = await res.json();
+    $('cfgFilePath').textContent = cfgData.configFilePath || '';
+    renderConfigEditor();
+  } catch(e) {
+    $('cfgBody').innerHTML = '<div style="color:#c62828;padding:1rem">Blad: ' + e.message + '</div>';
+  }
+}
+
+function closeConfigEditor() {
+  $('configModal').classList.remove('visible');
+}
+
+function onConfigModalOverlayClick(e) {
+  if (e.target === $('configModal')) closeConfigEditor();
+}
+
+function renderConfigEditor() {
+  if (!cfgData) return;
+  let html = '';
+  // Active profile selector
+  html += '<div class="cfg-field" style="margin-bottom:1rem"><label>Aktywny profil</label>';
+  html += '<select id="cfgActiveProfile">';
+  for (const p of cfgData.profiles) {
+    const sel = p.name === cfgData.activeProfile ? ' selected' : '';
+    html += '<option value="' + esc(p.name) + '"' + sel + '>' + esc(p.name) + '</option>';
+  }
+  html += '</select></div>';
+  // Profile cards
+  for (let i = 0; i < cfgData.profiles.length; i++) {
+    html += renderProfileCard(cfgData.profiles[i], i);
+  }
+  $('cfgBody').innerHTML = html;
+  // Sync auth method visibility
+  for (let i = 0; i < cfgData.profiles.length; i++) toggleAuthFields(i);
+}
+
+function renderProfileCard(p, i) {
+  const am = p.authMethod || 'token';
+  const tokenVal = p.token || '';
+  return '<div class="cfg-profile-card" id="cfgCard' + i + '">' +
+    '<button class="cfg-del" onclick="deleteProfile(' + i + ')" title="Usun profil">&times;</button>' +
+    '<div class="cfg-card-title">Profil #' + (i+1) + '</div>' +
+    '<div class="cfg-field"><label>Nazwa profilu</label>' +
+    '<input type="text" id="cfgName' + i + '" value="' + esc(p.name) + '" onchange="syncActiveProfileSelect()"></div>' +
+    '<div class="cfg-field"><label>NIP</label>' +
+    '<input type="text" id="cfgNip' + i + '" value="' + esc(p.nip || '') + '"></div>' +
+    '<div class="cfg-field"><label>Srodowisko</label>' +
+    '<select id="cfgEnv' + i + '">' +
+    '<option value="test"' + (p.environment==='test'?' selected':'') + '>test</option>' +
+    '<option value="demo"' + (p.environment==='demo'?' selected':'') + '>demo</option>' +
+    '<option value="prod"' + (p.environment==='prod'?' selected':'') + '>prod</option>' +
+    '</select></div>' +
+    '<div class="cfg-field"><label>Metoda uwierzytelniania</label>' +
+    '<select id="cfgAuth' + i + '" onchange="toggleAuthFields(' + i + ')">' +
+    '<option value="token"' + (am==='token'?' selected':'') + '>Token</option>' +
+    '<option value="certificate"' + (am==='certificate'?' selected':'') + '>Certyfikat</option>' +
+    '</select></div>' +
+    '<div id="cfgTokenSection' + i + '">' +
+    '<div class="cfg-field"><label>Token</label>' +
+    '<div class="cfg-pw-wrap">' +
+    '<input type="password" id="cfgToken' + i + '" value="' + esc(tokenVal) + '" autocomplete="off">' +
+    '<button class="btn-sm btn-outline" onclick="toggleTokenVis(' + i + ')">&#128065;</button>' +
+    '</div></div></div>' +
+    '<div id="cfgCertSection' + i + '">' +
+    '<div class="cfg-field"><label>Plik klucza prywatnego</label>' +
+    '<input type="text" id="cfgCertKey' + i + '" value="' + esc(p.certPrivateKeyFile||'') + '" placeholder="~/klucz.key"></div>' +
+    '<div class="cfg-field"><label>Plik certyfikatu</label>' +
+    '<input type="text" id="cfgCertFile' + i + '" value="' + esc(p.certCertificateFile||'') + '" placeholder="~/cert.pem"></div>' +
+    '<div class="cfg-field"><label>Haslo certyfikatu</label>' +
+    '<input type="password" id="cfgCertPass' + i + '" value="' + esc(p.certPassword||'') + '" autocomplete="off"></div>' +
+    '<div class="cfg-field"><label>Haslo z env var (opcjonalnie)</label>' +
+    '<input type="text" id="cfgCertPassEnv' + i + '" value="' + esc(p.certPasswordEnv||'') + '" placeholder="KSEF_CERT_PASSWORD"></div>' +
+    '<div class="cfg-field"><label>Haslo z pliku (opcjonalnie)</label>' +
+    '<input type="text" id="cfgCertPassFile' + i + '" value="' + esc(p.certPasswordFile||'') + '" placeholder="~/password.txt"></div>' +
+    '</div>' +
+    '</div>';
+}
+
+function toggleAuthFields(i) {
+  const am = document.getElementById('cfgAuth' + i)?.value || 'token';
+  const ts = $('cfgTokenSection' + i);
+  const cs = $('cfgCertSection' + i);
+  if (ts) ts.style.display = am === 'token' ? '' : 'none';
+  if (cs) cs.style.display = am === 'certificate' ? '' : 'none';
+}
+
+function toggleTokenVis(i) {
+  const el = $('cfgToken' + i);
+  if (el) el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function syncActiveProfileSelect() {
+  const sel = $('cfgActiveProfile');
+  if (!sel || !cfgData) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  for (let i = 0; i < cfgData.profiles.length; i++) {
+    const name = document.getElementById('cfgName' + i)?.value || cfgData.profiles[i].name;
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === prev) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function addProfile() {
+  if (!cfgData) return;
+  cfgData.profiles.push({ name: 'nowy-profil', nip: '', environment: 'test', authMethod: 'token', token: '' });
+  renderConfigEditor();
+  $('cfgCard' + (cfgData.profiles.length - 1))?.scrollIntoView({ behavior: 'smooth' });
+}
+
+function deleteProfile(i) {
+  if (!cfgData) return;
+  if (cfgData.profiles.length <= 1) { alert('Musi pozostac co najmniej jeden profil.'); return; }
+  if (!confirm('Usunac profil "' + cfgData.profiles[i].name + '"?')) return;
+  cfgData.profiles.splice(i, 1);
+  renderConfigEditor();
+}
+
+async function saveConfigEditor() {
+  if (!cfgData) return;
+  $('cfgSaveMsg').style.display = 'none';
+  $('cfgErrMsg').style.display = 'none';
+  // Collect current form state
+  const activeProfile = $('cfgActiveProfile')?.value || '';
+  const profiles = [];
+  for (let i = 0; i < cfgData.profiles.length; i++) {
+    const authMethod = document.getElementById('cfgAuth' + i)?.value || 'token';
+    profiles.push({
+      name: document.getElementById('cfgName' + i)?.value || '',
+      nip: document.getElementById('cfgNip' + i)?.value || '',
+      environment: document.getElementById('cfgEnv' + i)?.value || 'test',
+      authMethod,
+      token: authMethod === 'token' ? (document.getElementById('cfgToken' + i)?.value || '') : null,
+      certPrivateKeyFile: authMethod === 'certificate' ? (document.getElementById('cfgCertKey' + i)?.value || null) : null,
+      certCertificateFile: authMethod === 'certificate' ? (document.getElementById('cfgCertFile' + i)?.value || null) : null,
+      certPassword: authMethod === 'certificate' ? (document.getElementById('cfgCertPass' + i)?.value || null) : null,
+      certPasswordEnv: authMethod === 'certificate' ? (document.getElementById('cfgCertPassEnv' + i)?.value || null) : null,
+      certPasswordFile: authMethod === 'certificate' ? (document.getElementById('cfgCertPassFile' + i)?.value || null) : null,
+    });
+  }
+  const payload = { activeProfile, configFilePath: cfgData.configFilePath, profiles };
+  try {
+    const res = await fetch('/config-editor', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (data.ok) {
+      cfgData = payload;
+      $('cfgSaveMsg').textContent = 'Zapisano!';
+      $('cfgSaveMsg').style.display = '';
+      setTimeout(() => { $('cfgSaveMsg').style.display = 'none'; }, 3000);
+      // Refresh profile dropdown and token status (new/edited profile = new token state)
+      await loadPrefs();
+      applySetupMode(false);
+      await fetchTokenStatus();
+    } else {
+      $('cfgErrMsg').textContent = data.error || 'Nieznany blad';
+      $('cfgErrMsg').style.display = '';
+    }
+  } catch(e) {
+    $('cfgErrMsg').textContent = e.message;
+    $('cfgErrMsg').style.display = '';
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function toggleDarkMode() {
@@ -1202,7 +1470,7 @@ function closeDetails() {
   if (detailOverlay) { detailOverlay.remove(); detailOverlay = null; }
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetails(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDetails(); closeConfigEditor(); } });
 
 async function showDetails(idx, event) {
   closeDetails();

@@ -1,437 +1,378 @@
-# ksefcli
+# ksefcli — GUI
 
-`ksefcli` to narzędzie wiersza poleceń (CLI) dla systemu Linux, napisane w języku C#, które ułatwia interakcję z Krajowym Systemem e-Faktur (KSeF) w Polsce. Aplikacja wykorzystuje bibliotekę kliencką `ksef-client-csharp` do komunikacji z usługami KSeF.
+**PL** | [EN](#english)
 
-## Spis Treści
-
-- [Instalacja](#instalacja)
-- [Przykłady użycia](#przykłady-użycia)
-- [Konfiguracja](#konfiguracja)
-  - [Struktura pliku `ksefcli.yaml`](#struktura-pliku-ksefcliyaml)
-  - [Opcje Konfiguracyjne](#opcje-konfiguracyjne)
-  - [Przykład Konfiguracji](#przykład-konfiguracji)
-- [Użycie](#użycie)
-  - [Opcje Globalne](#opcje-globalne)
-  - [Dostępne Polecenia](#dostępne-polecenia)
-- [Polecenia](#polecenia)
-  - [`Auth`](#auth)
-  - [`TokenAuth`](#tokenauth)
-  - [`CertAuth`](#certauth)
-  - [`TokenRefresh`](#tokenrefresh)
-  - [`GetFaktura`](#getfaktura)
-  - [`SzukajFaktur`](#szukajfaktur)
-  - [`PobierzFaktury`](#pobierzfaktury)
-  - [`PrzeslijFaktury`](#przeslijfaktury)
-  - [`LinkDoFaktury`](#linkdofaktury)
-  - [`QRDoFaktury`](#qrdofaktury)
-  - [`XML2PDF`](#xml2pdf)
-- [Rozwój](#rozwój)
-- [Uwierzytelnianie w KSeF](#uwierzytelnianie-w-ksef)
-- [Autor i Licencja](#autor-i-licencja)
-
-## Instalacja
-
-Możesz pobrać statycznie linkowaną binarkę `ksefcli` bezpośrednio z artefaktów GitLab CI/CD, a następnie umieścić ją w katalogu znajdującym się w `PATH` (np. `/usr/local/bin`).
-
-Poniższy link jest przeznaczony dla systemu Linux.
-
-```bash
-curl -LsS https://gitlab.com/kamcuk/ksefcli/builds/artifacts/main/download?job=linux_build_main | zcat > ksefcli
-chmod +x ksefcli
-sudo mv ksefcli /usr/local/bin/
-```
-
-### Bezpośrednie linki do pobrania
-
-- [Linux x64](https://gitlab.com/kamcuk/ksefcli/-/jobs/artifacts/main/raw/ksefcli?job=linux_build_main)
-- [Windows x64](https://gitlab.com/kamcuk/ksefcli/-/jobs/artifacts/main/raw/ksefcli.exe?job=windows_build_main)
-
-
-## Przykłady użycia
-
-Wyszukiwanie numeru KSeF dla faktury o konkretnym numerze:
-```bash
-$ ksefcli SzukajFaktur -q -c ksefcli.yaml --from "-1week" --to "now" --invoiceNumber '0004/26' | jq -r '.Invoices[0].KsefNumber'
-12312312312-20260117-XXXXXXXXXXXX-5C
-```
-
-Przesyłanie faktury z użyciem konkretnego profilu:
-```bash
-$ ksefcli PrzeslijFaktury -c ksefcli.yaml -f d03900-001.xml  -a firma2
-```
-
-Wyszukiwanie faktur wystawionych w ostatnim tygodniu i zapisanie wyników do pliku:
-```bash
-$ ksefcli SzukajFaktur -c ksefcli.yaml --from "-1week" --to "now" > /tmp/1.json
-```
-
-## Konfiguracja
-
-Przed rozpoczęciem pracy z `ksefcli`, należy skonfigurować aplikację, tworząc plik `ksefcli.yaml` w jednym z następujących miejsc:
-- W katalogu bieżącym: `./ksefcli.yaml`
-- W katalogu konfiguracyjnym użytkownika: `$HOME/.config/ksefcli/ksefcli.yaml`
-
-Plik ten zawiera profile, które umożliwiają zarządzanie różnymi poświadczeniami i środowiskami KSeF.
-
-### Struktura pliku `ksefcli.yaml`
-
-```yaml
-active_profile: <nazwa_aktywnego_profilu>
-profiles:
-  <nazwa_profilu_1>:
-    environment: <srodowisko>
-    nip: <nip_podmiotu>
-    token: <token_autoryzacyjny>
-    certificate:
-      private_key: <zawartosc_klucza_prywatnego>
-      private_key_file: <sciezka_do_klucza_prywatnego>
-      certificate: <zawartosc_certyfikatu_publicznego>
-      certificate_file: <sciezka_do_certyfikatu_publicznego>
-      password: <haslo_do_klucza_prywatnego>
-      password_env: <zmienna_srodowiskowa_z_haslem>
-  <nazwa_profilu_2>:
-    # ...
-```
-
-### Opcje Konfiguracyjne
-
-*   `active_profile`: (Opcjonalnie) Nazwa profilu, który będzie używany domyślnie, jeśli nie zostanie podany za pomocą opcji `--profile`. Jeśli zdefiniowany jest tylko jeden profil, `active_profile` jest ignorowane.
-*   `profiles`: Mapa profili konfiguracyjnych.
-    *   `<nazwa_profilu>`: Dowolna nazwa identyfikująca profil (np. `dyzio`, `firma_xyz_test`).
-        *   `environment`: Środowisko KSeF (`test`, `demo`, `prod`).
-        *   `nip`: Numer Identyfikacji Podatkowej (NIP) podmiotu, którego dotyczy profil.
-        *   Należy zdefiniować **jedną** z poniższych metod uwierzytelniania:
-            *   `token`: Token autoryzacyjny sesji.
-            *   `certificate`: Dane certyfikatu kwalifikowanego.
-                *   `private_key`: Zawartość klucza prywatnego.
-                *   `private_key_file`: Ścieżka do klucza prywatnego (plik `.pem` lub `.pfx`). Można użyć `~` jako skrótu do katalogu domowego.
-                *   `certificate`: Zawartość certyfikatu publicznego.
-                *   `certificate_file`: Ścieżka do certyfikatu publicznego. Można użyć `~` jako skrótu do katalogu domowego.
-                *   `password`: Hasło do klucza prywatnego.
-                *   `password_env`: Nazwa zmiennej środowiskowej, która przechowuje hasło do klucza prywatnego.
-                *   `password_file`: Ścieżka do pliku z hasłem do klucza prywatnego.
-
-### Przykład Konfiguracji
-
-Poniższy przykład demonstruje konfigurację z wieloma profilami dla różnych podmiotów i środowisk.
-
-```yaml
 ---
+
+## Polski
+
+`ksefcli` to narzędzie do pobierania faktur z **Krajowego Systemu e-Faktur (KSeF)**. Oprócz interfejsu wiersza poleceń posiada wbudowany interfejs przeglądarkowy (GUI), który uruchamia się lokalnie i nie wymaga instalacji dodatkowego oprogramowania.
+
+### Wymagania
+
+- Plik wykonywalny `ksefcli` (Linux / Windows / macOS) — samowystarczalny, brak zależności .NET
+- Przeglądarka internetowa
+- Dla eksportu PDF: Node.js 18+ i git (tylko jeśli brak dołączonego pliku `ksef-pdf-generator`)
+
+### Szybki start
+
+```bash
+./ksefcli
+# Przeglądarka otwiera się automatycznie pod adresem http://localhost:<port>
+```
+
+Polecenie `Gui` jest domyślne — samo uruchomienie pliku wykonywalnego (np. dwuklikiem w systemie Windows) otwiera GUI.
+
+Przy pierwszym uruchomieniu bez pliku konfiguracyjnego — GUI otwiera **kreator konfiguracji** automatycznie.
+
+### Plik konfiguracyjny
+
+`ksefcli` szuka pliku `ksefcli.yaml` w następującej kolejności:
+
+| Priorytet | Lokalizacja |
+|-----------|-------------|
+| 1 | Flaga `-c /sciezka/do/pliku` |
+| 2 | Zmienna środowiskowa `KSEFCLI_CONFIG` |
+| 3 | `./ksefcli.yaml` — bieżący katalog roboczy |
+| 4 | `<katalog-exe>/ksefcli.yaml` — katalog obok pliku wykonywalnego |
+| 5 | `~/.config/ksefcli/ksefcli.yaml` — domyślna lokalizacja |
+
+Najwygodniejsze podejście: umieść `ksefcli.yaml` obok pliku wykonywalnego — działa z dowolnego miejsca.
+
+Na starcie aplikacja wypisuje, który plik został wczytany:
+```
+Config: /home/user/.config/ksefcli/ksefcli.yaml [default (~/.config/ksefcli/)]
+```
+
+#### Format pliku konfiguracyjnego
+
+```yaml
 active_profile: firma1
+
 profiles:
   firma1:
-    environment: test
-    nip: '12312312312'
-    token: fdsafa
+    environment: prod      # test | demo | prod
+    nip: "1234567890"
+    token: "TWOJ_TOKEN_KSEF"
+
   firma2:
-    environment: demo
-    nip: '12312312312'
-    token: fdsfa
-  firma3:
     environment: prod
-    nip: '23434545676'
-    token: fdasfa
-  cert_auth_example:
-    environment: prod
-    nip: '1234567890'
+    nip: "9876543210"
     certificate:
-      private_key_file: '~/certs/my_private_key.pem'
-      certificate_file: '~/certs/my_certificate.pem'
-      password_env: 'KSEF_CERT_PASSWORD'
-
+      private_key_file: ~/certyfikaty/klucz.pem
+      certificate_file: ~/certyfikaty/cert.pem
+      password_env: KSEF_CERT_PASSWORD
 ```
 
-W tym przykładzie:
-- Domyślnym profilem jest `firma1`.
-- Zdefiniowano trzy profile (`firma1`, `firma2`, `firma3`) używające uwierzytelniania tokenem na środowisku testowym dla dwóch różnych NIP-ów.
-- Profil `cert_auth_example` używa uwierzytelniania certyfikatem na środowisku produkcyjnym. Hasło do certyfikatu zostanie odczytane ze zmiennej środowiskowej `KSEF_CERT_PASSWORD`.
+Jeśli zdefiniowany jest tylko jeden profil, `active_profile` jest opcjonalne.
 
-## Użycie
+Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 
-Ogólna składnia poleceń `ksefcli` jest następująca:
+### Uruchamianie GUI
 
 ```bash
-ksefcli <polecenie> [opcje]
+# Podstawowe uruchomienie (Gui jest domyślne)
+./ksefcli
+
+# Z katalogiem wyjściowym i eksportem PDF
+./ksefcli Gui -o ~/faktury --pdf
+
+# Tryb LAN — dostęp z innych urządzeń w sieci
+./ksefcli Gui --lan -o /data --pdf
 ```
 
-### Opcje Globalne
+| Opcja | Opis | Domyślnie |
+|-------|------|-----------|
+| `-o`, `--outputdir` | Katalog zapisu faktur | `.` |
+| `-p`, `--pdf` | Generuj pliki PDF przy pobieraniu | wyłączone |
+| `--useInvoiceNumber` | Używaj numeru faktury zamiast numeru KSeF w nazwie pliku | wyłączone |
+| `--lan` | Nasłuchuj na wszystkich interfejsach sieciowych | wyłączone |
 
-### Dostępne Polecenia
+### Funkcje GUI
 
-*   `Auth`: Uwierzytelnia przy użyciu skonfigurowanej metody.
-*   `TokenAuth`: Uwierzytelnia przy użyciu tokena sesji KSeF.
-*   `CertAuth`: Uwierzytelnia przy użyciu certyfikatu kwalifikowanego.
-*   `TokenRefresh`: Odświeża istniejący token sesji.
-*   `SzukajFaktur`: Wyszukuje faktury na podstawie określonych kryteriów.
-*   `PobierzFaktury`: Pobiera faktury na podstawie kryteriów wyszukiwania.
-*   `GetFaktura`: Pobiera pojedynczą fakturę po jej numerze KSeF.
-*   `PrzeslijFaktury`: Wysyła faktury do KSeF.
-*   `LinkDoFaktury`: Generuje link weryfikacyjny dla faktury.
-*   `QRDoFaktury`: Generuje kod QR dla linku weryfikacyjnego faktury.
-*   `PrintConfig`: Prints the active configuration in YAML or JSON format.
-*   `SelfUpdate`: Aktualizuje narzędzie ksefcli do najnowszej wersji.
-*   `XML2PDF`: Konwertuje fakturę KSeF w formacie XML na format PDF.
+**Wyszukiwanie faktur**
+- Typ podmiotu: Sprzedawca / Nabywca / Subject3 / Authorized
+- Zakres dat (wybieracz miesięcy), typ daty: Wystawienie / Sprzedaż / PermanentStorage
+- Filtrowanie po walucie
 
-## Polecenia
+**Tabela wyników**
+- Numer KSeF, numer faktury, data wystawienia, sprzedawca, nabywca, kwota brutto, waluta
+- Wskaźniki statusu pliku — które faktury są już pobrane jako XML / PDF / JSON
+- Podgląd szczegółów faktury po kliknięciu lupki (strony, pozycje, podsumowanie)
+
+**Pobieranie**
+- Zaznaczanie pojedynczych faktur lub wszystkich
+- Wybór katalogu wyjściowego (przeglądarka folderów)
+- Formaty eksportu: XML (domyślnie włączony), PDF (włączony przy `--pdf`), JSON
+- Własny schemat nazw: `YYYY-MM-DD-Sprzedawca-Waluta-NumerKSeF`
+- "Separuj po NIP" — tworzy podkatalog dla każdego NIP
+
+**Status tokenu**
+- Wyświetla czas ważności tokenu dostępu i tokenu odświeżania
+- Kolorowy przycisk *Autoryzuj* (zielony / pomarańczowy / czerwony)
+- Ponowna autoryzacja bez restartu
+
+**⚙ Preferencje**
+- Katalog wyjściowy, formaty eksportu, schemat nazw plików
+- Tryb ciemny, tryb ciemny podglądu faktury
+- Port LAN (zmiana wymaga restartu)
+- Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
+
+Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
+
+**✎ Konfiguracja** (edytor w przeglądarce)
+- Edycja profili: nazwa, NIP, środowisko, metoda uwierzytelnienia
+- Pole tokenu z przełącznikiem widoczności
+- Pola certyfikatu (plik klucza, plik certyfikatu, hasło/env/plik)
+- Dodawanie i usuwanie profili
+- Zmiany zapisywane natychmiast do `ksefcli.yaml`; lista profili odświeżana bez restartu
+
+### Kreator pierwszego uruchomienia
+
+Jeśli plik `ksefcli.yaml` nie istnieje:
+1. GUI tworzy plik szablonowy w domyślnej lokalizacji
+2. Pojawia się baner ostrzegawczy *"Brak konfiguracji"*
+3. Przyciski wyszukiwania, pobierania i autoryzacji są zablokowane
+4. Edytor konfiguracji otwiera się automatycznie
+
+Po zapisaniu profilu — wszystkie przyciski odblokowują się bez restartu.
+
+### Docker / serwer domowy
+
+Dla uruchomienia na serwerze, NAS lub w środowisku Docker:
+
+```bash
+docker compose up --build
+# GUI dostępne pod http://localhost:8150
+```
+
+```yaml
+# docker-compose.yml
+services:
+  ksefcli:
+    build: .
+    ports:
+      - "8150:8150"
+    volumes:
+      - ./output:/data                                           # pobrane faktury
+      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro  # konfiguracja (tylko do odczytu)
+      - ksefcli-cache:/root/.cache/ksefcli                     # cache tokenów (wolumin nazwany)
+    environment:
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+
+volumes:
+  ksefcli-cache:
+```
+
+- `./output` — pobrane faktury pojawiają się bezpośrednio na hoście
+- `./ksefcli.yaml` — edytujesz lokalnie, kontener odczytuje
+- `ksefcli-cache` — wolumin nazwany; tokeny przeżywają `docker compose down/up`
+
+Obraz Docker zawiera wbudowany plik `ksef-pdf-generator` — eksport PDF działa bez Node.js.
+
+### Eksport PDF
+
+Plik PDF jest generowany przez [ksef-pdf-generator](https://github.com/kamilcuk/ksef-pdf-generator).
+
+Kolejność wyszukiwania (używane pierwsze znalezione):
+
+| Priorytet | Warunek | Wymagania |
+|-----------|---------|-----------|
+| 1 | `ksef-pdf-generator[.exe]` obok pliku `ksefcli` | Brak — plik samowystarczalny |
+| 2 | `ksef-pdf-generator` w `PATH` | Brak |
+| 3 | Fallback `npx --yes github:kamilcuk/ksef-pdf-generator` | **Node.js 18+** i **git** |
+
+Plik binarny dołączany jest automatycznie przy budowaniu przez Docker (`make docker-extract`).
+
+> **Node.js 20+**: ksefcli automatycznie wstrzykuje polyfill dla zmiennych przeglądarkowych (`navigator`, `window`) wymaganych przez pdfmake. Plik polyfill tworzony jest jednorazowo w `~/.cache/ksefcli/node-browser-polyfill.js`.
 
 ---
 
-### `Auth`
+## English
 
-Uwierzytelnia użytkownika na podstawie metody zdefiniowanej w aktywnym profilu (token lub certyfikat) i zwraca token dostępowy.
+`ksefcli` is a tool for downloading invoices from Poland's **KSeF** (National e-Invoice System). In addition to its command-line interface it includes a built-in browser-based GUI that runs locally with no additional software required.
 
-**Użycie:**
+### Requirements
+
+- `ksefcli` binary (Linux / Windows / macOS) — self-contained, no .NET runtime needed
+- A web browser
+- For PDF export: Node.js 18+ and git (only if the bundled `ksef-pdf-generator` binary is absent)
+
+### Quick start
+
 ```bash
-ksefcli -a moj_profil Auth
+./ksefcli
+# Browser opens automatically at http://localhost:<port>
 ```
+
+`Gui` is the default command — double-clicking the binary (e.g. on Windows) opens the GUI directly.
+
+On first launch without a config file the GUI opens the **setup wizard** automatically.
+
+### Configuration file
+
+`ksefcli` searches for `ksefcli.yaml` in this order:
+
+| Priority | Location |
+|----------|----------|
+| 1 | `-c /path/to/file` flag |
+| 2 | `KSEFCLI_CONFIG` environment variable |
+| 3 | `./ksefcli.yaml` — current working directory |
+| 4 | `<exe-dir>/ksefcli.yaml` — same directory as the binary |
+| 5 | `~/.config/ksefcli/ksefcli.yaml` — default fallback |
+
+The most convenient setup: place `ksefcli.yaml` next to the binary — works from any directory.
+
+On startup, ksefcli prints which file was loaded:
+```
+Config: /home/user/.config/ksefcli/ksefcli.yaml [default (~/.config/ksefcli/)]
+```
+
+#### Config file format
+
+```yaml
+active_profile: company1
+
+profiles:
+  company1:
+    environment: prod      # test | demo | prod
+    nip: "1234567890"
+    token: "YOUR_KSEF_TOKEN_HERE"
+
+  company2:
+    environment: prod
+    nip: "9876543210"
+    certificate:
+      private_key_file: ~/certs/private.key
+      certificate_file: ~/certs/cert.pem
+      password_env: KSEF_CERT_PASSWORD
+```
+
+If only one profile is defined, `active_profile` is optional.
+
+Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
+
+### Running the GUI
+
+```bash
+# Basic (Gui is the default command)
+./ksefcli
+
+# With output directory and PDF export
+./ksefcli Gui -o ~/invoices --pdf
+
+# LAN mode — accessible from other devices on the network
+./ksefcli Gui --lan -o /data --pdf
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-o`, `--outputdir` | Directory for saving invoices | `.` |
+| `-p`, `--pdf` | Generate PDF files when downloading | off |
+| `--useInvoiceNumber` | Use invoice number instead of KSeF number for filenames | off |
+| `--lan` | Listen on all network interfaces | off |
+
+### GUI features
+
+**Invoice search**
+- Subject type: Sprzedawca (seller) / Nabywca (buyer) / Subject3 / Authorized
+- Date range (month picker), date type: Issue / Invoicing / PermanentStorage
+- Per-currency filter chips
+
+**Results table**
+- KSeF number, invoice number, issue date, seller, buyer, gross amount, currency
+- File status indicators — which invoices are already downloaded as XML / PDF / JSON
+- Click the magnifying glass to preview invoice details (parties, line items, totals)
+
+**Download**
+- Select individual invoices or all at once
+- Folder picker for output directory
+- Export formats: XML (default on), PDF (on with `--pdf`), JSON (default off)
+- Custom filename pattern: `YYYY-MM-DD-SellerName-Currency-KsefNumber`
+- "Separate by NIP" — creates a subdirectory per NIP
+
+**Token status**
+- Displays access token and refresh token expiry times
+- Colour-coded Autoryzuj button (green / orange / red)
+- Re-authenticate without restarting
+
+**⚙ Preferences**
+- Output directory, export formats, filename style
+- Dark mode toggle, invoice preview dark mode
+- LAN port (change takes effect on next start)
+- Active profile selection (persisted across sessions; switching takes effect immediately without restart)
+
+Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
+
+**✎ Konfiguracja** (in-browser config editor)
+- Edit profiles: name, NIP, environment, auth method
+- Token field with show/hide toggle
+- Certificate fields (key file, cert file, password / env var / file)
+- Add and delete profiles
+- Saves immediately to `ksefcli.yaml`; profile dropdown refreshes without restart
+
+### First-run wizard
+
+If `ksefcli.yaml` does not exist at startup:
+1. GUI creates a template config at the default path
+2. An amber warning banner appears: *"Brak konfiguracji"*
+3. Search, download, and auth buttons are disabled
+4. Config editor opens automatically
+
+After saving a profile, all buttons re-enable — no restart needed.
+
+### Docker / home server
+
+For running on a server, NAS, or in a Docker environment:
+
+```bash
+docker compose up --build
+# GUI available at http://localhost:8150
+```
+
+```yaml
+# docker-compose.yml
+services:
+  ksefcli:
+    build: .
+    ports:
+      - "8150:8150"
+    volumes:
+      - ./output:/data                                           # downloaded invoices
+      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro  # config (read-only)
+      - ksefcli-cache:/root/.cache/ksefcli                     # token cache (named volume)
+    environment:
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+
+volumes:
+  ksefcli-cache:
+```
+
+- `./output` — downloaded invoices appear directly on the host
+- `./ksefcli.yaml` — edit on the host; the container reads it
+- `ksefcli-cache` — named volume; tokens survive `docker compose down/up`
+
+The Docker image bundles the `ksef-pdf-generator` binary — PDF export works without Node.js.
+
+### PDF export
+
+PDFs are generated by [ksef-pdf-generator](https://github.com/kamilcuk/ksef-pdf-generator).
+
+Resolution order (first found is used):
+
+| Priority | Condition | Requirements |
+|----------|-----------|--------------|
+| 1 | `ksef-pdf-generator[.exe]` next to `ksefcli` | None — self-contained binary |
+| 2 | `ksef-pdf-generator` on `PATH` | None |
+| 3 | npx fallback: `npx --yes github:kamilcuk/ksef-pdf-generator` | **Node.js 18+** and **git** |
+
+The bundled binary is included when building via Docker (`make docker-extract`).
+
+> **Node.js 20+**: ksefcli automatically injects a polyfill for browser globals (`navigator`, `window`) required by pdfmake. The polyfill is written once to `~/.cache/ksefcli/node-browser-polyfill.js`.
 
 ---
 
-### `TokenAuth`
-
-Wymusza uwierzytelnienie za pomocą tokena sesyjnego z aktywnego profilu. Profil musi zawierać klucz `token`.
-
-**Użycie:**
-```bash
-ksefcli -a profil_z_tokenem TokenAuth
-```
-
----
-
-### `CertAuth`
-
-Wymusza uwierzytelnienie za pomocą certyfikatu kwalifikowanego z aktywnego profilu. Profil musi zawierać sekcję `certificate`.
-
-**Użycie:**
-```bash
-ksefcli -a profil_z_certyfikatem CertAuth
-```
-
----
-
-### `TokenRefresh`
-
-Odświeża istniejący token sesji.
-
-**Użycie:**
-```bash
-ksefcli -a moj_profil TokenRefresh
-```
-
----
-
-### `GetFaktura`
-
-Pobiera pojedynczą fakturę w formacie XML.
-
-**Użycie:**
-```bash
-ksefcli GetFaktura <ksef-numer>
-```
-
-**Argumenty:**
-
-| Argument      | Opis                  | Wymagane |
-|---------------|-----------------------|----------|
-| `ksef-numer`  | Numer KSeF faktury.   | Tak      |
-
----
-
-### `SzukajFaktur`
-
-Wyszukuje faktury na podstawie podanych kryteriów. Odpowiada endpointowi `GET /online/Query/Invoice/Sync`.
-
-**Użycie:**
-```bash
-ksefcli SzukajFaktur --from "-7days" --subjectType Subject2
-```
-
-**Opcje:**
-
-| Opcja                                   | Opis                                                                                                                                     | Domyślnie    | Wymagane |
-|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|--------------|----------|
-| `-s`, `--subjectType`                   | Typ podmiotu dla kryteriów filtrowania. Możliwe wartości: `Subject1` (sprzedawca), `Subject2` (nabywca), `Subject3`, `SubjectAuthorized`. | `Subject1`   | Tak      |
-| `--from`                                | Data początkowa. Może być datą (np. `2023-01-01`) lub datą względną (np. `-2days`, `'last monday'`).                                       |              | Tak      |
-| `--to`                                  | Data końcowa. Może być datą (np. `2023-01-31`) lub datą względną (np. `today`, `-1day`).                                                   |              | Nie      |
-| `--dateType`                            | Typ daty używany w zakresie dat. Możliwe wartości: `Issue`, `Invoicing`, `PermanentStorage`.                                               | `Issue`      | Tak      |
-| `--pageOffset`                          | Przesunięcie strony dla paginacji.                                                                                                       | `0`          | Nie      |
-| `--pageSize`                            | Rozmiar strony dla paginacji.                                                                                                            | `10`         | Nie      |
-| `--restrictToPermanentStorageHwmDate`   | Ogranicza filtrowanie do `PermanentStorageHwmDate`. Dotyczy tylko `dateType` = `PermanentStorage`.                                     |              | Nie      |
-| `--ksefNumber`                          | Numer KSeF faktury (dokładne dopasowanie).                                                                                               |              | Nie      |
-| `--invoiceNumber`                       | Numer faktury nadany przez wystawcę (dokładne dopasowanie).                                                                              |              | Nie      |
-| `--amountType`                          | Typ filtru kwotowego. Możliwe wartości: `Brutto`, `Netto`, `Vat`.                                                                          |              | Nie      |
-| `--amountFrom`                          | Minimalna wartość kwoty.                                                                                                                 |              | Nie      |
-| `--amountTo`                            | Maksymalna wartość kwoty.                                                                                                                |              | Nie      |
-| `--sellerNip`                           | NIP sprzedawcy (dokładne dopasowanie).                                                                                                   |              | Nie      |
-| `--buyerIdentifierType`                 | Typ identyfikatora nabywcy. Możliwe wartości: `Nip`, `VatUe`, `Other`, `None`.                                                            |              | Nie      |
-| `--buyerIdValue`                        | Wartość identyfikatora nabywcy (dokładne dopasowanie).                                                                                   |              | Nie      |
-| `--currencyCodes`                       | Kody walut, oddzielone przecinkami (np. `PLN,EUR`).                                                                                       |              | Nie      |
-| `--invoicingMode`                       | Tryb fakturowania: `Online` lub `Offline`.                                                                                               |              | Nie      |
-| `--isSelfInvoicing`                     | Czy faktura jest samofakturowaniem.                                                                                                      |              | Nie      |
-| `--formType`                            | Typ dokumentu. Możliwe wartości: `FA`, `PEF`, `RR`.                                                                                      |              | Nie      |
-| `--invoiceTypes`                        | Typy faktur, oddzielone przecinkami (np. `Vat`, `Zal`, `Kor`).                                                                             |              | Nie      |
-| `--hasAttachment`                       | Czy faktura posiada załącznik.                                                                                                           |              | Nie      |
-
----
-
-### `PobierzFaktury`
-
-Pobiera wiele faktur na podstawie kryteriów wyszukiwania. Rozszerza polecenie `SzukajFaktur` o opcje zapisywania plików.
-
-**Użycie:**
-```bash
-ksefcli PobierzFaktury --from "-7days" --subjectType Subject2 -o /tmp/faktury --pdf
-```
-
-**Opcje:**
-To polecenie akceptuje wszystkie opcje z `SzukajFaktur` oraz dodatkowo:
-
-| Opcja                | Opis                                                            | Wymagane |
-|----------------------|-----------------------------------------------------------------|----------|
-| `-o`, `--outputdir`  | Katalog wyjściowy do zapisania faktur.                          | Tak      |
-| `-p`, `--pdf`        | Zapisz również wersję PDF faktury.                              | Nie      |
-| `--useInvoiceNumber` | Użyj `InvoiceNumber` zamiast `KsefNumber` jako nazwy pliku.     | Nie      |
-
----
-
-### `PrzeslijFaktury`
-
-Wysyła faktury w formacie XML do KSeF.
-
-**Użycie:**
-```bash
-ksefcli PrzeslijFaktury -f faktura1.xml faktura2.xml
-```
-
-**Opcje:**
-
-| Opcja           | Opis                                | Wymagane |
-|-----------------|-------------------------------------|----------|
-| `-f`, `--files` | Ścieżki do plików XML z fakturami.  | Tak      |
-
----
-
-### `LinkDoFaktury`
-
-Generuje link weryfikacyjny dla pojedynczej faktury.
-
-**Użycie:**
-```bash
-ksefcli LinkDoFaktury <ksef-numer>
-```
-
-**Argumenty:**
-
-| Argument      | Opis                  | Wymagane |
-|---------------|-----------------------|----------|
-| `ksef-numer`  | Numer KSeF faktury.   | Tak      |
-
----
-
-### `QRDoFaktury`
-
-Generuje kod QR dla linku weryfikacyjnego faktury i zapisuje go do pliku.
-
-**Użycie:**
-```bash
-ksefcli QRDoFaktury <ksef-numer> faktura-qr.png
-```
-
-**Argumenty:**
-
-| Argument        | Opis                                      | Wymagane |
-|-----------------|-------------------------------------------|----------|
-| `ksef-numer`    | Numer KSeF faktury.                       | Tak      |
-| `output-path`   | Ścieżka pliku wyjściowego dla kodu QR.    | Tak      |
-
-**Opcje:**
-
-| Opcja            | Opis                                 | Domyślnie |
-|------------------|--------------------------------------|-----------|
-| `-p`, `--pixels` | Piksele na moduł dla kodu QR.        | `5`       |
-
----
-
-### `PrintConfig`
-
-Wypisuje aktywną konfigurację w formacie YAML (domyślnie) lub JSON (z opcją `--json`).
-
-**Użycie:**
-```bash
-ksefcli PrintConfig [--json]
-```
-
-**Opcje:**
-
-| Opcja       | Opis                                | Domyślnie |
-|-------------|-------------------------------------|-----------|
-| `--json`    | Wypisuje konfigurację w formacie JSON. | `false`   |
-
----
-
-### `SelfUpdate`
-
-Aktualizuje narzędzie `ksefcli` do najnowszej stabilnej wersji, pobierając binarkę z repozytorium GitLab CI/CD.
-
-**Użycie:**
-```bash
-ksefcli SelfUpdate [--url <adres-url-binarki>]
-```
-
-**Opcje:**
-
-| Opcja            | Opis                                                                                   | Domyślnie |
-|------------------|----------------------------------------------------------------------------------------|-----------|
-| `-d`, `--destination` | Zapisuje nową wersję do określonej ścieżki zamiast zastępować bieżący plik wykonywalny. | Bieżący plik wykonywalny |
-| `--url`          | Określa niestandardowy adres URL do pobrania binarnego pliku aktualizacji.              | Automatycznie wykrywany na podstawie platformy |
-
----
-
-### `XML2PDF`
-
-Konwertuje fakturę KSeF w formacie XML na plik PDF.
-
-**Użycie:**
-```bash
-ksefcli XML2PDF faktura.xml faktura.pdf
-```
-
-**Argumenty:**
-
-| Argument      | Opis                        | Wymagane |
-|---------------|-----------------------------|----------|
-| `input-file`  | Wejściowy plik XML.         | Tak      |
-| `output-file` | Wyjściowy plik PDF.         | Nie      |
-
-## Rozwój
-
-Rozwój odbywa się na GitLabie.
-
-Aby skonfigurować środowisko deweloperskie, wykonaj następujące kroki:
-
-1.  Sklonuj repozytorium:
-    ```bash
-    git clone https://gitlab.com/kamcuk/ksefcli.git
-    ```
-2.  Zainstaluj zależności .NET:
-    ```bash
-    dotnet restore
-    ```
-3.  Zbuduj projekt:
-    ```bash
-    dotnet build
-    ```
-4.  Uruchom aplikację:
-    ```bash
-    dotnet run -- <polecenie> [opcje]
-    ```
-
-## Uwierzytelnianie w KSeF
-
-Szczegółowe informacje na temat mechanizmów uwierzytelniania w Krajowym Systemie e-Faktur można znaleźć w oficjalnej dokumentacji: [Uwierzytelnianie w KSeF](https://github.com/CIRFMF/ksef-docs/blob/main/uwierzytelnianie.md).
-Dokumentacja KSeF API: [https://api-test.ksef.mf.gov.pl/docs/v2/index.html](https://api-test.ksef.mf.gov.pl/docs/v2/index.html).
-
-## Autor i Licencja
-
-Program napisany przez Kamila Cukrowskiego.
-Licencja: [GPLv3](LICENSE.md).
+*Full CLI reference: [README.ksefcli.md](README.ksefcli.md)*
+*License: [GPLv3](LICENSE.md)*

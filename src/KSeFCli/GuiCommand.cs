@@ -4,6 +4,7 @@ using System.Xml.Linq;
 
 using CommandLine;
 
+using KSeF.Client.Core.Exceptions;
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Models.Authorization;
 using KSeF.Client.Core.Models.Invoices;
@@ -36,6 +37,7 @@ public class GuiCommand : IWithConfigCommand
     private IServiceScope? _scope;
     private WebProgressServer? _server;
     private Dictionary<string, string> _allProfiles = new(); // name → NIP
+    private bool _setupRequired = false;
 
     private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
 
@@ -52,6 +54,23 @@ public class GuiCommand : IWithConfigCommand
         int? LanPort = null,
         bool? DarkMode = null,
         bool? PreviewDarkMode = null);
+
+    private record ProfileEditorData(
+        string Name,
+        string Nip,
+        string Environment,
+        string AuthMethod,
+        string? Token,
+        string? CertPrivateKeyFile,
+        string? CertCertificateFile,
+        string? CertPassword,
+        string? CertPasswordEnv,
+        string? CertPasswordFile);
+
+    private record ConfigEditorData(
+        string ActiveProfile,
+        string ConfigFilePath,
+        ProfileEditorData[] Profiles);
 
     private static GuiPrefs LoadPrefs()
     {
@@ -80,37 +99,52 @@ public class GuiCommand : IWithConfigCommand
 
     public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
-        // Load all profiles from yaml (before Config() is first called)
-        try
-        {
-            var deserializer = new DeserializerBuilder()
-                .WithNamingConvention(UnderscoredNamingConvention.Instance)
-                .IgnoreUnmatchedProperties()
-                .Build();
-            var rawConfig = deserializer.Deserialize<KsefCliConfig>(File.ReadAllText(ConfigFile));
-            foreach (var (name, profile) in rawConfig.Profiles)
-                _allProfiles[name] = profile.Nip;
-        }
-        catch { }
-
-        // Restore saved profile preference (must happen before first Config() call)
+        // Check if config file exists before doing anything else
+        _setupRequired = !File.Exists(Path.GetFullPath(ConfigFile));
         GuiPrefs savedPrefs = LoadPrefs();
-        if (string.IsNullOrEmpty(ActiveProfile)
-            && !string.IsNullOrEmpty(savedPrefs.SelectedProfile)
-            && _allProfiles.ContainsKey(savedPrefs.SelectedProfile))
+        if (_setupRequired)
         {
-            ActiveProfile = savedPrefs.SelectedProfile;
-            Console.WriteLine($"Restored profile from preferences: {ActiveProfile}");
+            Console.WriteLine("No config file found. Opening setup wizard in GUI.");
+            ConfigLoader.WriteTemplate(ConfigFile);
+        }
+        else
+        {
+            // Load all profiles from yaml (before Config() is first called)
+            try
+            {
+                var deserializer = new DeserializerBuilder()
+                    .WithNamingConvention(UnderscoredNamingConvention.Instance)
+                    .IgnoreUnmatchedProperties()
+                    .Build();
+                var rawConfig = deserializer.Deserialize<KsefCliConfig>(File.ReadAllText(ConfigFile));
+                foreach (var (name, profile) in rawConfig.Profiles)
+                    _allProfiles[name] = profile.Nip;
+            }
+            catch { }
+
+            // Restore saved profile preference (must happen before first Config() call)
+            if (string.IsNullOrEmpty(ActiveProfile)
+                && !string.IsNullOrEmpty(savedPrefs.SelectedProfile)
+                && _allProfiles.ContainsKey(savedPrefs.SelectedProfile))
+            {
+                ActiveProfile = savedPrefs.SelectedProfile;
+                string restoredNip = _allProfiles.TryGetValue(ActiveProfile, out string? n) ? n : "?";
+                Console.WriteLine($"Restored profile from preferences: {ActiveProfile} (NIP {restoredNip})");
+            }
         }
 
-        if (Pdf)
+        if (!_setupRequired && Pdf)
         {
             XML2PDFCommand.AssertPdfGeneratorAvailable();
         }
 
         Directory.CreateDirectory(OutputDir);
 
-        _scope = scope;
+        // The scope passed in was created by ExecuteAsync BEFORE prefs were loaded (so it used the
+        // yaml's active_profile, not the user's preferred profile). Reset the cache and build a fresh
+        // scope now that ActiveProfile is correctly set.
+        ResetCachedConfig();
+        _scope = _setupRequired ? scope : GetScope();
         _ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
         int lanPort = Lan ? (savedPrefs.LanPort ?? DefaultLanPort) : 0;
@@ -137,18 +171,21 @@ public class GuiCommand : IWithConfigCommand
                 exportPdf = prefs.ExportPdf ?? true,
                 customFilenames = prefs.CustomFilenames ?? false,
                 separateByNip = prefs.SeparateByNip ?? false,
-                profileNip = Config().Nip,
+                profileNip = _setupRequired ? "" : Config().Nip,
                 selectedProfile = ActiveProfile,
                 allProfiles = _allProfiles,
                 lanPort = prefs.LanPort ?? DefaultLanPort,
                 darkMode = prefs.DarkMode ?? false,
                 previewDarkMode = prefs.PreviewDarkMode ?? false,
+                setupRequired = _setupRequired,
             });
         };
         server.OnSavePrefs = (json) =>
         {
             using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement root = doc.RootElement;
+            string? newProfile = root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null;
+            Console.WriteLine($"OnSavePrefs: selectedProfile={newProfile ?? "(null)"}, ActiveProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
             SavePrefs(new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
                 ExportXml: root.TryGetProperty("exportXml", out JsonElement ex) ? ex.GetBoolean() : null,
@@ -156,11 +193,20 @@ public class GuiCommand : IWithConfigCommand
                 ExportPdf: root.TryGetProperty("exportPdf", out JsonElement ep) ? ep.GetBoolean() : null,
                 CustomFilenames: root.TryGetProperty("customFilenames", out JsonElement cf) ? cf.GetBoolean() : null,
                 SeparateByNip: root.TryGetProperty("separateByNip", out JsonElement sn) ? sn.GetBoolean() : null,
-                SelectedProfile: root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null,
+                SelectedProfile: newProfile,
                 LanPort: root.TryGetProperty("lanPort", out JsonElement lp) ? lp.GetInt32() : null,
                 DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
                 PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null
             ));
+            if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
+            {
+                ActiveProfile = newProfile;
+                ResetCachedConfig();
+                _cachedInvoices = null;
+                _scope = GetScope(); // Recreate DI scope with new profile's config
+                string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
+                Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
+            }
             return Task.CompletedTask;
         };
         server.OnCheckExisting = (checkParams) =>
@@ -209,6 +255,103 @@ public class GuiCommand : IWithConfigCommand
             return Task.FromResult<object>(new { accessTokenValidUntil = (string?)null, refreshTokenValidUntil = (string?)null });
         };
 
+        server.OnLoadConfig = () =>
+        {
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(UnderscoredNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+            KsefCliConfig rawConfig;
+            try
+            {
+                rawConfig = deserializer.Deserialize<KsefCliConfig>(File.ReadAllText(ConfigFile));
+            }
+            catch
+            {
+                rawConfig = new KsefCliConfig { ActiveProfile = "", Profiles = new() };
+            }
+            ProfileEditorData[] profiles = rawConfig.Profiles
+                .Select(kvp => new ProfileEditorData(
+                    Name: kvp.Key,
+                    Nip: kvp.Value.Nip,
+                    Environment: kvp.Value.Environment,
+                    AuthMethod: kvp.Value.Certificate != null ? "certificate" : "token",
+                    Token: kvp.Value.Token,
+                    CertPrivateKeyFile: kvp.Value.Certificate?.Private_Key_File,
+                    CertCertificateFile: kvp.Value.Certificate?.Certificate_File,
+                    CertPassword: kvp.Value.Certificate?.Password,
+                    CertPasswordEnv: kvp.Value.Certificate?.Password_Env,
+                    CertPasswordFile: kvp.Value.Certificate?.Password_File))
+                .ToArray();
+            return Task.FromResult<object>(new ConfigEditorData(
+                ActiveProfile: rawConfig.ActiveProfile,
+                ConfigFilePath: Path.GetFullPath(ConfigFile),
+                Profiles: profiles));
+        };
+        server.OnSaveConfig = (json) =>
+        {
+            try
+            {
+                ConfigEditorData data = JsonSerializer.Deserialize<ConfigEditorData>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? throw new InvalidOperationException("Failed to parse config data.");
+
+                Dictionary<string, ProfileConfig> profiles = data.Profiles.ToDictionary(
+                    p => p.Name,
+                    p => p.AuthMethod == "certificate"
+                        ? new ProfileConfig
+                        {
+                            Nip = p.Nip,
+                            Environment = p.Environment,
+                            Certificate = new CertificateConfig
+                            {
+                                Private_Key_File = p.CertPrivateKeyFile,
+                                Certificate_File = p.CertCertificateFile,
+                                Password = p.CertPassword,
+                                Password_Env = p.CertPasswordEnv,
+                                Password_File = p.CertPasswordFile,
+                            }
+                        }
+                        : new ProfileConfig
+                        {
+                            Nip = p.Nip,
+                            Environment = p.Environment,
+                            Token = p.Token,
+                        });
+
+                KsefCliConfig newConfig = new KsefCliConfig
+                {
+                    ActiveProfile = data.ActiveProfile,
+                    Profiles = profiles,
+                };
+
+                string configPath = Path.GetFullPath(ConfigFile);
+                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+                File.WriteAllText(configPath, ConfigLoader.Serialize(newConfig));
+                Console.WriteLine($"Config saved: {configPath} ({profiles.Count} profile(s), active={data.ActiveProfile})");
+
+                // Reload profile list for the profile dropdown
+                _allProfiles.Clear();
+                foreach (var (name, profile) in profiles)
+                    _allProfiles[name] = profile.Nip;
+
+                // Update active profile and flush all cached config/token state
+                // so the next API call reads the freshly saved yaml from disk
+                ActiveProfile = data.ActiveProfile;
+                ResetCachedConfig();
+                _scope = GetScope(); // Recreate DI scope with the newly saved profile config
+
+                // Clear setup mode — config now exists
+                _setupRequired = false;
+
+                return Task.FromResult("");
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult(ex.Message);
+            }
+        };
+
         server.Start(cancellationToken);
         Console.WriteLine($"GUI running at {server.LocalUrl}");
         if (Lan)
@@ -226,6 +369,8 @@ public class GuiCommand : IWithConfigCommand
 
     private async Task<object> SearchAsync(SearchParams searchParams, CancellationToken ct)
     {
+        ProfileConfig searchProfile = Config();
+        Log.LogInformation($"GUI: search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]");
         if (!Enum.TryParse(searchParams.SubjectType, true, out InvoiceSubjectType subjectType))
         {
             subjectType = searchParams.SubjectType.ToLowerInvariant() switch
@@ -267,16 +412,31 @@ public class GuiCommand : IWithConfigCommand
         PagedInvoiceResponse pagedResponse;
         int currentOffset = 0;
         const int pageSize = 100;
+        const int maxRetries = 5;
+        const int interPageDelayMs = 200;
 
         do
         {
             Log.LogInformation($"Fetching page with offset {currentOffset} and size {pageSize}");
-            pagedResponse = await _ksefClient!.QueryInvoiceMetadataAsync(
-                filters,
-                accessToken,
-                pageOffset: currentOffset,
-                pageSize: pageSize,
-                cancellationToken: ct).ConfigureAwait(false);
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    pagedResponse = await _ksefClient!.QueryInvoiceMetadataAsync(
+                        filters,
+                        accessToken,
+                        pageOffset: currentOffset,
+                        pageSize: pageSize,
+                        cancellationToken: ct).ConfigureAwait(false);
+                    break;
+                }
+                catch (KsefRateLimitException ex) when (attempt < maxRetries)
+                {
+                    TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
+                    Log.LogWarning($"Rate limited (HTTP 429). Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{maxRetries})");
+                    await Task.Delay(delay, ct).ConfigureAwait(false);
+                }
+            }
 
             if (pagedResponse.Invoices != null)
             {
@@ -284,6 +444,9 @@ public class GuiCommand : IWithConfigCommand
             }
 
             currentOffset += pageSize;
+
+            if (pagedResponse.HasMore == true)
+                await Task.Delay(interPageDelayMs, ct).ConfigureAwait(false);
         } while (pagedResponse.HasMore == true);
 
         Log.LogInformation($"Found {allInvoices.Count} invoices.");
@@ -345,8 +508,26 @@ public class GuiCommand : IWithConfigCommand
                 if (_server != null)
                     await _server.SendEventAsync("invoice_start", new { current = i, name = fileName, progress = n, total = toDownload.Count }).ConfigureAwait(false);
 
-                // Fetch XML from API (always needed — source data for all formats)
-                string invoiceXml = await _ksefClient!.GetInvoiceAsync(inv.KsefNumber, await GetAccessToken(_scope!, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+                // Fetch XML from API (always needed — source data for all formats), retry on 429
+                const int dlMaxRetries = 5;
+                string invoiceXml = null!;
+                for (int attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        invoiceXml = await _ksefClient!.GetInvoiceAsync(
+                            inv.KsefNumber,
+                            await GetAccessToken(_scope!, ct).ConfigureAwait(false),
+                            ct).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (KsefRateLimitException ex) when (attempt < dlMaxRetries)
+                    {
+                        TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
+                        Log.LogWarning($"Rate limited downloading {inv.KsefNumber}. Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{dlMaxRetries})");
+                        await Task.Delay(delay, ct).ConfigureAwait(false);
+                    }
+                }
 
                 // Write desired formats to workdir, then move to output
                 if (dlParams.ExportJson)
@@ -426,7 +607,8 @@ public class GuiCommand : IWithConfigCommand
 
     private async Task<string> AuthAsync(CancellationToken ct)
     {
-        Log.LogInformation("GUI: forcing re-authentication");
+        ProfileConfig activeProfile = Config();
+        Log.LogInformation($"GUI: forcing re-authentication [profile={ActiveProfile}, nip={activeProfile.Nip}, env={activeProfile.Environment}]");
         var response = await Auth(_scope!, ct).ConfigureAwait(false);
         TokenStore tokenStore = GetTokenStore();
         TokenStore.Key key = GetTokenStoreKey();

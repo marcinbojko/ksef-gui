@@ -6,18 +6,7 @@ namespace KSeFCli;
 
 public static class ConfigLoader
 {
-    private static void EnsureConfigExists(string configPath)
-    {
-        // Create directory if it doesn't exist
-        string? directory = Path.GetDirectoryName(configPath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-            Console.WriteLine($"Created config directory: {directory}");
-        }
-
-        // Create template config file
-        string templateConfig = @"# KSeFCli Configuration File
+    private static readonly string TemplateConfig = @"# KSeFCli Configuration File
 #
 # This is a template configuration file. You need to configure at least one profile.
 # For more information, see the documentation.
@@ -40,10 +29,29 @@ profiles:
     #   # Or use environment variable for password:
     #   # password_env: KSEF_CERT_PASSWORD
 ";
-        File.WriteAllText(configPath, templateConfig);
-        Console.WriteLine($"Created template config file: {configPath}");
-        Console.WriteLine("Please edit the config file and configure your profile with NIP and authentication (token or certificate).");
 
+    /// <summary>
+    /// Creates the config directory and writes a template config file.
+    /// Does nothing if the file already exists.
+    /// </summary>
+    public static void WriteTemplate(string configPath)
+    {
+        string? directory = Path.GetDirectoryName(configPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+            Console.WriteLine($"Created config directory: {directory}");
+        }
+        if (!File.Exists(configPath))
+        {
+            File.WriteAllText(configPath, TemplateConfig);
+            Console.WriteLine($"Created template config file: {configPath}");
+        }
+    }
+
+    private static void EnsureConfigExists(string configPath)
+    {
+        WriteTemplate(configPath);
         throw new InvalidOperationException(
             $"Template configuration created at {configPath}. Please edit it with your credentials and try again.");
     }
@@ -73,7 +81,9 @@ profiles:
             throw new Exception($"Exception during deserialization of '{absoluteConfigPath}'", ex);
         }
 
-        string activeProfile = activeProfileNameOverride ?? config.ActiveProfile;
+        string activeProfile = string.IsNullOrWhiteSpace(activeProfileNameOverride)
+            ? config.ActiveProfile
+            : activeProfileNameOverride;
 
         if (string.IsNullOrWhiteSpace(activeProfile))
         {
@@ -192,6 +202,15 @@ profiles:
                 throw new InvalidOperationException("Certificate password is not set.");
             }
         }
+    }
+
+    public static string Serialize(KsefCliConfig config)
+    {
+        ISerializer serializer = new SerializerBuilder()
+            .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitEmptyCollections)
+            .Build();
+        return serializer.Serialize(config);
     }
 
     private static string ExpandTilde(string path)
