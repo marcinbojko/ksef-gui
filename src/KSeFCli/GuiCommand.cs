@@ -96,6 +96,25 @@ public class GuiCommand : IWithConfigCommand
         catch { }
     }
 
+    public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
+    {
+        LogConfigSource();
+        IServiceScope scope;
+        try
+        {
+            scope = GetScope();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Config load warning (starting in setup mode): {ex.Message}");
+            scope = new ServiceCollection().BuildServiceProvider().CreateScope();
+        }
+        using (scope)
+        {
+            return await ExecuteInScopeAsync(scope, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         // Check if config file exists before doing anything else
@@ -145,8 +164,38 @@ public class GuiCommand : IWithConfigCommand
         // yaml's active_profile, not the user's preferred profile). Reset the cache and build a fresh
         // scope now that ActiveProfile is correctly set.
         ResetCachedConfig();
-        _scope = _setupRequired ? scope : GetScope();
-        _ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+        if (_setupRequired)
+        {
+            _scope = scope;
+            _ksefClient = null;
+        }
+        else
+        {
+            try
+            {
+                _scope = GetScope();
+                _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+            }
+            catch (Exception ex)
+            {
+                // Saved/override profile no longer exists — clear it and let YAML decide
+                Console.WriteLine($"Profile '{ActiveProfile}' could not be loaded: {ex.Message}. Falling back to YAML active profile.");
+                ActiveProfile = "";
+                ResetCachedConfig();
+                try
+                {
+                    _scope = GetScope();
+                    _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+                }
+                catch (Exception ex2)
+                {
+                    Console.WriteLine($"Config load warning (entering setup mode): {ex2.Message}");
+                    _setupRequired = true;
+                    _scope = scope;
+                    _ksefClient = null;
+                }
+            }
+        }
 
         int lanPort = Lan ? (savedPrefs.LanPort ?? DefaultLanPort) : 0;
         using WebProgressServer server = new WebProgressServer(lan: Lan, port: lanPort);
@@ -205,6 +254,7 @@ public class GuiCommand : IWithConfigCommand
                 ResetCachedConfig();
                 _cachedInvoices = null;
                 _scope = GetScope(); // Recreate DI scope with new profile's config
+                _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
                 string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
                 Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
             }
@@ -347,6 +397,7 @@ public class GuiCommand : IWithConfigCommand
                 ActiveProfile = data.ActiveProfile;
                 ResetCachedConfig();
                 _scope = GetScope(); // Recreate DI scope with the newly saved profile config
+                _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
                 // Clear setup mode — config now exists
                 _setupRequired = false;

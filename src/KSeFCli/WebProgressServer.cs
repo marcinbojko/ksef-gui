@@ -989,14 +989,13 @@ function onConfigModalOverlayClick(e) {
 function renderConfigEditor() {
   if (!cfgData) return;
   let html = '';
-  // Active profile selector
-  html += '<div class="cfg-field" style="margin-bottom:1rem"><label>Aktywny profil</label>';
-  html += '<select id="cfgActiveProfile">';
+  // Hidden active profile selector (value managed by per-card radio buttons)
+  html += '<select id="cfgActiveProfile" style="display:none">';
   for (const p of cfgData.profiles) {
     const sel = p.name === cfgData.activeProfile ? ' selected' : '';
     html += '<option value="' + esc(p.name) + '"' + sel + '>' + esc(p.name) + '</option>';
   }
-  html += '</select></div>';
+  html += '</select>';
   // Profile cards
   for (let i = 0; i < cfgData.profiles.length; i++) {
     html += renderProfileCard(cfgData.profiles[i], i);
@@ -1009,9 +1008,13 @@ function renderConfigEditor() {
 function renderProfileCard(p, i) {
   const am = p.authMethod || 'token';
   const tokenVal = p.token || '';
+  const isActive = p.name === cfgData.activeProfile;
   return '<div class="cfg-profile-card" id="cfgCard' + i + '">' +
     '<button class="cfg-del" onclick="deleteProfile(' + i + ')" title="Usun profil">&times;</button>' +
-    '<div class="cfg-card-title">Profil #' + (i+1) + '</div>' +
+    '<div class="cfg-card-title">Profil #' + (i+1) +
+    '<label style="font-weight:normal;font-size:.82rem;cursor:pointer;display:flex;align-items:center;gap:.3rem;margin-left:auto">' +
+    '<input type="radio" name="activeProfileRadio" id="cfgActiveRadio' + i + '" value="' + esc(p.name) + '"' + (isActive ? ' checked' : '') + ' onchange="onActiveRadioChange(' + i + ')"> Aktywny</label>' +
+    '</div>' +
     '<div class="cfg-field"><label>Nazwa profilu</label>' +
     '<input type="text" id="cfgName' + i + '" value="' + esc(p.name) + '" onchange="syncActiveProfileSelect()"></div>' +
     '<div class="cfg-field"><label>NIP</label>' +
@@ -1073,7 +1076,17 @@ function syncActiveProfileSelect() {
     opt.textContent = name;
     if (name === prev) opt.selected = true;
     sel.appendChild(opt);
+    // Sync radio button value when name changes
+    const radio = document.getElementById('cfgActiveRadio' + i);
+    if (radio) radio.value = name;
   }
+}
+
+function onActiveRadioChange(i) {
+  const name = document.getElementById('cfgName' + i)?.value || (cfgData.profiles[i]?.name || '');
+  const sel = $('cfgActiveProfile');
+  if (sel) sel.value = name;
+  cfgData.activeProfile = name;
 }
 
 function addProfile() {
