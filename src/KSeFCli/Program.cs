@@ -35,7 +35,7 @@ internal class Program
 
         ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand, SelfUpdateCommand, PrintConfigCommand, GuiCommand>(args);
 
-        CancellationTokenSource cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
         {
             Console.WriteLine("Canceling...");
@@ -61,7 +61,7 @@ internal class Program
             {
                 HelpText helpText = HelpText.AutoBuild(result, h =>
                 {
-                    h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code lisenced under GPLv3.";
+                    h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code licensed under GPLv3.";
                     // new CopyrightInfo("Kamil Cukrowski", 2026);
                     h.AdditionalNewLineAfterOption = false;
                     return h;
