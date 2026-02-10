@@ -1,3 +1,5 @@
+using System.Reflection;
+
 using CommandLine;
 using CommandLine.Text;
 
@@ -7,6 +9,16 @@ internal class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        // Print build info
+        Assembly asm = System.Reflection.Assembly.GetExecutingAssembly();
+        string version = System.Reflection.CustomAttributeExtensions
+            .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(asm)
+            .FirstOrDefault(a => a.Key == "Version")?.Value ?? "unknown";
+        string buildDate = System.Reflection.CustomAttributeExtensions
+            .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(asm)
+            .FirstOrDefault(a => a.Key == "BuildDate")?.Value ?? "unknown";
+        Console.WriteLine($"ksefcli {version} ({buildDate})");
+
         // Default to GUI mode if no arguments provided (for double-click on Windows)
         if (args.Length == 0)
         {

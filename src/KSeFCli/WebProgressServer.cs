@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
@@ -96,7 +97,9 @@ internal sealed class WebProgressServer : IDisposable
             lock (_clientsLock)
             {
                 foreach (StreamWriter d in dead)
+                {
                     _sseClients.Remove(d);
+                }
             }
         }
     }
@@ -109,11 +112,17 @@ internal sealed class WebProgressServer : IDisposable
         try
         {
             if (OperatingSystem.IsLinux())
+            {
                 System.Diagnostics.Process.Start("xdg-open", url);
+            }
             else if (OperatingSystem.IsMacOS())
+            {
                 System.Diagnostics.Process.Start("open", url);
+            }
             else if (OperatingSystem.IsWindows())
+            {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c start {url}") { CreateNoWindow = true });
+            }
         }
         catch
         {
@@ -184,7 +193,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnLoadPrefs == null) return JsonSerializer.Serialize(new { });
+                if (OnLoadPrefs == null)
+                {
+                    return JsonSerializer.Serialize(new { });
+                }
+
                 object prefs = await OnLoadPrefs().ConfigureAwait(false);
                 return JsonSerializer.Serialize(prefs);
             }).ConfigureAwait(false);
@@ -195,7 +208,10 @@ internal sealed class WebProgressServer : IDisposable
             {
                 string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
                 if (OnSavePrefs != null)
+                {
                     await OnSavePrefs(body).ConfigureAwait(false);
+                }
+
                 return JsonSerializer.Serialize(new { ok = true });
             }).ConfigureAwait(false);
         }
@@ -203,7 +219,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnAuth == null) throw new InvalidOperationException("Auth not configured");
+                if (OnAuth == null)
+                {
+                    throw new InvalidOperationException("Auth not configured");
+                }
+
                 string message = await OnAuth(ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { ok = true, message });
             }).ConfigureAwait(false);
@@ -212,7 +232,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnSearch == null) throw new InvalidOperationException("Search not configured");
+                if (OnSearch == null)
+                {
+                    throw new InvalidOperationException("Search not configured");
+                }
+
                 string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
                 SearchParams searchParams = JsonSerializer.Deserialize<SearchParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? throw new InvalidOperationException("Invalid search parameters");
@@ -227,7 +251,9 @@ internal sealed class WebProgressServer : IDisposable
                 string dirPath = ctx.Request.QueryString["path"] ?? Directory.GetCurrentDirectory();
                 dirPath = Path.GetFullPath(dirPath);
                 if (!Directory.Exists(dirPath))
+                {
                     throw new DirectoryNotFoundException($"Directory not found: {dirPath}");
+                }
 
                 string? parent = Path.GetDirectoryName(dirPath);
                 List<string> dirs = new();
@@ -261,7 +287,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnDownload == null) throw new InvalidOperationException("Download not configured");
+                if (OnDownload == null)
+                {
+                    throw new InvalidOperationException("Download not configured");
+                }
+
                 string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
                 DownloadParams dlParams = JsonSerializer.Deserialize<DownloadParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new DownloadParams(".", null, false);
@@ -273,7 +303,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnInvoiceDetails == null) throw new InvalidOperationException("Details not configured");
+                if (OnInvoiceDetails == null)
+                {
+                    throw new InvalidOperationException("Details not configured");
+                }
+
                 string idxStr = ctx.Request.QueryString["idx"] ?? throw new InvalidOperationException("Missing idx");
                 int idx = int.Parse(idxStr);
                 object details = await OnInvoiceDetails(idx, ct).ConfigureAwait(false);
@@ -284,7 +318,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnCheckExisting == null) return "[]";
+                if (OnCheckExisting == null)
+                {
+                    return "[]";
+                }
+
                 string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
                 CheckExistingParams checkParams = JsonSerializer.Deserialize<CheckExistingParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new CheckExistingParams(".", false, false);
@@ -296,7 +334,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnTokenStatus == null) return JsonSerializer.Serialize(new { });
+                if (OnTokenStatus == null)
+                {
+                    return JsonSerializer.Serialize(new { });
+                }
+
                 object status = await OnTokenStatus().ConfigureAwait(false);
                 return JsonSerializer.Serialize(status);
             }).ConfigureAwait(false);
@@ -305,7 +347,11 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                if (OnLoadConfig == null) return JsonSerializer.Serialize(new { });
+                if (OnLoadConfig == null)
+                {
+                    return JsonSerializer.Serialize(new { });
+                }
+
                 object data = await OnLoadConfig().ConfigureAwait(false);
                 return JsonSerializer.Serialize(data, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             }).ConfigureAwait(false);
@@ -371,7 +417,7 @@ internal sealed class WebProgressServer : IDisposable
 
     private static int GetRandomPort()
     {
-        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        using TcpListener listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();

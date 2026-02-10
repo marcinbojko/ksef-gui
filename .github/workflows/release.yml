@@ -1,0 +1,105 @@
+---
+name: Release
+
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  attestations: read
+  checks: write
+  contents: write
+  deployments: read
+  discussions: read
+  id-token: write
+  issues: read
+  pages: read
+  packages: write
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: write
+
+jobs:
+  build-and-release:
+    name: Build binaries and create release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Get tag
+        id: tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (all platforms)
+        run: |
+          docker build \
+            --build-arg VERSION=${{ steps.tag.outputs.tag }} \
+            -t ksefcli:${{ steps.tag.outputs.tag }} .
+
+      - name: Extract binaries from Docker image
+        run: |
+          mkdir -p dist
+          docker create --name ksefcli-extract ksefcli:${{ steps.tag.outputs.tag }}
+          docker cp ksefcli-extract:/output/linux-x64/ksefcli   dist/ksefcli-linux-x64
+          docker cp ksefcli-extract:/output/win-x64/ksefcli.exe dist/ksefcli-win-x64.exe
+          docker cp ksefcli-extract:/output/osx-x64/ksefcli     dist/ksefcli-osx-x64
+          docker cp ksefcli-extract:/output/osx-arm64/ksefcli   dist/ksefcli-osx-arm64
+          docker rm ksefcli-extract
+          ls -lh dist/
+
+      - name: Login to DockerHub
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      - name: Push Docker image to DockerHub
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        run: |
+          docker tag ksefcli:${{ steps.tag.outputs.tag }} ${{ secrets.DOCKERHUB_USERNAME }}/ksefcli:${{ steps.tag.outputs.tag }}
+          docker tag ksefcli:${{ steps.tag.outputs.tag }} ${{ secrets.DOCKERHUB_USERNAME }}/ksefcli:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ksefcli:${{ steps.tag.outputs.tag }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ksefcli:latest
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/ksefcli-linux-x64
+            dist/ksefcli-win-x64.exe
+            dist/ksefcli-osx-x64
+            dist/ksefcli-osx-arm64
+          body: |
+            ## Binaries
+
+            | Platform | File |
+            |----------|------|
+            | Linux x64 | `ksefcli-linux-x64` |
+            | Windows x64 | `ksefcli-win-x64.exe` |
+            | macOS x64 (Intel) | `ksefcli-osx-x64` |
+            | macOS arm64 (Apple Silicon) | `ksefcli-osx-arm64` |
+
+            ## Docker
+
+            ```bash
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/ksefcli:${{ steps.tag.outputs.tag }}
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

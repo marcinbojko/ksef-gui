@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommandLine;
 
 using KSeF.Client.Core.Models.Authorization;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KSeFCli;

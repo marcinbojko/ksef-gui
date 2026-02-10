@@ -8,6 +8,30 @@
     <AssemblyName>ksefcli</AssemblyName>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
+  <Target Name="SetBuildMetadata" BeforeTargets="BeforeBuild">
+    <!-- Use tag if on a tag, short hash otherwise. Skip when SourceRevisionId already set (Docker/CI). -->
+    <Exec Command="git describe --tags --always"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low"
+          Condition="'$(SourceRevisionId)' == ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="SourceRevisionId"/>
+    </Exec>
+    <PropertyGroup>
+      <SourceRevisionId>$(SourceRevisionId.Trim())</SourceRevisionId>
+      <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">unknown</SourceRevisionId>
+      <BuildTimestamp>$([System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))</BuildTimestamp>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>Version</_Parameter1>
+        <_Parameter2>$(SourceRevisionId)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>BuildDate</_Parameter1>
+        <_Parameter2>$(BuildTimestamp)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.2" />

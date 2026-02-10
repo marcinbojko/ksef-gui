@@ -1,4 +1,5 @@
 using CommandLine;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KSeFCli;
