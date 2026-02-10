@@ -8,7 +8,6 @@ using KSeF.Client.Core.Exceptions;
 using KSeF.Client.Core.Interfaces.Clients;
 using KSeF.Client.Core.Models.Authorization;
 using KSeF.Client.Core.Models.Invoices;
-using KSeF.Client.Core.Models.Invoices.Common;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -112,13 +111,15 @@ public class GuiCommand : IWithConfigCommand
             // Load all profiles from yaml (before Config() is first called)
             try
             {
-                var deserializer = new DeserializerBuilder()
+                IDeserializer deserializer = new DeserializerBuilder()
                     .WithNamingConvention(UnderscoredNamingConvention.Instance)
                     .IgnoreUnmatchedProperties()
                     .Build();
-                var rawConfig = deserializer.Deserialize<KsefCliConfig>(File.ReadAllText(ConfigFile));
-                foreach (var (name, profile) in rawConfig.Profiles)
+                KsefCliConfig rawConfig = deserializer.Deserialize<KsefCliConfig>(File.ReadAllText(ConfigFile));
+                foreach ((string? name, ProfileConfig? profile) in rawConfig.Profiles)
+                {
                     _allProfiles[name] = profile.Nip;
+                }
             }
             catch { }
 
@@ -212,14 +213,18 @@ public class GuiCommand : IWithConfigCommand
         server.OnCheckExisting = (checkParams) =>
         {
             if (_cachedInvoices == null)
+            {
                 return Task.FromResult<object>(Array.Empty<object>());
+            }
 
             string outputDir = string.IsNullOrWhiteSpace(checkParams.OutputDir) ? OutputDir : checkParams.OutputDir;
             if (checkParams.SeparateByNip)
             {
                 string nip = Config().Nip;
                 if (!string.IsNullOrEmpty(nip))
+                {
                     outputDir = Path.Combine(outputDir, nip);
+                }
             }
 
             var result = _cachedInvoices.Select(inv =>
@@ -257,7 +262,7 @@ public class GuiCommand : IWithConfigCommand
 
         server.OnLoadConfig = () =>
         {
-            var deserializer = new DeserializerBuilder()
+            IDeserializer deserializer = new DeserializerBuilder()
                 .WithNamingConvention(UnderscoredNamingConvention.Instance)
                 .IgnoreUnmatchedProperties()
                 .Build();
@@ -332,8 +337,10 @@ public class GuiCommand : IWithConfigCommand
 
                 // Reload profile list for the profile dropdown
                 _allProfiles.Clear();
-                foreach (var (name, profile) in profiles)
+                foreach ((string? name, ProfileConfig? profile) in profiles)
+                {
                     _allProfiles[name] = profile.Nip;
+                }
 
                 // Update active profile and flush all cached config/token state
                 // so the next API call reads the freshly saved yaml from disk
@@ -355,7 +362,10 @@ public class GuiCommand : IWithConfigCommand
         server.Start(cancellationToken);
         Console.WriteLine($"GUI running at {server.LocalUrl}");
         if (Lan)
+        {
             Console.WriteLine($"LAN access enabled — accessible on all network interfaces, port {server.Port}");
+        }
+
         server.OpenBrowser();
 
         try
@@ -446,7 +456,9 @@ public class GuiCommand : IWithConfigCommand
             currentOffset += pageSize;
 
             if (pagedResponse.HasMore == true)
+            {
                 await Task.Delay(interPageDelayMs, ct).ConfigureAwait(false);
+            }
         } while (pagedResponse.HasMore == true);
 
         Log.LogInformation($"Found {allInvoices.Count} invoices.");
@@ -470,14 +482,18 @@ public class GuiCommand : IWithConfigCommand
     private async Task DownloadAsync(DownloadParams dlParams, CancellationToken ct)
     {
         if (_cachedInvoices == null || _cachedInvoices.Count == 0)
+        {
             throw new InvalidOperationException("No invoices found. Search first.");
+        }
 
         string outputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
         if (dlParams.SeparateByNip)
         {
             string nip = Config().Nip;
             if (!string.IsNullOrEmpty(nip))
+            {
                 outputDir = Path.Combine(outputDir, nip);
+            }
         }
         Directory.CreateDirectory(outputDir);
 
@@ -493,7 +509,9 @@ public class GuiCommand : IWithConfigCommand
         for (int i = 0; i < _cachedInvoices.Count; i++)
         {
             if (selected == null || selected.Contains(i))
+            {
                 toDownload.Add((i, _cachedInvoices[i]));
+            }
         }
 
         bool wantPdf = dlParams.ExportPdf || Pdf;
@@ -506,7 +524,9 @@ public class GuiCommand : IWithConfigCommand
                 string fileName = BuildFileName(inv, dlParams.CustomFilenames);
 
                 if (_server != null)
+                {
                     await _server.SendEventAsync("invoice_start", new { current = i, name = fileName, progress = n, total = toDownload.Count }).ConfigureAwait(false);
+                }
 
                 // Fetch XML from API (always needed — source data for all formats), retry on 429
                 const int dlMaxRetries = 5;
@@ -548,7 +568,9 @@ public class GuiCommand : IWithConfigCommand
                 if (wantPdf)
                 {
                     if (_server != null)
+                    {
                         await _server.SendEventAsync("invoice_done", new { current = i, file = fileName, pdf = true, progress = n, total = toDownload.Count }).ConfigureAwait(false);
+                    }
 
                     byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct).ConfigureAwait(false);
                     string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
@@ -558,12 +580,16 @@ public class GuiCommand : IWithConfigCommand
                     Console.WriteLine($"Saved PDF for {inv.KsefNumber} to {finalPdf}");
 
                     if (_server != null)
+                    {
                         await _server.SendEventAsync("pdf_done", new { current = i, file = finalPdf, progress = n, total = toDownload.Count }).ConfigureAwait(false);
+                    }
                 }
                 else
                 {
                     if (_server != null)
+                    {
                         await _server.SendEventAsync("invoice_complete", new { current = i, file = fileName, progress = n, total = toDownload.Count }).ConfigureAwait(false);
+                    }
                 }
             }
         }
@@ -581,13 +607,17 @@ public class GuiCommand : IWithConfigCommand
             SeparateByNip: dlParams.SeparateByNip));
 
         if (_server != null)
+        {
             await _server.SendEventAsync("all_done", new { count = toDownload.Count }).ConfigureAwait(false);
+        }
     }
 
     private string BuildFileName(InvoiceSummary inv, bool customScheme)
     {
         if (!customScheme)
+        {
             return UseInvoiceNumber ? inv.InvoiceNumber : inv.KsefNumber;
+        }
 
         string date = inv.IssueDate.ToString("yyyy-MM-dd");
         string seller = SanitizeFileName(inv.Seller?.Name ?? "nieznany");
@@ -601,7 +631,10 @@ public class GuiCommand : IWithConfigCommand
         char[] invalid = Path.GetInvalidFileNameChars();
         string sanitized = string.Join("", name.Select(c => Array.IndexOf(invalid, c) >= 0 || c == ' ' ? '_' : c));
         if (sanitized.Length > 60)
+        {
             sanitized = sanitized[..60];
+        }
+
         return sanitized.Trim();
     }
 
@@ -609,7 +642,7 @@ public class GuiCommand : IWithConfigCommand
     {
         ProfileConfig activeProfile = Config();
         Log.LogInformation($"GUI: forcing re-authentication [profile={ActiveProfile}, nip={activeProfile.Nip}, env={activeProfile.Environment}]");
-        var response = await Auth(_scope!, ct).ConfigureAwait(false);
+        AuthenticationOperationStatusResponse response = await Auth(_scope!, ct).ConfigureAwait(false);
         TokenStore tokenStore = GetTokenStore();
         TokenStore.Key key = GetTokenStoreKey();
         tokenStore.SetToken(key, new TokenStore.Data(response));
@@ -621,7 +654,9 @@ public class GuiCommand : IWithConfigCommand
     private async Task<object> InvoiceDetailsAsync(int idx, CancellationToken ct)
     {
         if (_cachedInvoices == null || idx < 0 || idx >= _cachedInvoices.Count)
+        {
             throw new InvalidOperationException($"Invalid invoice index: {idx}");
+        }
 
         InvoiceSummary inv = _cachedInvoices[idx];
         string accessToken = await GetAccessToken(_scope!, ct).ConfigureAwait(false);
@@ -686,10 +721,18 @@ public class GuiCommand : IWithConfigCommand
 
     private static string? FormatAddress(XElement? adres, XNamespace ns)
     {
-        if (adres == null) return null;
+        if (adres == null)
+        {
+            return null;
+        }
+
         string? l1 = adres.Element(ns + "AdresL1")?.Value;
         string? l2 = adres.Element(ns + "AdresL2")?.Value;
-        if (l1 == null && l2 == null) return null;
+        if (l1 == null && l2 == null)
+        {
+            return null;
+        }
+
         return $"{l1}, {l2}";
     }
 }

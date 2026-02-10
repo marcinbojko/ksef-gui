@@ -26,10 +26,16 @@ public abstract class IWithConfigCommand : IGlobalCommand
     private static string ResolveDefaultConfigPath()
     {
         string cwdPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "ksefcli.yaml");
-        if (System.IO.File.Exists(cwdPath)) return cwdPath;
+        if (System.IO.File.Exists(cwdPath))
+        {
+            return cwdPath;
+        }
 
         string exePath = System.IO.Path.Combine(AppContext.BaseDirectory, "ksefcli.yaml");
-        if (System.IO.File.Exists(exePath)) return exePath;
+        if (System.IO.File.Exists(exePath))
+        {
+            return exePath;
+        }
 
         return System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
             ".config", "ksefcli", "ksefcli.yaml");
@@ -111,7 +117,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         LogConfigSource();
-        using var scope = GetScope();
+        using IServiceScope scope = GetScope();
         return await ExecuteInScopeAsync(scope, cancellationToken).ConfigureAwait(false);
     }
 
@@ -133,11 +139,17 @@ public abstract class IWithConfigCommand : IGlobalCommand
                 System.IO.Path.Combine(AppContext.BaseDirectory, "ksefcli.yaml"));
 
             if (cfgPath == cwdCandidate)
+            {
                 source = "found in current directory";
+            }
             else if (cfgPath == exeCandidate)
+            {
                 source = "found next to executable";
+            }
             else
+            {
                 source = "default (~/.config/ksefcli/)";
+            }
         }
 
         bool exists = System.IO.File.Exists(cfgPath);

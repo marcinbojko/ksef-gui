@@ -57,16 +57,23 @@ public class XML2PDFCommand : IGlobalCommand
         string ext = OperatingSystem.IsWindows() ? ".exe" : "";
         string bundledPath = Path.Combine(AppContext.BaseDirectory, $"ksef-pdf-generator{ext}");
         if (File.Exists(bundledPath))
+        {
             return [bundledPath, "invoice", inputXml, outputPdf];
+        }
 
         // 2. Check for ksef-pdf-generator in PATH
         if (Subprocess.CheckCommandExists("ksef-pdf-generator"))
+        {
             return ["ksef-pdf-generator", "invoice", inputXml, outputPdf];
+        }
 
         // 3. Fallback to npx (requires git to be installed)
         if (!Subprocess.CheckCommandExists("npx"))
+        {
             throw new InvalidOperationException(
                 "ksef-pdf-generator not found. Either place it alongside ksefcli, install Node.js (npx), or disable PDF export.");
+        }
+
         return ["npx", "--yes", "github:kamilcuk/ksef-pdf-generator", "invoice", inputXml, outputPdf];
     }
 
@@ -134,9 +141,21 @@ public class XML2PDFCommand : IGlobalCommand
     {
         string ext = OperatingSystem.IsWindows() ? ".exe" : "";
         string bundledPath = Path.Combine(AppContext.BaseDirectory, $"ksef-pdf-generator{ext}");
-        if (File.Exists(bundledPath)) return;
-        if (Subprocess.CheckCommandExists("ksef-pdf-generator")) return;
-        if (Subprocess.CheckCommandExists("npx")) return;
+        if (File.Exists(bundledPath))
+        {
+            return;
+        }
+
+        if (Subprocess.CheckCommandExists("ksef-pdf-generator"))
+        {
+            return;
+        }
+
+        if (Subprocess.CheckCommandExists("npx"))
+        {
+            return;
+        }
+
         throw new InvalidOperationException(
             "PDF generation requires ksef-pdf-generator binary or Node.js (npx). Neither found.");
     }
