@@ -33,8 +33,8 @@ LABEL release="ksefcli"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.title="ksefcli"
 LABEL org.opencontainers.image.description="KSeF invoice downloader CLI and GUI"
-LABEL org.opencontainers.image.url="https://github.com/kamilcuk/ksefcli"
-LABEL org.opencontainers.image.source="https://github.com/kamilcuk/ksefcli"
+LABEL org.opencontainers.image.url="https://github.com/marcinbojko/ksef-gui"
+LABEL org.opencontainers.image.source="https://github.com/marcinbojko/ksef-gui"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
