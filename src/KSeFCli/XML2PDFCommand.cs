@@ -123,7 +123,10 @@ public class XML2PDFCommand : IGlobalCommand
             // bundle doesn't crash with "navigator is not defined" on Node.js 20+
             string polyfillPath = EnsureNodePolyfill();
             string existing = System.Environment.GetEnvironmentVariable("NODE_OPTIONS") ?? "";
-            string requireFlag = $"--require {polyfillPath}";
+            // Use forward slashes and quote the path so NODE_OPTIONS parses correctly on Windows
+            // (backslashes confuse Node's option parser; spaces in the path break unquoted args)
+            string polyfillPathForNode = polyfillPath.Replace('\\', '/');
+            string requireFlag = $"--require \"{polyfillPathForNode}\"";
             env = new Dictionary<string, string?>
             {
                 ["NODE_OPTIONS"] = string.IsNullOrEmpty(existing)
