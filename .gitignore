@@ -79,3 +79,8 @@ ksefcli.yaml
 *.env
 *.ksefcli.yaml
 openapi.json
+CLAUDE.md
+.claude/
+
+# Downloaded invoices — may contain sensitive data
+output/
