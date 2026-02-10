@@ -173,7 +173,9 @@ public class GuiCommand : IWithConfigCommand
         {
             try
             {
-                _scope = GetScope();
+                IServiceScope newScope = GetScope();
+                _scope?.Dispose();
+                _scope = newScope;
                 _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
             }
             catch (Exception ex)
@@ -184,7 +186,9 @@ public class GuiCommand : IWithConfigCommand
                 ResetCachedConfig();
                 try
                 {
-                    _scope = GetScope();
+                    IServiceScope newScope = GetScope();
+                    _scope?.Dispose();
+                    _scope = newScope;
                     _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
                 }
                 catch (Exception ex2)
@@ -253,7 +257,9 @@ public class GuiCommand : IWithConfigCommand
                 ActiveProfile = newProfile;
                 ResetCachedConfig();
                 _cachedInvoices = null;
-                _scope = GetScope(); // Recreate DI scope with new profile's config
+                IServiceScope switchedScope = GetScope(); // may throw — old scope stays intact
+                _scope?.Dispose();
+                _scope = switchedScope;
                 _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
                 string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
                 Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
@@ -396,7 +402,9 @@ public class GuiCommand : IWithConfigCommand
                 // so the next API call reads the freshly saved yaml from disk
                 ActiveProfile = data.ActiveProfile;
                 ResetCachedConfig();
-                _scope = GetScope(); // Recreate DI scope with the newly saved profile config
+                IServiceScope savedScope = GetScope(); // may throw — old scope stays intact
+                _scope?.Dispose();
+                _scope = savedScope;
                 _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
                 // Clear setup mode — config now exists
