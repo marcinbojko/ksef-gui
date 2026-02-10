@@ -79,3 +79,4 @@ ksefcli.yaml
 *.env
 *.ksefcli.yaml
 openapi.json
+CLAUDE.md
