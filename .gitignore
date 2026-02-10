@@ -80,3 +80,6 @@ ksefcli.yaml
 *.ksefcli.yaml
 openapi.json
 CLAUDE.md
+
+# Downloaded invoices — may contain sensitive data
+output/
