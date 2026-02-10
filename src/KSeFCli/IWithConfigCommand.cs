@@ -121,7 +121,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return await ExecuteInScopeAsync(scope, cancellationToken).ConfigureAwait(false);
     }
 
-    private void LogConfigSource()
+    protected void LogConfigSource()
     {
         string cfgPath = System.IO.Path.GetFullPath(ConfigFile);
         string? envVar = System.Environment.GetEnvironmentVariable("KSEFCLI_CONFIG");
