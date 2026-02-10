@@ -21,7 +21,19 @@ namespace KSeFCli;
 public abstract class IWithConfigCommand : IGlobalCommand
 {
     [Option('c', "config", HelpText = "Path to config file")]
-    public string ConfigFile { get; set; } = System.Environment.GetEnvironmentVariable("KSEFCLI_CONFIG") ?? System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".config", "ksefcli", "ksefcli.yaml");
+    public string ConfigFile { get; set; } = System.Environment.GetEnvironmentVariable("KSEFCLI_CONFIG") ?? ResolveDefaultConfigPath();
+
+    private static string ResolveDefaultConfigPath()
+    {
+        string cwdPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "ksefcli.yaml");
+        if (System.IO.File.Exists(cwdPath)) return cwdPath;
+
+        string exePath = System.IO.Path.Combine(AppContext.BaseDirectory, "ksefcli.yaml");
+        if (System.IO.File.Exists(exePath)) return exePath;
+
+        return System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            ".config", "ksefcli", "ksefcli.yaml");
+    }
 
     [Option('a', "active", HelpText = "Active profile name")]
     public string ActiveProfile { get; set; } = System.Environment.GetEnvironmentVariable("KSEFCLI_ACTIVE") ?? "";
@@ -32,16 +44,28 @@ public abstract class IWithConfigCommand : IGlobalCommand
     [Option("no-tokencache", HelpText = "Disable token cache usage")]
     public bool NoTokenCache { get; set; }
 
-    private readonly Lazy<ProfileConfig> _cachedProfile;
-    private readonly Lazy<KsefCliConfig> _cachedConfig;
-    private readonly Lazy<TokenStore> _tokenStore;
+    private Lazy<ProfileConfig> _cachedProfile;
+    private Lazy<KsefCliConfig> _cachedConfig;
+    private Lazy<TokenStore> _tokenStore;
 
     public IWithConfigCommand()
     {
-        _cachedConfig = new Lazy<KsefCliConfig>(() =>
+        _cachedConfig = new Lazy<KsefCliConfig>(() => ConfigLoader.Load(ConfigFile, ActiveProfile));
+        _cachedProfile = new Lazy<ProfileConfig>(() =>
         {
-            return ConfigLoader.Load(ConfigFile, ActiveProfile);
+            KsefCliConfig config = _cachedConfig.Value;
+            return config.Profiles[config.ActiveProfile];
         });
+        _tokenStore = new Lazy<TokenStore>(() => new TokenStore(TokenCache));
+    }
+
+    /// <summary>
+    /// Discards the cached config, profile, and token store so they are reloaded from disk on next access.
+    /// Call after modifying the config file at runtime (e.g. from the GUI config editor).
+    /// </summary>
+    protected void ResetCachedConfig()
+    {
+        _cachedConfig = new Lazy<KsefCliConfig>(() => ConfigLoader.Load(ConfigFile, ActiveProfile));
         _cachedProfile = new Lazy<ProfileConfig>(() =>
         {
             KsefCliConfig config = _cachedConfig.Value;
@@ -86,8 +110,38 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
+        LogConfigSource();
         using var scope = GetScope();
         return await ExecuteInScopeAsync(scope, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void LogConfigSource()
+    {
+        string cfgPath = System.IO.Path.GetFullPath(ConfigFile);
+        string? envVar = System.Environment.GetEnvironmentVariable("KSEFCLI_CONFIG");
+
+        string source;
+        if (!string.IsNullOrEmpty(envVar))
+        {
+            source = $"env KSEFCLI_CONFIG";
+        }
+        else
+        {
+            string cwdCandidate = System.IO.Path.GetFullPath(
+                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "ksefcli.yaml"));
+            string exeCandidate = System.IO.Path.GetFullPath(
+                System.IO.Path.Combine(AppContext.BaseDirectory, "ksefcli.yaml"));
+
+            if (cfgPath == cwdCandidate)
+                source = "found in current directory";
+            else if (cfgPath == exeCandidate)
+                source = "found next to executable";
+            else
+                source = "default (~/.config/ksefcli/)";
+        }
+
+        bool exists = System.IO.File.Exists(cfgPath);
+        Console.WriteLine($"Config: {cfgPath} [{source}]{(exists ? "" : " [not found]")}");
     }
 
     public abstract Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken);
@@ -271,7 +325,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         };
     }
 
-    private IServiceScope GetScope()
+    protected IServiceScope GetScope()
     {
         ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();
