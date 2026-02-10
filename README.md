@@ -6,13 +6,66 @@
 
 ## Polski
 
+> **Fork** — ten projekt jest forkiem [kamilcuk/ksefcli](https://github.com/kamilcuk/ksefcli) autorstwa [Kamila Cukrowskiego](https://github.com/kamilcuk). Oryginalne repozytorium zawiera wersję CLI; ten fork dodaje rozbudowany interfejs przeglądarkowy (GUI) oraz dodatkowe funkcje.
+
 `ksefcli` to narzędzie do pobierania faktur z **Krajowego Systemu e-Faktur (KSeF)**. Oprócz interfejsu wiersza poleceń posiada wbudowany interfejs przeglądarkowy (GUI), który uruchamia się lokalnie i nie wymaga instalacji dodatkowego oprogramowania.
 
 ### Wymagania
 
 - Plik wykonywalny `ksefcli` (Linux / Windows / macOS) — samowystarczalny, brak zależności .NET
 - Przeglądarka internetowa
-- Dla eksportu PDF: Node.js 18+ i git (tylko jeśli brak dołączonego pliku `ksef-pdf-generator`)
+- Dla eksportu PDF: Node.js 18+ i git
+
+### Instalacja
+
+Pobierz najnowszy plik binarny dla swojej platformy ze strony [Releases](https://github.com/marcinbojko/ksef-gui/releases).
+
+#### Windows
+
+Umieść `ksefcli-win-x64.exe` w wybranym folderze (możesz zmienić nazwę na `ksefcli.exe`).
+
+Dla eksportu PDF — zainstaluj [Chocolatey](https://chocolatey.org/install), następnie:
+
+```powershell
+choco install nodejs git
+```
+
+#### macOS
+
+Umieść `ksefcli-osx-arm64` (Apple Silicon) lub `ksefcli-osx-x64` (Intel) w wybranym miejscu i nadaj uprawnienia do wykonania:
+
+```bash
+chmod +x ksefcli-osx-arm64
+```
+
+Dla eksportu PDF — zainstaluj [Homebrew](https://brew.sh), następnie:
+
+```bash
+brew install node git
+```
+
+#### Linux
+
+Umieść `ksefcli-linux-x64` w wybranym miejscu i nadaj uprawnienia do wykonania:
+
+```bash
+chmod +x ksefcli-linux-x64
+```
+
+Dla eksportu PDF:
+
+```bash
+# Debian / Ubuntu
+sudo apt install nodejs git
+
+# Fedora / RHEL
+sudo dnf install nodejs git
+
+# Arch
+sudo pacman -S nodejs git
+```
+
+---
 
 ### Szybki start
 
@@ -169,7 +222,7 @@ volumes:
 - `./ksefcli.yaml` — edytujesz lokalnie, kontener odczytuje
 - `ksefcli-cache` — wolumin nazwany; tokeny przeżywają `docker compose down/up`
 
-Obraz Docker zawiera wbudowany plik `ksef-pdf-generator` — eksport PDF działa bez Node.js.
+Obraz Docker zawiera wbudowany plik `ksef-pdf-generator` — eksport PDF działa bez Node.js na hoście.
 
 ### Eksport PDF
 
@@ -183,7 +236,7 @@ Kolejność wyszukiwania (używane pierwsze znalezione):
 | 2 | `ksef-pdf-generator` w `PATH` | Brak |
 | 3 | Fallback `npx --yes github:kamilcuk/ksef-pdf-generator` | **Node.js 18+** i **git** |
 
-Plik binarny dołączany jest automatycznie przy budowaniu przez Docker (`make docker-extract`).
+W przypadku samodzielnych plików binarnych używany jest wariant 3 (npx) — wymagane Node.js i git.
 
 > **Node.js 20+**: ksefcli automatycznie wstrzykuje polyfill dla zmiennych przeglądarkowych (`navigator`, `window`) wymaganych przez pdfmake. Plik polyfill tworzony jest jednorazowo w `~/.cache/ksefcli/node-browser-polyfill.js`.
 
@@ -191,13 +244,66 @@ Plik binarny dołączany jest automatycznie przy budowaniu przez Docker (`make d
 
 ## English
 
+> **Fork** — this project is a fork of [kamilcuk/ksefcli](https://github.com/kamilcuk/ksefcli) by [Kamil Cukrowski](https://github.com/kamilcuk). The original repository provides a CLI tool; this fork adds a full browser-based GUI and additional features.
+
 `ksefcli` is a tool for downloading invoices from Poland's **KSeF** (National e-Invoice System). In addition to its command-line interface it includes a built-in browser-based GUI that runs locally with no additional software required.
 
 ### Requirements
 
 - `ksefcli` binary (Linux / Windows / macOS) — self-contained, no .NET runtime needed
 - A web browser
-- For PDF export: Node.js 18+ and git (only if the bundled `ksef-pdf-generator` binary is absent)
+- For PDF export: Node.js 18+ and git
+
+### Installation
+
+Download the latest binary for your platform from the [Releases](https://github.com/marcinbojko/ksef-gui/releases) page.
+
+#### Windows
+
+Place `ksefcli-win-x64.exe` in any folder (rename to `ksefcli.exe` if desired).
+
+For PDF export — install [Chocolatey](https://chocolatey.org/install), then:
+
+```powershell
+choco install nodejs git
+```
+
+#### macOS
+
+Place `ksefcli-osx-arm64` (Apple Silicon) or `ksefcli-osx-x64` (Intel) anywhere and make it executable:
+
+```bash
+chmod +x ksefcli-osx-arm64
+```
+
+For PDF export — install [Homebrew](https://brew.sh), then:
+
+```bash
+brew install node git
+```
+
+#### Linux
+
+Place `ksefcli-linux-x64` anywhere and make it executable:
+
+```bash
+chmod +x ksefcli-linux-x64
+```
+
+For PDF export:
+
+```bash
+# Debian / Ubuntu
+sudo apt install nodejs git
+
+# Fedora / RHEL
+sudo dnf install nodejs git
+
+# Arch
+sudo pacman -S nodejs git
+```
+
+---
 
 ### Quick start
 
@@ -354,7 +460,7 @@ volumes:
 - `./ksefcli.yaml` — edit on the host; the container reads it
 - `ksefcli-cache` — named volume; tokens survive `docker compose down/up`
 
-The Docker image bundles the `ksef-pdf-generator` binary — PDF export works without Node.js.
+The Docker image bundles the `ksef-pdf-generator` binary — PDF export works without Node.js on the host.
 
 ### PDF export
 
@@ -368,7 +474,7 @@ Resolution order (first found is used):
 | 2 | `ksef-pdf-generator` on `PATH` | None |
 | 3 | npx fallback: `npx --yes github:kamilcuk/ksef-pdf-generator` | **Node.js 18+** and **git** |
 
-The bundled binary is included when building via Docker (`make docker-extract`).
+For standalone binaries, variant 3 (npx) is used — Node.js and git are required for PDF export.
 
 > **Node.js 20+**: ksefcli automatically injects a polyfill for browser globals (`navigator`, `window`) required by pdfmake. The polyfill is written once to `~/.cache/ksefcli/node-browser-polyfill.js`.
 
