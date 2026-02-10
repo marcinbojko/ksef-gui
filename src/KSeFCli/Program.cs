@@ -61,7 +61,7 @@ internal class Program
             {
                 HelpText helpText = HelpText.AutoBuild(result, h =>
                 {
-                    h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code lisenced under GPLv3.";
+                    h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code licensed under GPLv3.";
                     // new CopyrightInfo("Kamil Cukrowski", 2026);
                     h.AdditionalNewLineAfterOption = false;
                     return h;
