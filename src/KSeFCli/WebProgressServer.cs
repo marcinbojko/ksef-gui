@@ -625,6 +625,12 @@ body.dark .btn-details:hover{border-color:#64b5f6;color:#64b5f6;background:#0d21
 .detail-popover.preview-dark .preview-totals td{border-color:#444;color:#e0e0e0}
 .detail-popover.preview-dark .preview-totals .label{background:#252525}
 .detail-popover.preview-dark .preview-meta{color:#666;border-top-color:#333}
+.detail-popover.preview-dark .dp-section h4{color:#aaa;border-bottom-color:#333}
+.detail-popover.preview-dark .dp-label{color:#aaa}
+.detail-popover.preview-dark .dp-val{color:#e0e0e0}
+.detail-popover.preview-dark th{background:#252525;border-bottom-color:#444;color:#aaa}
+.detail-popover.preview-dark td{border-bottom-color:#333;color:#e0e0e0}
+.detail-popover.preview-dark .dp-loading{color:#666}
 body.dark .btn-preview{border-color:#555;color:#aaa}
 body.dark .btn-preview:hover{border-color:#81c784;color:#81c784;background:#1b3a1b}
 body.dark tr.has-files>td{background:rgba(129,199,132,.06)}
@@ -750,6 +756,7 @@ body.dark .sort-arrow{color:#666}
 <div class="sel-toolbar" id="selToolbar">
   <button class="btn-sm btn-outline" onclick="selectAll()">Zaznacz wszystkie</button>
   <button class="btn-sm btn-outline" onclick="clearSelection()">Odznacz wszystkie</button>
+  <button class="btn-sm btn-outline" onclick="selectMissing()">Zaznacz brakujące</button>
   <span class="sel-count" id="selCount"></span>
 </div>
 <div id="tableWrap"></div>
@@ -1013,7 +1020,7 @@ function renderProfileCard(p, i) {
     '<button class="cfg-del" onclick="deleteProfile(' + i + ')" title="Usun profil">&times;</button>' +
     '<div class="cfg-card-title">Profil #' + (i+1) +
     '<label style="font-weight:normal;font-size:.82rem;cursor:pointer;display:flex;align-items:center;gap:.3rem;margin-left:auto">' +
-    '<input type="radio" name="activeProfileRadio" id="cfgActiveRadio' + i + '" value="' + esc(p.name) + '"' + (isActive ? ' checked' : '') + ' onchange="onActiveRadioChange(' + i + ')"> Aktywny</label>' +
+    '<input type="radio" name="activeProfileRadio" id="cfgActiveRadio' + i + '" value="' + esc(p.name) + '"' + (isActive ? ' checked' : '') + ' onchange="onActiveRadioChange(' + i + ')"> Domyślny</label>' +
     '</div>' +
     '<div class="cfg-field"><label>Nazwa profilu</label>' +
     '<input type="text" id="cfgName' + i + '" value="' + esc(p.name) + '" onchange="syncActiveProfileSelect()"></div>' +
@@ -1291,6 +1298,15 @@ function clearSelection() {
   renderTable();
 }
 
+function selectMissing() {
+  const filtered = getFilteredInvoices();
+  for (const inv of filtered) {
+    const fs = fileStatus[inv._idx] || {};
+    if (!fs.xml && !fs.pdf && !fs.json) selectedInvoices.add(inv._idx);
+  }
+  renderTable();
+}
+
 function updateSelectionUI() {
   const n = selectedInvoices.size;
   selToolbar.classList.toggle('visible', invoices.length > 0);
@@ -1539,7 +1555,7 @@ async function showDetails(idx, event) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDetails(); });
 
   const pop = document.createElement('div');
-  pop.className = 'detail-popover';
+  pop.className = 'detail-popover' + ($('previewDarkMode').checked ? ' preview-dark' : '');
   pop.innerHTML = '<div class="dp-header"><h3>Szczegoly faktury</h3><button class="dp-close" onclick="closeDetails()">&times;</button></div><div class="dp-body"><div class="dp-loading"><span class="spinner">&#8635;</span> Pobieranie...</div></div>';
   overlay.appendChild(pop);
   document.body.appendChild(overlay);
