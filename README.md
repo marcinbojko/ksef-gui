@@ -14,7 +14,8 @@
 
 - Plik wykonywalny `ksefcli` (Linux / Windows / macOS) — samowystarczalny, brak zależności .NET
 - Przeglądarka internetowa
-- Dla eksportu PDF: Node.js 18+ i git
+
+Eksport PDF **nie wymaga** Node.js, git ani żadnych zewnętrznych narzędzi — generator PDF jest wbudowany w aplikację.
 
 ### Instalacja
 
@@ -24,12 +25,6 @@ Pobierz najnowszy plik binarny dla swojej platformy ze strony [Releases](https:/
 
 Umieść `ksefcli-win-x64.exe` w wybranym folderze (możesz zmienić nazwę na `ksefcli.exe`).
 
-Dla eksportu PDF — zainstaluj [Chocolatey](https://chocolatey.org/install), następnie:
-
-```powershell
-choco install nodejs git
-```
-
 #### macOS
 
 Umieść `ksefcli-osx-arm64` (Apple Silicon) lub `ksefcli-osx-x64` (Intel) w wybranym miejscu i nadaj uprawnienia do wykonania:
@@ -38,31 +33,12 @@ Umieść `ksefcli-osx-arm64` (Apple Silicon) lub `ksefcli-osx-x64` (Intel) w wyb
 chmod +x ksefcli-osx-arm64
 ```
 
-Dla eksportu PDF — zainstaluj [Homebrew](https://brew.sh), następnie:
-
-```bash
-brew install node git
-```
-
 #### Linux
 
 Umieść `ksefcli-linux-x64` w wybranym miejscu i nadaj uprawnienia do wykonania:
 
 ```bash
 chmod +x ksefcli-linux-x64
-```
-
-Dla eksportu PDF:
-
-```bash
-# Debian / Ubuntu
-sudo apt install nodejs git
-
-# Fedora / RHEL
-sudo dnf install nodejs git
-
-# Arch
-sudo pacman -S nodejs git
 ```
 
 ---
@@ -168,6 +144,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 **⚙ Preferencje**
 - Katalog wyjściowy, formaty eksportu, schemat nazw plików
 - Tryb ciemny, tryb ciemny podglądu faktury
+- Schemat kolorów PDF: Granatowy / Zielony / Szary
 - Port LAN (zmiana wymaga restartu)
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
 
@@ -222,23 +199,32 @@ volumes:
 - `./ksefcli.yaml` — edytujesz lokalnie, kontener odczytuje
 - `ksefcli-cache` — wolumin nazwany; tokeny przeżywają `docker compose down/up`
 
-Obraz Docker zawiera wbudowany plik `ksef-pdf-generator` — eksport PDF działa bez Node.js na hoście.
-
 ### Eksport PDF
 
-Plik PDF jest generowany przez [ksef-pdf-generator](https://github.com/kamilcuk/ksef-pdf-generator).
+PDF jest generowany **natywnie przez wbudowany renderer** oparty na [QuestPDF](https://www.questpdf.com/) — czysta implementacja .NET, bez zewnętrznych zależności.
 
-Kolejność wyszukiwania (używane pierwsze znalezione):
+Nie jest wymagany Node.js, git ani żaden zewnętrzny generator. Eksport PDF działa identycznie na każdej platformie i w środowisku Docker.
 
-| Priorytet | Warunek | Wymagania |
-|-----------|---------|-----------|
-| 1 | `ksef-pdf-generator[.exe]` obok pliku `ksefcli` | Brak — plik samowystarczalny |
-| 2 | `ksef-pdf-generator` w `PATH` | Brak |
-| 3 | Fallback `npx --yes github:kamilcuk/ksef-pdf-generator` | **Node.js 18+** i **git** |
+#### Schemat kolorów
 
-W przypadku samodzielnych plików binarnych używany jest wariant 3 (npx) — wymagane Node.js i git.
+Wygląd nagłówków tabel i akcentów w PDF można zmienić w preferencjach GUI (zakładka ⚙):
 
-> **Node.js 20+**: ksefcli automatycznie wstrzykuje polyfill dla zmiennych przeglądarkowych (`navigator`, `window`) wymaganych przez pdfmake. Plik polyfill tworzony jest jednorazowo w `~/.cache/ksefcli/node-browser-polyfill.js`.
+| Schemat | Opis |
+|---------|------|
+| **Granatowy** (domyślny) | Ciemny niebieski — klasyczny, formalny wygląd |
+| **Zielony** | Ciemna zieleń — świeży, ekologiczny akcent |
+| **Szary** | Ciemny szary — neutralny, minimalistyczny |
+
+Schemat dotyczy nagłówków tabel, obramowań sekcji i koloru akcentowego. Tło dokumentu zawsze białe, tekst czarny.
+
+Konwersja z wiersza poleceń:
+
+```bash
+# Domyślny schemat (granatowy)
+./ksefcli XML2PDF faktura.xml
+
+# Wskazanie schematu przez zmienną środowiskową lub flagę (jeśli obsługiwane)
+```
 
 ---
 
@@ -252,7 +238,8 @@ W przypadku samodzielnych plików binarnych używany jest wariant 3 (npx) — wy
 
 - `ksefcli` binary (Linux / Windows / macOS) — self-contained, no .NET runtime needed
 - A web browser
-- For PDF export: Node.js 18+ and git
+
+PDF export **does not require** Node.js, git, or any external tools — the PDF renderer is built into the application.
 
 ### Installation
 
@@ -262,12 +249,6 @@ Download the latest binary for your platform from the [Releases](https://github.
 
 Place `ksefcli-win-x64.exe` in any folder (rename to `ksefcli.exe` if desired).
 
-For PDF export — install [Chocolatey](https://chocolatey.org/install), then:
-
-```powershell
-choco install nodejs git
-```
-
 #### macOS
 
 Place `ksefcli-osx-arm64` (Apple Silicon) or `ksefcli-osx-x64` (Intel) anywhere and make it executable:
@@ -276,31 +257,12 @@ Place `ksefcli-osx-arm64` (Apple Silicon) or `ksefcli-osx-x64` (Intel) anywhere 
 chmod +x ksefcli-osx-arm64
 ```
 
-For PDF export — install [Homebrew](https://brew.sh), then:
-
-```bash
-brew install node git
-```
-
 #### Linux
 
 Place `ksefcli-linux-x64` anywhere and make it executable:
 
 ```bash
 chmod +x ksefcli-linux-x64
-```
-
-For PDF export:
-
-```bash
-# Debian / Ubuntu
-sudo apt install nodejs git
-
-# Fedora / RHEL
-sudo dnf install nodejs git
-
-# Arch
-sudo pacman -S nodejs git
 ```
 
 ---
@@ -406,6 +368,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 **⚙ Preferences**
 - Output directory, export formats, filename style
 - Dark mode toggle, invoice preview dark mode
+- PDF colour scheme: Navy / Forest / Slate
 - LAN port (change takes effect on next start)
 - Active profile selection (persisted across sessions; switching takes effect immediately without restart)
 
@@ -460,23 +423,30 @@ volumes:
 - `./ksefcli.yaml` — edit on the host; the container reads it
 - `ksefcli-cache` — named volume; tokens survive `docker compose down/up`
 
-The Docker image bundles the `ksef-pdf-generator` binary — PDF export works without Node.js on the host.
-
 ### PDF export
 
-PDFs are generated by [ksef-pdf-generator](https://github.com/kamilcuk/ksef-pdf-generator).
+PDFs are rendered by a **native built-in engine** based on [QuestPDF](https://www.questpdf.com/) — a pure .NET library with no external dependencies.
 
-Resolution order (first found is used):
+Node.js, git, and any external generator are no longer required. PDF export works identically on all platforms and inside Docker with no additional setup.
 
-| Priority | Condition | Requirements |
-|----------|-----------|--------------|
-| 1 | `ksef-pdf-generator[.exe]` next to `ksefcli` | None — self-contained binary |
-| 2 | `ksef-pdf-generator` on `PATH` | None |
-| 3 | npx fallback: `npx --yes github:kamilcuk/ksef-pdf-generator` | **Node.js 18+** and **git** |
+#### Colour schemes
 
-For standalone binaries, variant 3 (npx) is used — Node.js and git are required for PDF export.
+The look of table headers and accents can be changed in the GUI preferences (⚙ tab):
 
-> **Node.js 20+**: ksefcli automatically injects a polyfill for browser globals (`navigator`, `window`) required by pdfmake. The polyfill is written once to `~/.cache/ksefcli/node-browser-polyfill.js`.
+| Scheme | Description |
+|--------|-------------|
+| **Navy** (default) | Dark navy blue — classic, formal look |
+| **Forest** | Dark green — fresh accent |
+| **Slate** | Dark grey — neutral, minimalist |
+
+The scheme affects table header backgrounds, section border colours, and the brand accent. Document background is always white; body text is always black.
+
+Command-line conversion:
+
+```bash
+./ksefcli XML2PDF invoice.xml
+./ksefcli XML2PDF invoice.xml output.pdf
+```
 
 ---
 

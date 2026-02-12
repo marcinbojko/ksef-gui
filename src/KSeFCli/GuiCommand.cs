@@ -52,7 +52,8 @@ public class GuiCommand : IWithConfigCommand
         string? SelectedProfile = null,
         int? LanPort = null,
         bool? DarkMode = null,
-        bool? PreviewDarkMode = null);
+        bool? PreviewDarkMode = null,
+        string? PdfColorScheme = null);
 
     private record ProfileEditorData(
         string Name,
@@ -231,6 +232,7 @@ public class GuiCommand : IWithConfigCommand
                 lanPort = prefs.LanPort ?? DefaultLanPort,
                 darkMode = prefs.DarkMode ?? false,
                 previewDarkMode = prefs.PreviewDarkMode ?? false,
+                pdfColorScheme = prefs.PdfColorScheme ?? "navy",
                 setupRequired = _setupRequired,
             });
         };
@@ -250,7 +252,8 @@ public class GuiCommand : IWithConfigCommand
                 SelectedProfile: newProfile,
                 LanPort: root.TryGetProperty("lanPort", out JsonElement lp) ? lp.GetInt32() : null,
                 DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
-                PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null
+                PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null,
+                PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null
             ));
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
             {
@@ -654,7 +657,7 @@ public class GuiCommand : IWithConfigCommand
                         await _server.SendEventAsync("invoice_done", new { current = i, file = fileName, pdf = true, progress = n, total = toDownload.Count }).ConfigureAwait(false);
                     }
 
-                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct).ConfigureAwait(false);
+                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme).ConfigureAwait(false);
                     string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
                     await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
                     string finalPdf = Path.Combine(outputDir, $"{fileName}.pdf");
@@ -680,13 +683,15 @@ public class GuiCommand : IWithConfigCommand
             try { Directory.Delete(workDir, recursive: true); } catch { }
         }
 
-        SavePrefs(new GuiPrefs(
-            OutputDir: dlParams.SeparateByNip ? Path.GetDirectoryName(outputDir) ?? outputDir : outputDir,
-            ExportXml: dlParams.ExportXml,
-            ExportJson: dlParams.ExportJson,
-            ExportPdf: wantPdf,
-            CustomFilenames: dlParams.CustomFilenames,
-            SeparateByNip: dlParams.SeparateByNip));
+        SavePrefs(LoadPrefs() with
+        {
+            OutputDir = dlParams.SeparateByNip ? Path.GetDirectoryName(outputDir) ?? outputDir : outputDir,
+            ExportXml = dlParams.ExportXml,
+            ExportJson = dlParams.ExportJson,
+            ExportPdf = wantPdf,
+            CustomFilenames = dlParams.CustomFilenames,
+            SeparateByNip = dlParams.SeparateByNip,
+        });
 
         if (_server != null)
         {
