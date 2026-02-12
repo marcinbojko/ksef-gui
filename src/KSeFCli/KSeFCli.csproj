@@ -32,6 +32,12 @@
     </ItemGroup>
   </Target>
 
+  <!-- Extract native libs (SkiaSharp/QuestPDF) from single-file bundle at startup.
+       Required on Windows; harmless on Linux/macOS. Only active during publish. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.2" />
