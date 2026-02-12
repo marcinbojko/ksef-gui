@@ -257,7 +257,6 @@ public class GuiCommand : IWithConfigCommand
                 string previousProfile = ActiveProfile;
                 ActiveProfile = newProfile;
                 ResetCachedConfig();
-                _cachedInvoices = null;
                 try
                 {
                     IServiceScope switchedScope = GetScope();
@@ -265,6 +264,7 @@ public class GuiCommand : IWithConfigCommand
                     _scope?.Dispose();
                     _scope = switchedScope;
                     _ksefClient = switchedClient;
+                    _cachedInvoices = null; // clear only after successful switch
                     string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
                     Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
                 }
