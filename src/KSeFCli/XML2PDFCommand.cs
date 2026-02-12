@@ -11,6 +11,9 @@ public class XML2PDFCommand : IGlobalCommand
     [Value(1, HelpText = "Output PDF file path.")]
     public string? OutputFile { get; set; }
 
+    [Option('s', "color-scheme", HelpText = "PDF colour scheme: navy (default), forest, slate.")]
+    public string? ColorScheme { get; set; }
+
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         ConfigureLogging();
@@ -42,7 +45,7 @@ public class XML2PDFCommand : IGlobalCommand
         }
 
         string xmlContent = await File.ReadAllTextAsync(InputFile, cancellationToken).ConfigureAwait(false);
-        byte[] pdfContent = await XML2PDF(xmlContent, Quiet, cancellationToken).ConfigureAwait(false);
+        byte[] pdfContent = await XML2PDF(xmlContent, Quiet, cancellationToken, ColorScheme).ConfigureAwait(false);
 
         await File.WriteAllBytesAsync(outputPdfPath, pdfContent, cancellationToken).ConfigureAwait(false);
 
@@ -54,7 +57,9 @@ public class XML2PDFCommand : IGlobalCommand
     public static Task<byte[]> XML2PDF(string xmlContent, bool quiet, CancellationToken cancellationToken, string? colorScheme = null)
     {
         if (!quiet)
+        {
             Console.WriteLine("Generating PDF (native renderer)...");
+        }
 
         return Task.FromResult(KSeFInvoicePdf.FromXml(xmlContent, colorScheme));
     }

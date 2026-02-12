@@ -223,7 +223,9 @@ Konwersja z wiersza poleceń:
 # Domyślny schemat (granatowy)
 ./ksefcli XML2PDF faktura.xml
 
-# Wskazanie schematu przez zmienną środowiskową lub flagę (jeśli obsługiwane)
+# Wskazanie schematu
+./ksefcli XML2PDF faktura.xml --color-scheme forest
+./ksefcli XML2PDF faktura.xml wynik.pdf --color-scheme slate
 ```
 
 ---
@@ -445,7 +447,8 @@ Command-line conversion:
 
 ```bash
 ./ksefcli XML2PDF invoice.xml
-./ksefcli XML2PDF invoice.xml output.pdf
+./ksefcli XML2PDF invoice.xml output.pdf --color-scheme forest
+./ksefcli XML2PDF invoice.xml output.pdf --color-scheme slate
 ```
 
 ---

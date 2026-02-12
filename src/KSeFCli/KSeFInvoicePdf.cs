@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Xml.Linq;
+
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -73,35 +74,36 @@ internal record InvoiceData(
 
 internal static class KSeFInvoiceParser
 {
-    private static readonly XNamespace Ns = "http://crd.gov.pl/wzor/2025/06/25/13775/";
+    private static readonly XNamespace FallbackNs = "http://crd.gov.pl/wzor/2025/06/25/13775/";
 
     public static InvoiceData Parse(string xmlContent)
     {
-        var doc = XDocument.Parse(xmlContent);
-        var root = doc.Root!;
+        XDocument doc = XDocument.Parse(xmlContent);
+        XElement root = doc.Root!;
+        XNamespace ns = root.GetDefaultNamespace() == XNamespace.None ? FallbackNs : root.GetDefaultNamespace();
 
         XElement? El(XElement parent, string name) =>
-            parent.Element(Ns + name) ?? parent.Element(name);
+            parent.Element(ns + name) ?? parent.Element(name);
 
         string? Val(XElement? parent, string name) =>
             parent is null ? null : El(parent, name)?.Value?.Trim();
 
         IEnumerable<XElement> Els(XElement parent, string name) =>
-            parent.Elements(Ns + name).Any()
-                ? parent.Elements(Ns + name)
+            parent.Elements(ns + name).Any()
+                ? parent.Elements(ns + name)
                 : parent.Elements(name);
 
-        var naglowek = El(root, "Naglowek")!;
-        var podmiot1 = El(root, "Podmiot1")!;
-        var podmiot2 = El(root, "Podmiot2")!;
-        var fa = El(root, "Fa")!;
-        var stopka = El(root, "Stopka");
+        XElement naglowek = El(root, "Naglowek")!;
+        XElement podmiot1 = El(root, "Podmiot1")!;
+        XElement podmiot2 = El(root, "Podmiot2")!;
+        XElement fa = El(root, "Fa")!;
+        XElement? stopka = El(root, "Stopka");
 
         InvoiceParty ParseParty(XElement p)
         {
-            var dane = El(p, "DaneIdentyfikacyjne");
-            var adres = El(p, "Adres");
-            var kontakt = El(p, "DaneKontaktowe");
+            XElement? dane = El(p, "DaneIdentyfikacyjne");
+            XElement? adres = El(p, "Adres");
+            XElement? kontakt = El(p, "DaneKontaktowe");
             return new InvoiceParty(
                 Nip: Val(dane, "NIP"),
                 Nazwa: Val(dane, "Nazwa"),
@@ -115,9 +117,9 @@ internal static class KSeFInvoiceParser
             );
         }
 
-        var wiersze = Els(fa, "FaWiersz")
+        List<InvoiceLine> wiersze = Els(fa, "FaWiersz")
             .Select(w => new InvoiceLine(
-                Nr: int.TryParse(Val(w, "NrWierszaFa"), out var nr) ? nr : 0,
+                Nr: int.TryParse(Val(w, "NrWierszaFa"), out int nr) ? nr : 0,
                 UuId: Val(w, "UU_ID"),
                 Name: Val(w, "P_7"),
                 Indeks: Val(w, "Indeks"),
@@ -135,8 +137,8 @@ internal static class KSeFInvoiceParser
             .ToList();
 
         // VAT summary
-        var vatRows = new List<VatRow>();
-        var vatMap = new (string Rate, string NetField, string? VatField)[]
+        List<VatRow> vatRows = new List<VatRow>();
+        (string Rate, string NetField, string? VatField)[] vatMap = new (string Rate, string NetField, string? VatField)[]
         {
             ("23%", "P_13_1", "P_14_1"),
             ("8%",  "P_13_2", "P_14_2"),
@@ -145,59 +147,69 @@ internal static class KSeFInvoiceParser
             ("zw",  "P_13_7", null),
             ("np",  "P_13_8", null),
         };
-        foreach (var (rate, netF, vatF) in vatMap)
+        foreach ((string? rate, string? netF, string? vatF) in vatMap)
         {
-            var net = Val(fa, netF);
+            string? net = Val(fa, netF);
             if (!string.IsNullOrEmpty(net))
+            {
                 vatRows.Add(new VatRow(rate, net, vatF is null ? null : Val(fa, vatF)));
+            }
         }
 
-        var dodOpis = Els(fa, "DodatkowyOpis")
+        List<(string Klucz, string Wartosc)> dodOpis = Els(fa, "DodatkowyOpis")
             .Select(d => (Klucz: Val(d, "Klucz") ?? "", Wartosc: Val(d, "Wartosc") ?? ""))
             .ToList();
 
-        var platnosc = El(fa, "Platnosc");
+        XElement? platnosc = El(fa, "Platnosc");
         bool zaplacono = platnosc is not null && Val(platnosc, "Zaplacono") == "1";
         string? dataZaplaty = platnosc is null ? null : Val(platnosc, "DataZaplaty");
         string? formaPlatnosci = platnosc is null ? null : FormatPlatnosc(Val(platnosc, "FormaPlatnosci"));
 
         // TerminPlatnosci can be a string or contain nested <Termin> elements
-        var terminy = new List<string>();
+        List<string> terminy = new List<string>();
         if (platnosc is not null)
         {
-            var tpEl = El(platnosc, "TerminPlatnosci");
+            XElement? tpEl = El(platnosc, "TerminPlatnosci");
             if (tpEl is not null)
             {
-                var terminEls = Els(tpEl, "Termin").Select(t => t.Value.Trim()).ToList();
+                List<string> terminEls = Els(tpEl, "Termin").Select(t => t.Value.Trim()).ToList();
                 if (terminEls.Count > 0)
+                {
                     terminy.AddRange(terminEls);
+                }
                 else if (!string.IsNullOrWhiteSpace(tpEl.Value))
+                {
                     terminy.Add(tpEl.Value.Trim());
+                }
             }
         }
 
         BankAccount? bank = null;
         if (platnosc is not null)
         {
-            var rbEl = El(platnosc, "RachunekBankowy");
+            XElement? rbEl = El(platnosc, "RachunekBankowy");
             if (rbEl is not null)
+            {
                 bank = new BankAccount(Val(rbEl, "NrRB"), Val(rbEl, "NazwaBanku"), Val(rbEl, "OpisRachunku"));
+            }
         }
 
-        var warunki = El(fa, "WarunkiTransakcji");
-        var umowy = new List<string>();
+        XElement? warunki = El(fa, "WarunkiTransakcji");
+        List<string> umowy = new List<string>();
         if (warunki is not null)
         {
-            var umowyEl = El(warunki, "Umowy");
+            XElement? umowyEl = El(warunki, "Umowy");
             if (umowyEl is not null)
+            {
                 umowy.AddRange(Els(umowyEl, "NrUmowy").Select(u => u.Value.Trim()));
+            }
         }
 
-        var faZal = El(fa, "FakturaZaliczkowa");
+        XElement? faZal = El(fa, "FakturaZaliczkowa");
         string? nrFaZal = faZal is null ? null : Val(faZal, "NrFaZaliczkowej");
 
-        var rejestry = stopka is null ? null : El(stopka, "Rejestry");
-        var okresEl = El(fa, "OkresFa");
+        XElement? rejestry = stopka is null ? null : El(stopka, "Rejestry");
+        XElement? okresEl = El(fa, "OkresFa");
 
         return new InvoiceData(
             RodzajFaktury: Val(fa, "RodzajFaktury"),
@@ -256,39 +268,39 @@ internal record PdfColorScheme(
 )
 {
     public static readonly PdfColorScheme Navy = new(
-        Primary:      "#1a3a6b",
+        Primary: "#1a3a6b",
         PrimaryLight: "#e8eef7",
-        PrimaryText:  Colors.White,
-        Accent:       "#cc0000",
-        TextMuted:    "#666666",
-        RowAlt:       "#f5f5f5",
-        Border:       "#dddddd"
+        PrimaryText: Colors.White,
+        Accent: "#cc0000",
+        TextMuted: "#666666",
+        RowAlt: "#f5f5f5",
+        Border: "#dddddd"
     );
 
     public static readonly PdfColorScheme Forest = new(
-        Primary:      "#1a4a2e",
+        Primary: "#1a4a2e",
         PrimaryLight: "#e8f4ec",
-        PrimaryText:  Colors.White,
-        Accent:       "#cc0000",
-        TextMuted:    "#556655",
-        RowAlt:       "#f4f9f5",
-        Border:       "#c8ddd0"
+        PrimaryText: Colors.White,
+        Accent: "#cc0000",
+        TextMuted: "#556655",
+        RowAlt: "#f4f9f5",
+        Border: "#c8ddd0"
     );
 
     public static readonly PdfColorScheme Slate = new(
-        Primary:      "#2d3748",
+        Primary: "#2d3748",
         PrimaryLight: "#edf2f7",
-        PrimaryText:  Colors.White,
-        Accent:       "#cc0000",
-        TextMuted:    "#718096",
-        RowAlt:       "#f7fafc",
-        Border:       "#e2e8f0"
+        PrimaryText: Colors.White,
+        Accent: "#cc0000",
+        TextMuted: "#718096",
+        RowAlt: "#f7fafc",
+        Border: "#e2e8f0"
     );
 
     public static PdfColorScheme FromName(string? name) => name?.ToLowerInvariant() switch
     {
         "forest" or "green" => Forest,
-        "slate"  or "grey" or "gray" => Slate,
+        "slate" or "grey" or "gray" => Slate,
         _ => Navy
     };
 }
@@ -297,16 +309,16 @@ internal record PdfColorScheme(
 
 internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 {
-    private string Blue       => scheme.Primary;
-    private string Gray       => scheme.TextMuted;
-    private string LightGray  => scheme.RowAlt;
+    private string Blue => scheme.Primary;
+    private string Gray => scheme.TextMuted;
+    private string LightGray => scheme.RowAlt;
     private string BorderGray => scheme.Border;
-    private string RedAccent  => scheme.Accent;
+    private string RedAccent => scheme.Accent;
 
     public static byte[] Generate(InvoiceData d, PdfColorScheme? colorScheme = null)
     {
         QuestPDF.Settings.License = LicenseType.Community;
-        var gen = new KSeFInvoicePdfGenerator(colorScheme ?? PdfColorScheme.Navy);
+        KSeFInvoicePdfGenerator gen = new KSeFInvoicePdfGenerator(colorScheme ?? PdfColorScheme.Navy);
 
         return Document.Create(container =>
         {
@@ -318,7 +330,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 page.MarginLeft(1.5f, Unit.Centimetre);
                 page.MarginRight(1.5f, Unit.Centimetre);
                 page.PageColor(Colors.White);
-                page.DefaultTextStyle(x => x.FontSize(8.5f).FontFamily("DejaVu Sans"));
+                page.DefaultTextStyle(x => x.FontSize(8.5f));
 
                 page.Header().Element(c => gen.ComposeHeader(c, d));
                 page.Content().PaddingTop(6).Element(c => gen.ComposeContent(c, d));
@@ -351,7 +363,9 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     right.Item().Text("Numer Faktury:").FontSize(7).FontColor(Gray);
                     right.Item().Text(d.Numer ?? "—").FontSize(14).Bold().FontColor(Colors.Black);
                     if (d.RodzajFaktury is not null)
+                    {
                         right.Item().Text(InvoiceSubtitle(d.RodzajFaktury)).FontSize(7.5f).FontColor(Gray);
+                    }
                 });
             });
 
@@ -378,45 +392,55 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                             t.Span(d.DataFaktury ?? "—").FontSize(7.5f).Bold();
                         });
                         if (!string.IsNullOrEmpty(d.MiejsceWystawienia))
+                        {
                             r.ConstantItem(180).Text(t =>
                             {
                                 t.Span("Miejsce wystawienia: ").FontSize(7.5f).FontColor(Gray);
                                 t.Span(d.MiejsceWystawienia).FontSize(7.5f).Bold();
                             });
+                        }
                     });
                     if (!string.IsNullOrEmpty(d.DataDostawy))
+                    {
                         det.Item().PaddingTop(2).Text(t =>
                         {
                             t.Span("Data dostawy/wykonania usługi: ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.DataDostawy).FontSize(7.5f).Bold();
                         });
+                    }
+
                     if (!string.IsNullOrEmpty(d.OkresOd))
+                    {
                         det.Item().PaddingTop(2).Text(t =>
                         {
                             t.Span("Okres: ").FontSize(7.5f).FontColor(Gray);
                             t.Span($"{d.OkresOd} – {d.OkresDo}").FontSize(7.5f).Bold();
                         });
+                    }
+
                     if (!string.IsNullOrEmpty(d.NrFaZaliczkowej))
+                    {
                         det.Item().PaddingTop(2).Text(t =>
                         {
                             t.Span("Faktura zaliczkowa: ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.NrFaZaliczkowej).FontSize(7.5f);
                         });
+                    }
                 });
         });
     }
 
     private static string InvoiceSubtitle(string? rodzaj) => rodzaj switch
     {
-        "VAT"     => "Faktura podstawowa",
-        "ROZ"     => "Faktura rozliczeniowa",
-        "ZAL"     => "Faktura zaliczkowa",
-        "KOR"     => "Faktura korygująca",
+        "VAT" => "Faktura podstawowa",
+        "ROZ" => "Faktura rozliczeniowa",
+        "ZAL" => "Faktura zaliczkowa",
+        "KOR" => "Faktura korygująca",
         "KOR_ZAL" => "Faktura korygująca zaliczkową",
-        "UPR"     => "Faktura uproszczona",
-        "RR"      => "Faktura RR",
-        null      => "Faktura",
-        _         => $"Faktura {rodzaj}"
+        "UPR" => "Faktura uproszczona",
+        "RR" => "Faktura RR",
+        null => "Faktura",
+        _ => $"Faktura {rodzaj}"
     };
 
     private void PartyBox(IContainer c, string label, InvoiceParty p)
@@ -433,40 +457,60 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 });
             }
             if (!string.IsNullOrEmpty(p.Nip))
+            {
                 col.Item().PaddingTop(p.NrEORI is null ? 3 : 1).Text(t =>
                 {
                     t.Span("NIP: ").FontSize(7.5f).Bold();
                     t.Span(p.Nip).FontSize(7.5f);
                 });
+            }
+
             if (!string.IsNullOrEmpty(p.Nazwa))
+            {
                 col.Item().PaddingTop(1).Text(t =>
                 {
                     t.Span("Nazwa: ").FontSize(7.5f).Bold();
                     t.Span(p.Nazwa).FontSize(7.5f);
                 });
+            }
 
             if (!string.IsNullOrEmpty(p.AdresL1) || !string.IsNullOrEmpty(p.AdresL2))
             {
                 col.Item().PaddingTop(4).Text("Adres").FontSize(7.5f).Bold().FontColor(Gray);
                 if (!string.IsNullOrEmpty(p.AdresL1))
+                {
                     col.Item().Text(p.AdresL1).FontSize(7.5f);
+                }
+
                 if (!string.IsNullOrEmpty(p.AdresL2))
+                {
                     col.Item().Text(p.AdresL2).FontSize(7.5f);
+                }
+
                 if (!string.IsNullOrEmpty(p.KodKraju))
+                {
                     col.Item().Text(CountryName(p.KodKraju)).FontSize(7.5f);
+                }
             }
 
             if (!string.IsNullOrEmpty(p.Email) || !string.IsNullOrEmpty(p.Telefon))
             {
                 col.Item().PaddingTop(4).Text("Dane kontaktowe").FontSize(7.5f).Bold().FontColor(Gray);
                 if (!string.IsNullOrEmpty(p.Email))
+                {
                     col.Item().Text($"E-mail: {p.Email}").FontSize(7.5f);
+                }
+
                 if (!string.IsNullOrEmpty(p.Telefon))
+                {
                     col.Item().Text($"Tel.: {p.Telefon}").FontSize(7.5f);
+                }
             }
 
             if (!string.IsNullOrEmpty(p.NrKlienta))
+            {
                 col.Item().PaddingTop(2).Text($"Nr klienta: {p.NrKlienta}").FontSize(7f).FontColor(Gray);
+            }
         });
     }
 
@@ -478,17 +522,24 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
         {
             // Line items
             if (d.Wiersze.Count > 0)
+            {
                 col.Item().PaddingTop(8).Element(c2 => LinesSection(c2, d));
+            }
 
             // VAT summary + total
             col.Item().PaddingTop(10).Row(row =>
             {
                 if (d.VatRows.Count > 0)
+                {
                     row.RelativeItem().Element(c2 => VatTable(c2, d));
+                }
                 else
+                {
                     row.RelativeItem();
+                }
 
                 if (!string.IsNullOrEmpty(d.RazemBrutto))
+                {
                     row.ConstantItem(200).AlignBottom().AlignRight().Column(tot =>
                     {
                         tot.Item().Background("#f5f5f5").Border(0.5f).BorderColor(Blue)
@@ -499,6 +550,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                                 .Text($"{d.RazemBrutto} {d.Waluta}").FontSize(9).Bold().FontColor(Colors.Black);
                         });
                     });
+                }
             });
 
             // Payment
@@ -506,25 +558,35 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 || !string.IsNullOrEmpty(d.FormaPlatnosci) || d.TerminyPlatnosci.Count > 0
                 || d.RachunekBankowy is not null;
             if (hasPayment)
+            {
                 col.Item().PaddingTop(10).Element(c2 => PaymentSection(c2, d));
+            }
 
             // Additional notes
             if (d.DodatkowyOpis.Count > 0)
+            {
                 col.Item().PaddingTop(10).Element(c2 => DodatkowyOpisSection(c2, d));
+            }
 
             // WZ documents
             if (!string.IsNullOrEmpty(d.WZ))
+            {
                 col.Item().PaddingTop(10).Element(c2 => WzSection(c2, d));
+            }
 
             // Contracts
             if (d.NrUmowy.Count > 0)
+            {
                 col.Item().PaddingTop(10).Element(c2 => UmowySection(c2, d));
+            }
 
             // Registries footer
             bool hasRej = !string.IsNullOrEmpty(d.PelnaNazwa) || !string.IsNullOrEmpty(d.Regon)
                 || !string.IsNullOrEmpty(d.Bdo);
             if (hasRej)
+            {
                 col.Item().PaddingTop(10).Element(c2 => RejestryTable(c2, d));
+            }
         });
     }
 
@@ -532,10 +594,10 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     private void LinesSection(IContainer c, InvoiceData d)
     {
-        bool hasUuId  = d.Wiersze.Any(w => !string.IsNullOrEmpty(w.UuId));
+        bool hasUuId = d.Wiersze.Any(w => !string.IsNullOrEmpty(w.UuId));
         bool hasGross = d.Wiersze.Any(w => !string.IsNullOrEmpty(w.UnitGrossPrice) || !string.IsNullOrEmpty(w.GrossTotal));
-        bool hasFx    = d.Waluta != "PLN" && d.Wiersze.Any(w => !string.IsNullOrEmpty(w.ExchangeRate));
-        bool hasGtin  = d.Wiersze.Any(w => !string.IsNullOrEmpty(w.Gtin));
+        bool hasFx = d.Waluta != "PLN" && d.Wiersze.Any(w => !string.IsNullOrEmpty(w.ExchangeRate));
+        bool hasGtin = d.Wiersze.Any(w => !string.IsNullOrEmpty(w.Gtin));
 
         c.Column(col =>
         {
@@ -549,16 +611,31 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 table.ColumnsDefinition(cols =>
                 {
                     cols.ConstantColumn(18);  // Lp
-                    if (hasUuId) cols.ConstantColumn(72); // UU_ID
+                    if (hasUuId)
+                    {
+                        cols.ConstantColumn(72); // UU_ID
+                    }
+
                     cols.RelativeColumn(3);   // Nazwa
                     cols.ConstantColumn(26);  // Cena netto
-                    if (hasGross) cols.ConstantColumn(28); // Cena brutto
+                    if (hasGross)
+                    {
+                        cols.ConstantColumn(28); // Cena brutto
+                    }
+
                     cols.ConstantColumn(22);  // Ilość
                     cols.ConstantColumn(24);  // Miara
                     cols.ConstantColumn(22);  // Stawka
                     cols.ConstantColumn(32);  // Wart. netto
-                    if (hasGross) cols.ConstantColumn(32); // Wart. brutto
-                    if (hasFx) cols.ConstantColumn(32);    // Kurs
+                    if (hasGross)
+                    {
+                        cols.ConstantColumn(32); // Wart. brutto
+                    }
+
+                    if (hasFx)
+                    {
+                        cols.ConstantColumn(32);    // Kurs
+                    }
                 });
 
                 table.Header(h =>
@@ -568,41 +645,77 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                             .Text(text).FontSize(6.5f).Bold().FontColor(Colors.White);
 
                     Th("Lp.");
-                    if (hasUuId) Th("Unikalny numer wiersza");
+                    if (hasUuId)
+                    {
+                        Th("Unikalny numer wiersza");
+                    }
+
                     Th("Nazwa towaru\nlub usługi");
                     Th("Cena\njedn.\nnetto");
-                    if (hasGross) Th("Cena jedn.\nbrutto");
+                    if (hasGross)
+                    {
+                        Th("Cena jedn.\nbrutto");
+                    }
+
                     Th("Ilość");
                     Th("Miara");
                     Th("Stawka\npodatku");
                     Th("Wartość\nsprzedaży netto");
-                    if (hasGross) Th("Wartość\nsprzedaży\nbrutto");
-                    if (hasFx) Th("Kurs\nwaluty");
+                    if (hasGross)
+                    {
+                        Th("Wartość\nsprzedaży\nbrutto");
+                    }
+
+                    if (hasFx)
+                    {
+                        Th("Kurs\nwaluty");
+                    }
                 });
 
-                foreach (var (w, i) in d.Wiersze.Select((w, i) => (w, i)))
+                foreach ((InvoiceLine? w, int i) in d.Wiersze.Select((w, i) => (w, i)))
                 {
                     string bg = i % 2 == 0 ? Colors.White : LightGray;
                     void Td(string? text, bool right = false, bool center = false)
                     {
-                        var cell = table.Cell().Background(bg)
+                        IContainer cell = table.Cell().Background(bg)
                             .BorderBottom(0.5f).BorderColor(BorderGray).Padding(3);
-                        var txt = cell.Text(text ?? "").FontSize(7.5f);
-                        if (right) txt.AlignRight();
-                        else if (center) txt.AlignCenter();
+                        TextBlockDescriptor txt = cell.Text(text ?? "").FontSize(7.5f);
+                        if (right)
+                        {
+                            txt.AlignRight();
+                        }
+                        else if (center)
+                        {
+                            txt.AlignCenter();
+                        }
                     }
 
                     Td(w.Nr.ToString(), center: true);
-                    if (hasUuId) Td(w.UuId);
+                    if (hasUuId)
+                    {
+                        Td(w.UuId);
+                    }
+
                     Td(w.Name);
                     Td(w.UnitNetPrice, right: true);
-                    if (hasGross) Td(w.UnitGrossPrice, right: true);
+                    if (hasGross)
+                    {
+                        Td(w.UnitGrossPrice, right: true);
+                    }
+
                     Td(w.Qty, right: true);
                     Td(w.Unit, center: true);
                     Td(FormatVatRate(w.VatRate), center: true);
                     Td(w.NetTotal, right: true);
-                    if (hasGross) Td(w.GrossTotal, right: true);
-                    if (hasFx) Td(w.ExchangeRate, right: true);
+                    if (hasGross)
+                    {
+                        Td(w.GrossTotal, right: true);
+                    }
+
+                    if (hasFx)
+                    {
+                        Td(w.ExchangeRate, right: true);
+                    }
                 }
             });
 
@@ -623,9 +736,13 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                         h.Cell().Background(Blue).Padding(3)
                             .Text("GTIN").FontSize(6.5f).Bold().FontColor(Colors.White);
                     });
-                    foreach (var (w, i) in d.Wiersze.Select((w, i) => (w, i)))
+                    foreach ((InvoiceLine? w, int i) in d.Wiersze.Select((w, i) => (w, i)))
                     {
-                        if (string.IsNullOrEmpty(w.Gtin)) continue;
+                        if (string.IsNullOrEmpty(w.Gtin))
+                        {
+                            continue;
+                        }
+
                         string bg = i % 2 == 0 ? Colors.White : LightGray;
                         table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(BorderGray)
                             .Padding(3).Text(w.Nr.ToString()).FontSize(7.5f).AlignCenter();
@@ -662,7 +779,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     Th("Lp."); Th("Stawka podatku"); Th("Kwota netto"); Th("Kwota podatku"); Th("Kwota brutto");
                 });
 
-                foreach (var (row, i) in d.VatRows.Select((r, i) => (r, i)))
+                foreach ((VatRow? row, int i) in d.VatRows.Select((r, i) => (r, i)))
                 {
                     string bg = i % 2 == 0 ? Colors.White : LightGray;
                     decimal net = Parse(row.Net);
@@ -696,29 +813,40 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 row.RelativeItem().Column(left =>
                 {
                     if (d.Zaplacono)
+                    {
                         left.Item().Text(t =>
                         {
                             t.Span("Informacja o płatności: ").FontSize(7.5f).FontColor(Gray);
                             t.Span("Zapłacono").FontSize(7.5f).Bold().FontColor("#2a7a2a");
                         });
+                    }
+
                     if (!string.IsNullOrEmpty(d.DataZaplaty))
+                    {
                         left.Item().PaddingTop(1).Text(t =>
                         {
                             t.Span("Data zapłaty: ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.DataZaplaty).FontSize(7.5f);
                         });
+                    }
+
                     if (!string.IsNullOrEmpty(d.FormaPlatnosci))
+                    {
                         left.Item().PaddingTop(1).Text(t =>
                         {
                             t.Span("Forma płatności: ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.FormaPlatnosci).FontSize(7.5f);
                         });
-                    foreach (var termin in d.TerminyPlatnosci)
+                    }
+
+                    foreach (string termin in d.TerminyPlatnosci)
+                    {
                         left.Item().PaddingTop(1).Text(t =>
                         {
                             t.Span("Termin płatności: ").FontSize(7.5f).FontColor(Gray);
                             t.Span(termin).FontSize(7.5f);
                         });
+                    }
                 });
 
                 if (d.RachunekBankowy is not null)
@@ -728,12 +856,20 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     {
                         right.Item().Text("Rachunek bankowy").FontSize(7.5f).Bold().FontColor(Gray);
                         if (!string.IsNullOrEmpty(d.RachunekBankowy.NrRB))
+                        {
                             right.Item().PaddingTop(1)
                                 .Text(FormatIban(d.RachunekBankowy.NrRB)).FontSize(7.5f);
+                        }
+
                         if (!string.IsNullOrEmpty(d.RachunekBankowy.NazwaBanku))
+                        {
                             right.Item().Text(d.RachunekBankowy.NazwaBanku).FontSize(7.5f).FontColor(Gray);
+                        }
+
                         if (!string.IsNullOrEmpty(d.RachunekBankowy.OpisRachunku))
+                        {
                             right.Item().Text(d.RachunekBankowy.OpisRachunku).FontSize(7.5f).FontColor(Gray);
+                        }
                     });
                 }
             });
@@ -747,7 +883,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
         c.BorderTop(0.5f).BorderColor(BorderGray).PaddingTop(6).Column(col =>
         {
             col.Item().Text("Informacje dodatkowe").FontSize(9).Bold().FontColor(Colors.Black);
-            foreach (var (klucz, wartosc) in d.DodatkowyOpis)
+            foreach ((string? klucz, string? wartosc) in d.DodatkowyOpis)
             {
                 col.Item().PaddingTop(3).Row(row =>
                 {
@@ -784,8 +920,10 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
         c.BorderTop(0.5f).BorderColor(BorderGray).PaddingTop(6).Column(col =>
         {
             col.Item().Text("Umowy").FontSize(9).Bold().FontColor(Colors.Black);
-            foreach (var nr in d.NrUmowy)
+            foreach (string nr in d.NrUmowy)
+            {
                 col.Item().PaddingTop(2).Text(nr).FontSize(7.5f);
+            }
         });
     }
 
@@ -831,7 +969,9 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
             {
                 t.DefaultTextStyle(s => s.FontSize(7).FontColor(Gray));
                 if (!string.IsNullOrEmpty(d.SystemInfo))
+                {
                     t.Span($"Wytworzona w: {d.SystemInfo}");
+                }
             });
             row.ConstantItem(80).AlignRight().Text(t =>
             {
@@ -849,13 +989,13 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
     private static string FormatVatRate(string? rate) => rate switch
     {
         "23" => "23%",
-        "8"  => "8%",
-        "5"  => "5%",
-        "0"  => "0%",
+        "8" => "8%",
+        "5" => "5%",
+        "0" => "0%",
         "zw" => "zw",
         "np" => "np",
         null => "—",
-        _    => rate + "%"
+        _ => rate + "%"
     };
 
     private static string FormatIban(string nr)
@@ -879,11 +1019,11 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
         "CZ" => "Czechy",
         "SK" => "Słowacja",
         null => "",
-        _    => code
+        _ => code
     };
 
     private static decimal Parse(string? s) =>
-        decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0;
+        decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal v) ? v : 0;
 }
 
 // ── Public entry point ───────────────────────────────────────────────────────
@@ -892,7 +1032,7 @@ public static class KSeFInvoicePdf
 {
     public static byte[] FromXml(string xmlContent, string? colorScheme = null)
     {
-        var data = KSeFInvoiceParser.Parse(xmlContent);
+        InvoiceData data = KSeFInvoiceParser.Parse(xmlContent);
         return KSeFInvoicePdfGenerator.Generate(data, PdfColorScheme.FromName(colorScheme));
     }
 }
