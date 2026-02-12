@@ -32,7 +32,7 @@ jobs:
             target: win-x64
             exe: ksefcli.exe
             artifact: ksefcli-win-x64.exe
-          - runner: macos-13
+          - runner: macos-15-intel
             target: osx-x64
             exe: ksefcli
             artifact: ksefcli-osx-x64
