@@ -261,9 +261,10 @@ public class GuiCommand : IWithConfigCommand
                 try
                 {
                     IServiceScope switchedScope = GetScope();
+                    IKSeFClient switchedClient = switchedScope.ServiceProvider.GetRequiredService<IKSeFClient>();
                     _scope?.Dispose();
                     _scope = switchedScope;
-                    _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+                    _ksefClient = switchedClient;
                     string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
                     Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
                 }
@@ -417,9 +418,10 @@ public class GuiCommand : IWithConfigCommand
                 try
                 {
                     IServiceScope savedScope = GetScope();
+                    IKSeFClient savedClient = savedScope.ServiceProvider.GetRequiredService<IKSeFClient>();
                     _scope?.Dispose();
                     _scope = savedScope;
-                    _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+                    _ksefClient = savedClient;
                 }
                 catch
                 {
