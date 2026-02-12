@@ -11,6 +11,9 @@ public class XML2PDFCommand : IGlobalCommand
     [Value(1, HelpText = "Output PDF file path.")]
     public string? OutputFile { get; set; }
 
+    [Option('s', "color-scheme", HelpText = "PDF colour scheme: navy (default), forest, slate.")]
+    public string? ColorScheme { get; set; }
+
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         ConfigureLogging();
@@ -42,7 +45,7 @@ public class XML2PDFCommand : IGlobalCommand
         }
 
         string xmlContent = await File.ReadAllTextAsync(InputFile, cancellationToken).ConfigureAwait(false);
-        byte[] pdfContent = await XML2PDF(xmlContent, Quiet, cancellationToken).ConfigureAwait(false);
+        byte[] pdfContent = await XML2PDF(xmlContent, Quiet, cancellationToken, ColorScheme).ConfigureAwait(false);
 
         await File.WriteAllBytesAsync(outputPdfPath, pdfContent, cancellationToken).ConfigureAwait(false);
 
@@ -51,78 +54,18 @@ public class XML2PDFCommand : IGlobalCommand
         return 0;
     }
 
-    private static string[] GetPdfCommand(string inputXml, string outputPdf)
+    public static Task<byte[]> XML2PDF(string xmlContent, bool quiet, CancellationToken cancellationToken, string? colorScheme = null)
     {
-        // 1. Check for bundled SEA binary alongside ksefcli
-        string ext = OperatingSystem.IsWindows() ? ".exe" : "";
-        string bundledPath = Path.Combine(AppContext.BaseDirectory, $"ksef-pdf-generator{ext}");
-        if (File.Exists(bundledPath))
+        if (!quiet)
         {
-            return [bundledPath, "invoice", inputXml, outputPdf];
+            Console.WriteLine("Generating PDF (native renderer)...");
         }
 
-        // 2. Check for ksef-pdf-generator in PATH
-        if (Subprocess.CheckCommandExists("ksef-pdf-generator"))
-        {
-            return ["ksef-pdf-generator", "invoice", inputXml, outputPdf];
-        }
-
-        // 3. Fallback to npx (requires git to be installed)
-        if (!Subprocess.CheckCommandExists("npx"))
-        {
-            throw new InvalidOperationException(
-                "ksef-pdf-generator not found. Either place it alongside ksefcli, install Node.js (npx), or disable PDF export.");
-        }
-
-        return ["npx", "--yes", "github:kamilcuk/ksef-pdf-generator", "invoice", inputXml, outputPdf];
-    }
-
-    public static async Task<byte[]> XML2PDF(string xmlContent, bool quiet, CancellationToken cancellationToken)
-    {
-        using TemporaryFile tempXml = new(extension: ".xml");
-        await File.WriteAllTextAsync(tempXml.Path, xmlContent, cancellationToken).ConfigureAwait(false);
-        using TemporaryFile tempPdf = new(extension: ".pdf");
-
-        string[] cmd = GetPdfCommand(tempXml.Path, tempPdf.Path);
-
-        Subprocess proc = new(CommandAndArgs: cmd, Environment: null, Quiet: quiet);
-        try
-        {
-            await proc.CheckCallAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (InvalidOperationException) when (cmd[0] is "npx" or "ksef-pdf-generator")
-        {
-            // On Windows, npm may exit with code 1 due to EPERM errors during cache cleanup
-            // even when PDF generation succeeded. Treat it as success if the output file exists.
-            FileInfo fi = new(tempPdf.Path);
-            if (!fi.Exists || fi.Length == 0)
-            {
-                throw;
-            }
-        }
-        return await File.ReadAllBytesAsync(tempPdf.Path, cancellationToken).ConfigureAwait(false);
+        return Task.FromResult(KSeFInvoicePdf.FromXml(xmlContent, colorScheme));
     }
 
     public static void AssertPdfGeneratorAvailable()
     {
-        string ext = OperatingSystem.IsWindows() ? ".exe" : "";
-        string bundledPath = Path.Combine(AppContext.BaseDirectory, $"ksef-pdf-generator{ext}");
-        if (File.Exists(bundledPath))
-        {
-            return;
-        }
-
-        if (Subprocess.CheckCommandExists("ksef-pdf-generator"))
-        {
-            return;
-        }
-
-        if (Subprocess.CheckCommandExists("npx"))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            "PDF generation requires ksef-pdf-generator binary or Node.js (npx). Neither found.");
+        // Native renderer — always available, no external dependencies required.
     }
 }

@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace KSeFCli;
 
 internal record SearchParams(string SubjectType, string From, string? To, string DateType);
-internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false);
+internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null);
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip);
 
 internal sealed class WebProgressServer : IDisposable
@@ -738,6 +738,15 @@ body.dark .sort-arrow{color:#666}
   <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer"><input type="checkbox" id="expJson" onchange="savePrefs()"> JSON</label>
   <span style="color:#ccc;margin:0 .3rem">|</span>
   <div class="field" style="flex-direction:row;align-items:center;gap:.3rem">
+    <label style="font-size:.78rem;font-weight:600;color:#555;white-space:nowrap">Schemat kolorów PDF:</label>
+    <select id="pdfColorScheme" style="font-size:.8rem;padding:.2rem .4rem" onchange="savePrefs()">
+      <option value="navy">Granatowy</option>
+      <option value="forest">Zielony</option>
+      <option value="slate">Szary</option>
+    </select>
+  </div>
+  <span style="color:#ccc;margin:0 .3rem">|</span>
+  <div class="field" style="flex-direction:row;align-items:center;gap:.3rem">
     <label style="font-size:.78rem;font-weight:600;color:#555;white-space:nowrap">Port LAN:</label>
     <input id="lanPort" type="number" value="8150" min="1024" max="65535" style="width:70px;font-size:.8rem;padding:.2rem .4rem" onchange="savePrefs()">
     <span style="font-size:.7rem;color:#999">(restart)</span>
@@ -841,6 +850,7 @@ async function loadPrefs() {
       if (p.lanPort) $('lanPort').value = p.lanPort;
       if (p.darkMode) { $('darkMode').checked = true; document.body.classList.add('dark'); }
       if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
+      if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
       if (p.profileNip) $('profileNipLabel').textContent = p.profileNip;
       // Populate profile dropdown
       if (p.allProfiles) {
@@ -874,6 +884,7 @@ function applySetupMode(required) {
 // --- Token status ---
 let tokenExpiry = null; // Date object for access token expiry
 let tokenRefreshExpiry = null;
+let searchRunning = false;
 
 async function fetchTokenStatus() {
   try {
@@ -900,6 +911,7 @@ function updateAuthButton() {
   if (!tokenExpiry) {
     btn.classList.add('auth-unknown');
     info.textContent = 'brak tokenu';
+    if (!searchRunning) $('btnSearch').disabled = true;
     return;
   }
 
@@ -912,13 +924,16 @@ function updateAuthButton() {
     btn.classList.add('auth-expired');
     info.textContent = 'token wygasl (' + timeStr + ')';
     info.style.color = '#c62828';
+    if (!searchRunning) $('btnSearch').disabled = true;
   } else if (diffMin <= 5) {
     btn.classList.add('auth-warning');
     info.textContent = 'wygasa o ' + timeStr;
     info.style.color = '#e65100';
+    if (!searchRunning) $('btnSearch').disabled = false;
   } else {
     info.textContent = 'wazny do ' + timeStr;
     info.style.color = '#2e7d32';
+    if (!searchRunning) $('btnSearch').disabled = false;
   }
 }
 
@@ -937,6 +952,7 @@ function savePrefs() {
     separateByNip: $('separateByNip').checked,
     darkMode: $('darkMode').checked,
     previewDarkMode: $('previewDarkMode').checked,
+    pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
     lanPort: parseInt($('lanPort').value) || 8150
   };
@@ -1400,6 +1416,7 @@ function monthToTo(val) {
 }
 
 async function doSearch() {
+  searchRunning = true;
   btnSearch.disabled = true; btnDownload.disabled = true; btnDownloadSel.disabled = true;
   downloadBar.style.display = 'none';
   selToolbar.classList.remove('visible');
@@ -1431,11 +1448,13 @@ async function doSearch() {
     buildCurrencyFilter();
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
+    searchRunning = false;
     btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true;
     checkExisting();
   } catch (err) {
+    searchRunning = false;
     setStatus('Blad: ' + err.message, 'error');
-    btnSearch.disabled = false;
+    updateAuthButton();
   }
 }
 
@@ -1464,7 +1483,8 @@ async function doDownload(selOnly) {
       exportXml: $('expXml').checked,
       exportJson: $('expJson').checked,
       exportPdf: $('expPdf').checked,
-      separateByNip: $('separateByNip').checked
+      separateByNip: $('separateByNip').checked,
+      pdfColorScheme: $('pdfColorScheme').value
     };
     const res = await fetch('/download', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Download failed'); }
