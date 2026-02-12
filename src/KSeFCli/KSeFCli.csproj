@@ -32,6 +32,12 @@
     </ItemGroup>
   </Target>
 
+  <!-- Extract native libs (SkiaSharp/QuestPDF) from single-file bundle at startup.
+       Required on Windows; harmless on Linux/macOS. Only active during publish. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.2" />
@@ -42,7 +48,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
-    <PackageReference Include="QuestPDF" Version="2024.12.0" />
+    <PackageReference Include="QuestPDF" Version="2025.12.4" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client/KSeF.Client.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002;CA1305;CA1852;CA1816;CA1852;CA1305;CS9107;CA1805" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.Core/KSeF.Client.Core.csproj" NoWarn="CA1805" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.ClientFactory/KSeF.Client.ClientFactory.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002;CA1305;CA1852;CA1816;CA1852;CA1305;CS9107;CA1805" />

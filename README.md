@@ -33,6 +33,12 @@ Umieść `ksefcli-osx-arm64` (Apple Silicon) lub `ksefcli-osx-x64` (Intel) w wyb
 chmod +x ksefcli-osx-arm64
 ```
 
+Plik pobrany z internetu jest domyślnie objęty kwarantanną macOS (Gatekeeper), co blokuje ładowanie natywnych bibliotek i powoduje błąd przy generowaniu PDF. Usuń atrybut kwarantanny przed pierwszym uruchomieniem:
+
+```bash
+xattr -dr com.apple.quarantine ksefcli-osx-arm64
+```
+
 #### Linux
 
 Umieść `ksefcli-linux-x64` w wybranym miejscu i nadaj uprawnienia do wykonania:
@@ -257,6 +263,12 @@ Place `ksefcli-osx-arm64` (Apple Silicon) or `ksefcli-osx-x64` (Intel) anywhere 
 
 ```bash
 chmod +x ksefcli-osx-arm64
+```
+
+Files downloaded from the internet are quarantined by macOS Gatekeeper, which prevents native libraries from loading and causes a crash on PDF generation. Clear the quarantine attribute before first run:
+
+```bash
+xattr -dr com.apple.quarantine ksefcli-osx-arm64
 ```
 
 #### Linux
