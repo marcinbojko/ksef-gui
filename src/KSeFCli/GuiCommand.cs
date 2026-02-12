@@ -254,15 +254,27 @@ public class GuiCommand : IWithConfigCommand
             ));
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
             {
+                string previousProfile = ActiveProfile;
                 ActiveProfile = newProfile;
                 ResetCachedConfig();
-                _cachedInvoices = null;
-                IServiceScope switchedScope = GetScope(); // may throw — old scope stays intact
-                _scope?.Dispose();
-                _scope = switchedScope;
-                _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-                string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
-                Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
+                try
+                {
+                    IServiceScope switchedScope = GetScope();
+                    IKSeFClient switchedClient = switchedScope.ServiceProvider.GetRequiredService<IKSeFClient>();
+                    _scope?.Dispose();
+                    _scope = switchedScope;
+                    _ksefClient = switchedClient;
+                    _cachedInvoices = null; // clear only after successful switch
+                    string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
+                    Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
+                }
+                catch
+                {
+                    // Rollback: restore the valid previous profile so Config() keeps working
+                    ActiveProfile = previousProfile;
+                    ResetCachedConfig();
+                    throw;
+                }
             }
             return Task.CompletedTask;
         };
@@ -400,12 +412,23 @@ public class GuiCommand : IWithConfigCommand
 
                 // Update active profile and flush all cached config/token state
                 // so the next API call reads the freshly saved yaml from disk
+                string previousActiveProfile = ActiveProfile;
                 ActiveProfile = data.ActiveProfile;
                 ResetCachedConfig();
-                IServiceScope savedScope = GetScope(); // may throw — old scope stays intact
-                _scope?.Dispose();
-                _scope = savedScope;
-                _ksefClient = _scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+                try
+                {
+                    IServiceScope savedScope = GetScope();
+                    IKSeFClient savedClient = savedScope.ServiceProvider.GetRequiredService<IKSeFClient>();
+                    _scope?.Dispose();
+                    _scope = savedScope;
+                    _ksefClient = savedClient;
+                }
+                catch
+                {
+                    ActiveProfile = previousActiveProfile;
+                    ResetCachedConfig();
+                    throw;
+                }
 
                 // Clear setup mode — config now exists
                 _setupRequired = false;
