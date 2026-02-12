@@ -53,5 +53,9 @@ public class PdfGenerationTests
         byte[] pdf = KSeFInvoicePdf.FromXml(xml, scheme);
         Assert.NotNull(pdf);
         Assert.True(pdf.Length > 1024);
+        Assert.Equal((byte)'%', pdf[0]);
+        Assert.Equal((byte)'P', pdf[1]);
+        Assert.Equal((byte)'D', pdf[2]);
+        Assert.Equal((byte)'F', pdf[3]);
     }
 }
