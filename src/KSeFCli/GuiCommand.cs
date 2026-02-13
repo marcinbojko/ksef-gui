@@ -51,6 +51,7 @@ public class GuiCommand : IWithConfigCommand
         bool? SeparateByNip = null,
         string? SelectedProfile = null,
         int? LanPort = null,
+        bool? ListenOnAll = null,
         bool? DarkMode = null,
         bool? PreviewDarkMode = null,
         bool? DetailsDarkMode = null,
@@ -207,7 +208,8 @@ public class GuiCommand : IWithConfigCommand
         }
 
         int lanPort = savedPrefs.LanPort ?? DefaultLanPort;
-        using WebProgressServer server = new WebProgressServer(lan: Lan, port: lanPort);
+        bool listenOnAll = Lan || (savedPrefs.ListenOnAll ?? false);
+        using WebProgressServer server = new WebProgressServer(lan: listenOnAll, port: lanPort);
         _server = server;
 
         server.OnSearch = SearchAsync;
@@ -234,6 +236,8 @@ public class GuiCommand : IWithConfigCommand
                 selectedProfile = ActiveProfile,
                 allProfiles = _allProfiles,
                 lanPort = prefs.LanPort ?? DefaultLanPort,
+                listenOnAll = prefs.ListenOnAll ?? false,
+                serverUrl = server.LocalUrl,
                 darkMode = prefs.DarkMode ?? false,
                 previewDarkMode = prefs.PreviewDarkMode ?? false,
                 detailsDarkMode = prefs.DetailsDarkMode ?? false,
@@ -259,6 +263,7 @@ public class GuiCommand : IWithConfigCommand
                 SeparateByNip: root.TryGetProperty("separateByNip", out JsonElement sn) ? sn.GetBoolean() : null,
                 SelectedProfile: newProfile,
                 LanPort: root.TryGetProperty("lanPort", out JsonElement lp) ? lp.GetInt32() : null,
+                ListenOnAll: root.TryGetProperty("listenOnAll", out JsonElement loa) ? loa.GetBoolean() : null,
                 DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
                 PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null,
                 DetailsDarkMode: root.TryGetProperty("detailsDarkMode", out JsonElement ddm) ? ddm.GetBoolean() : null,

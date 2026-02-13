@@ -787,6 +787,7 @@ body.dark .pref-label{color:#aaa}
     <div class="prefs-tabs">
       <button class="prefs-tab active" id="ptab-general" onclick="switchPrefsTab('general',this)">Ogólne</button>
       <button class="prefs-tab" id="ptab-export" onclick="switchPrefsTab('export',this)">Eksport</button>
+      <button class="prefs-tab" id="ptab-network" onclick="switchPrefsTab('network',this)">Sieć</button>
       <button class="prefs-tab" id="ptab-appearance" onclick="switchPrefsTab('appearance',this)">Wygląd</button>
     </div>
     <div style="overflow-y:auto;flex:1;padding:.6rem 1rem">
@@ -815,12 +816,29 @@ body.dark .pref-label{color:#aaa}
             <span style="font-size:.75rem;color:#999">0 = wyłączone</span>
           </div>
         </div>
+      </div>
+      <div class="prefs-pane" id="pane-network" style="display:none">
         <div class="pref-row">
-          <span class="pref-label">Port LAN</span>
+          <span class="pref-label">Port nasłuchiwania</span>
           <div style="display:flex;align-items:center;gap:.5rem">
             <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:80px" onchange="savePrefs()">
             <span style="font-size:.75rem;color:#999">wymaga restartu</span>
           </div>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Tryb nasłuchiwania</span>
+          <div style="display:flex;flex-direction:column;gap:.4rem;font-size:.85rem">
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+              <input type="radio" name="listenMode" id="listenLocal" value="local" onchange="savePrefs()"> Tylko localhost (127.0.0.1)
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+              <input type="radio" name="listenMode" id="listenAll" value="all" onchange="savePrefs()"> Sieć lokalna (0.0.0.0) — wymaga restartu
+            </label>
+          </div>
+        </div>
+        <div class="pref-row" style="align-items:flex-start">
+          <span class="pref-label" style="padding-top:.1rem">Aktualny adres</span>
+          <span id="serverUrl" style="font-size:.85rem;font-family:monospace;word-break:break-all"></span>
         </div>
       </div>
       <div class="prefs-pane" id="pane-export" style="display:none">
@@ -966,6 +984,9 @@ async function loadPrefs() {
       if (p.customFilenames != null) $('customFilenames').checked = p.customFilenames;
       if (p.separateByNip != null) $('separateByNip').checked = p.separateByNip;
       if (p.lanPort) $('lanPort').value = p.lanPort;
+      $('listenLocal').checked = !p.listenOnAll;
+      $('listenAll').checked = !!p.listenOnAll;
+      if (p.serverUrl) $('serverUrl').textContent = p.serverUrl;
       if (p.darkMode) { $('darkMode').checked = true; document.body.classList.add('dark'); }
       if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
       if (p.detailsDarkMode) { $('detailsDarkMode').checked = true; }
@@ -1078,6 +1099,7 @@ function savePrefs() {
     pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
     lanPort: parseInt($('lanPort').value) || 18150,
+    listenOnAll: $('listenAll').checked,
     autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0,
     jsonConsoleLog: $('jsonConsoleLog').checked
   };
