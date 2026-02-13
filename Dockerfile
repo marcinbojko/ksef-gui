@@ -38,7 +38,7 @@ LABEL org.opencontainers.image.source="https://github.com/marcinbojko/ksef-gui"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+    libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /output
 
