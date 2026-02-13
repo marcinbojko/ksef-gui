@@ -9,7 +9,7 @@ public static class Log
 {
     private static ILoggerFactory? _loggerFactory;
 
-    public static ILogger<object> Logger { get; private set; } = default!;
+    public static ILogger<object> Logger { get; private set; } = Microsoft.Extensions.Logging.Abstractions.NullLogger<object>.Instance;
 
     public static void ConfigureLogging(bool verbose = false, bool quiet = false)
     {
