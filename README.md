@@ -154,12 +154,16 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 Zakładka **Ogólne**:
 - Katalog wyjściowy, formaty eksportu (XML / PDF / JSON), schemat nazw plików
 - Separacja po NIP (podkatalog = NIP aktywnego profilu)
-- Port LAN (zmiana wymaga restartu)
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
 - **Auto-odświeżanie** — cykliczne wyszukiwanie w tle co N minut (0 = wyłączone); gdy pojawiają się nowe faktury, wyświetlane są powiadomienia (pasek tytułu, toast, powiadomienie systemowe przeglądarki)
 
 Zakładka **Eksport**:
 - Szczegółowe opcje eksportu plików
+
+Zakładka **Sieć**:
+- Port nasłuchiwania (domyślnie `18150`) — zmiana wymaga restartu
+- Tryb nasłuchiwania: **Tylko localhost** (domyślnie) lub **Sieć lokalna (0.0.0.0)**
+- Wyświetla aktualny adres URL serwera
 
 Zakładka **Wygląd**:
 - Trzy niezależne tryby ciemne: interfejs GUI, podgląd faktury (HTML), szczegóły faktury
@@ -195,32 +199,54 @@ Po zapisaniu profilu — wszystkie przyciski odblokowują się bez restartu.
 Dla uruchomienia na serwerze, NAS lub w środowisku Docker:
 
 ```bash
-docker compose up --build
-# GUI dostępne pod http://localhost:8150
+cp .env.example .env   # uzupełnij KSEFCLI_HOSTNAME i opcjonalnie KSEFCLI_BASICAUTH_USERS
+docker compose up -d
 ```
 
-```yaml
-# docker-compose.yml
-services:
-  ksefcli:
-    build: .
-    ports:
-      - "8150:8150"
-    volumes:
-      - ./output:/data                                           # pobrane faktury
-      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro  # konfiguracja (tylko do odczytu)
-      - ksefcli-cache:/root/.cache/ksefcli                     # cache tokenów (wolumin nazwany)
-    environment:
-      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
-    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+#### Architektura
 
-volumes:
-  ksefcli-cache:
-```
+| Serwis | Rola |
+|--------|------|
+| **ksefcli** | GUI nasłuchuje na porcie `18150`, wystawione przez Traefik |
+| **Traefik** | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, opcjonalne basic-auth |
+| **Ofelia** | Harmonogram zadań — rotacja logów, health-probe, opcjonalne czyszczenie starych faktur |
+
+#### Sieć
+
+Compose definiuje dwie wewnętrzne sieci (nie wymagają wcześniejszego tworzenia):
+
+- **front** — Traefik ↔ ksefcli (ruch publiczny)
+- **back** (izolowana, bez dostępu do internetu) — ksefcli ↔ ofelia
+
+#### Zmienne środowiskowe (`.env`)
+
+Skopiuj `.env.example` i dostosuj:
+
+| Zmienna | Opis | Domyślnie |
+|---------|------|-----------|
+| `TZ` | Strefa czasowa | `Europe/Warsaw` |
+| `TRAEFIK_TAG` | Tag obrazu Traefik | `v3.3` |
+| `ACME_EMAIL` | E-mail do rejestracji Let's Encrypt (wymagany) | — |
+| `TRAEFIK_CERT_RESOLVER` | Nazwa resolwera (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
+| `KSEFCLI_TAG` | Tag obrazu Docker | `latest` |
+| `KSEFCLI_PORT` | Port wewnętrzny | `18150` |
+| `KSEFCLI_HOSTNAME` | Hostname za Traefik (np. `ksef.example.com`) | — |
+| `KSEFCLI_BASICAUTH_USERS` | Hash basic-auth (`htpasswd -nb user pass`) | wyłączone |
+| `OFELIA_TAG` | Tag obrazu Ofelia | `latest` |
+
+#### Ofelia — zadania cykliczne (`ofelia/config.ini`)
+
+| Zadanie | Harmonogram | Opis |
+|---------|-------------|------|
+| `log-rotate` | `@daily` | Usuwa logi Serilog starsze niż 7 dni |
+| `health-check` | `@every 5m` | Restartuje kontener jeśli healthcheck zawiedzie |
+| `cleanup-old-invoices` | `@weekly` *(wyłączone)* | Usuwa faktury starsze niż 365 dni |
+
+#### Woluminy i pliki
 
 - `./output` — pobrane faktury pojawiają się bezpośrednio na hoście
-- `./ksefcli.yaml` — edytujesz lokalnie, kontener odczytuje
-- `ksefcli-cache` — wolumin nazwany; tokeny przeżywają `docker compose down/up`
+- `./ksefcli.yaml` — edytujesz lokalnie, kontener odczytuje (`:ro`)
+- `ksefcli-cache` — wolumin nazwany; tokeny i preferencje przeżywają `docker compose down/up`
 
 ### Eksport PDF
 
@@ -403,12 +429,16 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 **General** tab:
 - Output directory, export formats (XML / PDF / JSON), filename style
 - Separate-by-NIP option (subdirectory = active profile's NIP)
-- LAN port (change takes effect on next start)
 - Active profile selection (persisted across sessions; switching takes effect immediately without restart)
 - **Auto-refresh** — background search every N minutes (0 = disabled); when new invoices appear, notifications are shown (page title badge, in-page toast, browser Web Notification)
 
 **Export** tab:
 - Detailed file export options
+
+**Network** tab:
+- Listening port (default `18150`) — change takes effect on next restart
+- Listen mode: **Localhost only** (default) or **All interfaces (0.0.0.0)**
+- Displays the current server URL
 
 **Appearance** tab:
 - Three independent dark modes: GUI interface, invoice HTML preview, invoice details panel
@@ -444,32 +474,54 @@ After saving a profile, all buttons re-enable — no restart needed.
 For running on a server, NAS, or in a Docker environment:
 
 ```bash
-docker compose up --build
-# GUI available at http://localhost:8150
+cp .env.example .env   # set KSEFCLI_HOSTNAME and optionally KSEFCLI_BASICAUTH_USERS
+docker compose up -d
 ```
 
-```yaml
-# docker-compose.yml
-services:
-  ksefcli:
-    build: .
-    ports:
-      - "8150:8150"
-    volumes:
-      - ./output:/data                                           # downloaded invoices
-      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro  # config (read-only)
-      - ksefcli-cache:/root/.cache/ksefcli                     # token cache (named volume)
-    environment:
-      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
-    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+#### Architecture
 
-volumes:
-  ksefcli-cache:
-```
+| Service | Role |
+|---------|------|
+| **ksefcli** | GUI listening on port `18150`, exposed via Traefik |
+| **Traefik** | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, optional basic-auth |
+| **Ofelia** | Job scheduler — log rotation, health probe, optional old-invoice cleanup |
+
+#### Networks
+
+Two internal networks (no pre-creation required):
+
+- **front** — Traefik ↔ ksefcli (public-facing traffic)
+- **back** (isolated, no direct internet) — ksefcli ↔ ofelia only
+
+#### Environment variables (`.env`)
+
+Copy `.env.example` and adjust:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TZ` | Timezone | `Europe/Warsaw` |
+| `TRAEFIK_TAG` | Traefik image tag | `v3.3` |
+| `ACME_EMAIL` | Let's Encrypt registration email (required) | — |
+| `TRAEFIK_CERT_RESOLVER` | Cert resolver name (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
+| `KSEFCLI_TAG` | Docker image tag | `latest` |
+| `KSEFCLI_PORT` | Internal port | `18150` |
+| `KSEFCLI_HOSTNAME` | Hostname behind Traefik (e.g. `ksef.example.com`) | — |
+| `KSEFCLI_BASICAUTH_USERS` | Basic-auth hash (`htpasswd -nb user pass`) | disabled |
+| `OFELIA_TAG` | Ofelia image tag | `latest` |
+
+#### Ofelia scheduled jobs (`ofelia/config.ini`)
+
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| `log-rotate` | `@daily` | Deletes Serilog log files older than 7 days |
+| `health-check` | `@every 5m` | Restarts container if healthcheck fails |
+| `cleanup-old-invoices` | `@weekly` *(disabled)* | Deletes invoices older than 365 days |
+
+#### Volumes and files
 
 - `./output` — downloaded invoices appear directly on the host
-- `./ksefcli.yaml` — edit on the host; the container reads it
-- `ksefcli-cache` — named volume; tokens survive `docker compose down/up`
+- `./ksefcli.yaml` — edit on the host; the container reads it (`:ro`)
+- `ksefcli-cache` — named volume; tokens and preferences survive `docker compose down/up`
 
 ### PDF export
 
