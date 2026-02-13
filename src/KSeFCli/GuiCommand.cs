@@ -471,7 +471,10 @@ public class GuiCommand : IWithConfigCommand
     private async Task<object> SearchAsync(SearchParams searchParams, CancellationToken ct)
     {
         ProfileConfig searchProfile = Config();
-        Log.LogInformation($"GUI: search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]");
+        bool isCyclic = searchParams.Source == "auto";
+        Log.LogInformation(isCyclic
+            ? $"GUI: cyclic-search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]"
+            : $"GUI: search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]");
         if (!Enum.TryParse(searchParams.SubjectType, true, out InvoiceSubjectType subjectType))
         {
             subjectType = searchParams.SubjectType.ToLowerInvariant() switch
@@ -552,7 +555,9 @@ public class GuiCommand : IWithConfigCommand
             }
         } while (pagedResponse.HasMore == true);
 
-        Log.LogInformation($"Found {allInvoices.Count} invoices.");
+        Log.LogInformation(isCyclic
+            ? $"GUI: cyclic-search done — {allInvoices.Count} invoices"
+            : $"GUI: search done — {allInvoices.Count} invoices");
         _cachedInvoices = allInvoices;
 
         return allInvoices.Select(i => new
@@ -734,13 +739,13 @@ public class GuiCommand : IWithConfigCommand
     private async Task<string> AuthAsync(CancellationToken ct)
     {
         ProfileConfig activeProfile = Config();
-        Log.LogInformation($"GUI: forcing re-authentication [profile={ActiveProfile}, nip={activeProfile.Nip}, env={activeProfile.Environment}]");
+        Log.LogInformation($"GUI: session-refresh [profile={ActiveProfile}, nip={activeProfile.Nip}, env={activeProfile.Environment}]");
         AuthenticationOperationStatusResponse response = await Auth(_scope!, ct).ConfigureAwait(false);
         TokenStore tokenStore = GetTokenStore();
         TokenStore.Key key = GetTokenStoreKey();
         tokenStore.SetToken(key, new TokenStore.Data(response));
         string validUntil = response.AccessToken.ValidUntil.ToLocalTime().ToString("HH:mm:ss");
-        Log.LogInformation($"GUI: auth OK, access token valid until {response.AccessToken.ValidUntil}");
+        Log.LogInformation($"GUI: session-refresh OK — access token valid until {response.AccessToken.ValidUntil:HH:mm:ss}, refresh token valid until {response.RefreshToken.ValidUntil:HH:mm:ss}");
         return $"Token wazny do {validUntil}";
     }
 

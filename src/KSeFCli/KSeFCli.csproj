@@ -49,6 +49,11 @@
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <PackageReference Include="QuestPDF" Version="2025.12.4" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client/KSeF.Client.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002;CA1305;CA1852;CA1816;CA1852;CA1305;CS9107;CA1805" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.Core/KSeF.Client.Core.csproj" NoWarn="CA1805" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.ClientFactory/KSeF.Client.ClientFactory.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002;CA1305;CA1852;CA1816;CA1852;CA1305;CS9107;CA1805" />
