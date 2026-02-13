@@ -75,6 +75,8 @@ services:
     command:
       - Gui
       - --lan
+      - --port
+      - "${KSEFCLI_PORT:-18150}"
       - -o
       - /data
       - --pdf

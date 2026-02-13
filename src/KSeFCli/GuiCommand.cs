@@ -31,6 +31,9 @@ public class GuiCommand : IWithConfigCommand
     [Option("lan", HelpText = "Allow LAN access (listen on all network interfaces instead of localhost only).")]
     public bool Lan { get; set; }
 
+    [Option("port", HelpText = "Override the listening port (takes priority over saved preferences).")]
+    public int? PortOverride { get; set; }
+
     private List<InvoiceSummary>? _cachedInvoices;
     private IKSeFClient? _ksefClient;
     private IServiceScope? _scope;
@@ -207,7 +210,7 @@ public class GuiCommand : IWithConfigCommand
             }
         }
 
-        int lanPort = savedPrefs.LanPort ?? DefaultLanPort;
+        int lanPort = PortOverride ?? savedPrefs.LanPort ?? DefaultLanPort;
         bool listenOnAll = Lan || (savedPrefs.ListenOnAll ?? false);
         using WebProgressServer server = new WebProgressServer(lan: listenOnAll, port: lanPort);
         _server = server;
