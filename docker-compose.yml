@@ -56,7 +56,7 @@ services:
     build:
       context: .
       args:
-        VERSION: ${KSEFCLI_TAG:-dev}
+        APP_VERSION: ${KSEFCLI_TAG:-dev}
     container_name: ksefcli
     restart: unless-stopped
     stop_grace_period: 15s
