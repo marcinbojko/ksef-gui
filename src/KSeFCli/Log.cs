@@ -40,10 +40,18 @@ public static class Log
                 shared: true)
             .CreateLogger();
 
+        _loggerFactory?.Dispose();
         _loggerFactory = LoggerFactory.Create(builder =>
-            builder.AddSerilog(Serilog.Log.Logger, dispose: false));
+            builder.AddSerilog(Serilog.Log.Logger, dispose: true));
 
         Logger = _loggerFactory.CreateLogger<object>();
+    }
+
+    public static void Shutdown()
+    {
+        _loggerFactory?.Dispose();
+        _loggerFactory = null;
+        Serilog.Log.CloseAndFlush();
     }
 
     public static void LogTrace(string message) => Logger.LogTrace("{Message}", message);

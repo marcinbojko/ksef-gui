@@ -43,38 +43,45 @@ internal class Program
             e.Cancel = true;
         };
 
-        return await result.MapResult(
-            (IGlobalCommand cmd) =>
-            {
-                try
+        try
+        {
+            return await result.MapResult(
+                (IGlobalCommand cmd) =>
                 {
-                    cmd.ConfigureLogging();
-                    return cmd.ExecuteAsync(cts.Token);
-                }
-                catch (Exception ex)
+                    try
+                    {
+                        cmd.ConfigureLogging();
+                        return cmd.ExecuteAsync(cts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine(ex.ToString());
+                        return Task.FromResult(3);
+                    }
+                },
+                errs =>
                 {
-                    Console.Error.WriteLine(ex.ToString());
-                    return Task.FromResult(3);
-                }
-            },
-            errs =>
-            {
-                HelpText helpText = HelpText.AutoBuild(result, h =>
-                {
-                    h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code lisenced under GPLv3.";
-                    // new CopyrightInfo("Kamil Cukrowski", 2026);
-                    h.AdditionalNewLineAfterOption = false;
-                    return h;
-                });
-                Console.WriteLine(helpText);
+                    HelpText helpText = HelpText.AutoBuild(result, h =>
+                    {
+                        h.Copyright = "Copyright (C) 2026 Kamil Cukrowski. Source code lisenced under GPLv3.";
+                        // new CopyrightInfo("Kamil Cukrowski", 2026);
+                        h.AdditionalNewLineAfterOption = false;
+                        return h;
+                    });
+                    Console.WriteLine(helpText);
 
-                if (errs.Any(e => e is HelpRequestedError or HelpVerbRequestedError))
-                {
-                    return Task.FromResult(0);
-                }
+                    if (errs.Any(e => e is HelpRequestedError or HelpVerbRequestedError))
+                    {
+                        return Task.FromResult(0);
+                    }
 
-                return Task.FromResult(1);
-            }
-        ).ConfigureAwait(false);
+                    return Task.FromResult(1);
+                }
+            ).ConfigureAwait(false);
+        }
+        finally
+        {
+            Log.Shutdown();
+        }
     }
 }
