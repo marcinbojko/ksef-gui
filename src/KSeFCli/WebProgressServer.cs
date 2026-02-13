@@ -818,7 +818,7 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Port LAN</span>
           <div style="display:flex;align-items:center;gap:.5rem">
-            <input id="lanPort" type="number" value="8150" min="1024" max="65535" style="width:80px" onchange="savePrefs()">
+            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:80px" onchange="savePrefs()">
             <span style="font-size:.75rem;color:#999">wymaga restartu</span>
           </div>
         </div>
@@ -1077,7 +1077,7 @@ function savePrefs() {
     detailsDarkMode: $('detailsDarkMode').checked,
     pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
-    lanPort: parseInt($('lanPort').value) || 8150,
+    lanPort: parseInt($('lanPort').value) || 18150,
     autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0,
     jsonConsoleLog: $('jsonConsoleLog').checked
   };

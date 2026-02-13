@@ -40,7 +40,7 @@ public class GuiCommand : IWithConfigCommand
 
     private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
 
-    private const int DefaultLanPort = 8150;
+    private const int DefaultLanPort = 18150;
 
     private record GuiPrefs(
         string? OutputDir = null,
@@ -206,7 +206,7 @@ public class GuiCommand : IWithConfigCommand
             }
         }
 
-        int lanPort = Lan ? (savedPrefs.LanPort ?? DefaultLanPort) : 0;
+        int lanPort = savedPrefs.LanPort ?? DefaultLanPort;
         using WebProgressServer server = new WebProgressServer(lan: Lan, port: lanPort);
         _server = server;
 
