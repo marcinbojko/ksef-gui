@@ -66,7 +66,7 @@ services:
       - front
       - back
     volumes:
-      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml
+      - ksefcli-config:/root/.config/ksefcli
       - ./output:/data
       - ksefcli-cache:/root/.cache/ksefcli
     environment:
@@ -134,6 +134,8 @@ networks:
 
 # ── Volumes ───────────────────────────────────────────────────────────────────
 volumes:
+  ksefcli-config:
+    driver: local
   ksefcli-cache:
     driver: local
   traefik-acme:

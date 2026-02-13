@@ -205,15 +205,9 @@ Dla uruchomienia na serwerze, NAS lub w środowisku Docker compose dostarcza kom
 cp .env.example .env
 $EDITOR .env
 
-# 2. Utwórz pusty plik konfiguracyjny (WYMAGANE przed pierwszym uruchomieniem)
-#    Pominięcie tego kroku powoduje, że Docker tworzy katalog zamiast pliku!
-touch ksefcli.yaml
-
-# 3. Uruchom stos
+# 2. Uruchom stos
 docker compose up -d
 ```
-
-> **Ważne — `ksefcli.yaml`:** Ten krok jest obowiązkowy. Jeśli `ksefcli.yaml` nie istnieje jako plik, Docker automatycznie tworzy **katalog** o tej nazwie, co uniemożliwia uruchomienie kontenera. Pusty plik jest wystarczający — GUI wygeneruje w nim szablon konfiguracji przy pierwszym uruchomieniu.
 
 > **Wymaganie DNS:** `KSEFCLI_HOSTNAME` musi wskazywać na adres IP hosta przed uruchomieniem — Traefik użyje go do uzyskania certyfikatu TLS od Let's Encrypt.
 
@@ -306,7 +300,7 @@ Edytuj `ofelia/config.ini` żeby zmienić harmonogramy lub włączyć czyszczeni
 | Ścieżka | Typ | Opis |
 |---------|-----|------|
 | `./output` | bind (rw) | Pobrane faktury pojawiają się bezpośrednio na hoście |
-| `./ksefcli.yaml` | bind (rw) | Edytowany przez GUI i lokalnie; zmiany widoczne natychmiast |
+| `ksefcli-config` | named volume | Konfiguracja ksefcli (`ksefcli.yaml`) — tworzona automatycznie przez aplikację |
 | `./ofelia/config.ini` | bind (ro) | Konfiguracja harmonogramu zadań Ofelia |
 | `ksefcli-cache` | named volume | Tokeny sesji i preferencje GUI — przeżywają `docker compose down/up` |
 | `traefik-acme` | named volume | Certyfikaty TLS Let's Encrypt — zachowane między restartami |
@@ -543,15 +537,9 @@ For running on a server, NAS, or in a Docker environment the compose file provid
 cp .env.example .env
 $EDITOR .env
 
-# 2. Create an empty config file (REQUIRED before first run)
-#    Skipping this step causes Docker to create a directory instead of a file!
-touch ksefcli.yaml
-
-# 3. Bring the stack up
+# 2. Bring the stack up
 docker compose up -d
 ```
-
-> **Important — `ksefcli.yaml`:** This step is mandatory. If `ksefcli.yaml` does not exist as a file, Docker will automatically create a **directory** with that name, which prevents the container from starting. An empty file is sufficient — the GUI will write a config template into it on first run.
 
 > **DNS requirement:** `KSEFCLI_HOSTNAME` must resolve to the host IP before startup — Traefik uses it to obtain a TLS certificate from Let's Encrypt.
 
@@ -644,7 +632,7 @@ Edit `ofelia/config.ini` to change schedules or enable invoice cleanup. Changes 
 | Path | Type | Description |
 |------|------|-------------|
 | `./output` | bind (rw) | Downloaded invoices appear directly on the host |
-| `./ksefcli.yaml` | bind (rw) | Edited by the GUI and on the host; changes are reflected immediately |
+| `ksefcli-config` | named volume | ksefcli configuration (`ksefcli.yaml`) — created automatically by the app |
 | `./ofelia/config.ini` | bind (ro) | Ofelia job scheduler configuration |
 | `ksefcli-cache` | named volume | Session tokens and GUI preferences — survive `docker compose down/up` |
 | `traefik-acme` | named volume | Let's Encrypt TLS certificates — preserved across restarts |
