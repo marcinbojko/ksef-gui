@@ -113,10 +113,7 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
         Log.LogInformation("6. Closing batch session");
         await ksefClient.CloseBatchSessionAsync(result.ReferenceNumber, accessToken).ConfigureAwait(false);
 
-        /* ---------------------------------------------------------------------- */
-        Log.LogInformation("session-check-status-and-get-upo.md");
-
-        Log.LogInformation("4) Waiting for invoice processing");
+        Log.LogInformation("7. Waiting for invoice processing");
         SessionStatusResponse sessionStatus = await AsyncPollingUtils.PollWithBackoffAsync(
             action: () => ksefClient.GetSessionStatusAsync(referenceNumber, accessToken, cancellationToken),
             result => result is not null && result.SuccessfulInvoiceCount is not null,
@@ -137,7 +134,7 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
         // maxAttempts: 30,
         // cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        Log.LogInformation("3. Getting information about submitted invoices");
+        Log.LogInformation("8. Getting information about submitted invoices");
         await PobranieInformacjiNaTematPrzeslanychFaktur(ksefClient, referenceNumber, accessToken, cancellationToken).ConfigureAwait(false);
 
         return 0;
