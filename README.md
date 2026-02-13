@@ -125,6 +125,8 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 
 ### Funkcje GUI
 
+![Główny ekran](images/mainscreen.png)
+
 **Wyszukiwanie faktur**
 - Typ podmiotu: Sprzedawca / Nabywca / Subject3 / Authorized
 - Zakres dat (wybieracz miesięcy), typ daty: Wystawienie / Sprzedaż / PermanentStorage
@@ -151,7 +153,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 
 Zakładka **Ogólne**:
 - Katalog wyjściowy, formaty eksportu (XML / PDF / JSON), schemat nazw plików
-- Separacja po profilu (podkatalog = nazwa aktywnego profilu)
+- Separacja po NIP (podkatalog = NIP aktywnego profilu)
 - Port LAN (zmiana wymaga restartu)
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
 - **Auto-odświeżanie** — cykliczne wyszukiwanie w tle co N minut (0 = wyłączone); gdy pojawiają się nowe faktury, wyświetlane są powiadomienia (pasek tytułu, toast, powiadomienie systemowe przeglądarki)
@@ -166,12 +168,16 @@ Zakładka **Wygląd**:
 
 Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
 
+![Preferencje](images/prefs.png)
+
 **✎ Konfiguracja** (edytor w przeglądarce)
 - Edycja profili: nazwa, NIP, środowisko, metoda uwierzytelnienia
 - Pole tokenu z przełącznikiem widoczności
 - Pola certyfikatu (plik klucza, plik certyfikatu, hasło/env/plik)
 - Dodawanie i usuwanie profili
 - Zmiany zapisywane natychmiast do `ksefcli.yaml`; lista profili odświeżana bez restartu
+
+![Konfiguracja](images/config.png)
 
 ### Kreator pierwszego uruchomienia
 
@@ -367,6 +373,8 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 
 ### GUI features
 
+![Main screen](images/mainscreen.png)
+
 **Invoice search**
 - Subject type: Sprzedawca (seller) / Nabywca (buyer) / Subject3 / Authorized
 - Date range (month picker), date type: Issue / Invoicing / PermanentStorage
@@ -408,12 +416,16 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 
 Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
 
+![Preferences](images/prefs.png)
+
 **✎ Konfiguracja** (in-browser config editor)
 - Edit profiles: name, NIP, environment, auth method
 - Token field with show/hide toggle
 - Certificate fields (key file, cert file, password / env var / file)
 - Add and delete profiles
 - Saves immediately to `ksefcli.yaml`; profile dropdown refreshes without restart
+
+![Configuration](images/config.png)
 
 ### First-run wizard
 
