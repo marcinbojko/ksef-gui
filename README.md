@@ -306,7 +306,7 @@ Edytuj `ofelia/config.ini` żeby zmienić harmonogramy lub włączyć czyszczeni
 | Ścieżka | Typ | Opis |
 |---------|-----|------|
 | `./output` | bind (rw) | Pobrane faktury pojawiają się bezpośrednio na hoście |
-| `./ksefcli.yaml` | bind (ro) | Edytujesz lokalnie; kontener odczytuje bez restartu |
+| `./ksefcli.yaml` | bind (rw) | Edytowany przez GUI i lokalnie; zmiany widoczne natychmiast |
 | `./ofelia/config.ini` | bind (ro) | Konfiguracja harmonogramu zadań Ofelia |
 | `ksefcli-cache` | named volume | Tokeny sesji i preferencje GUI — przeżywają `docker compose down/up` |
 | `traefik-acme` | named volume | Certyfikaty TLS Let's Encrypt — zachowane między restartami |
@@ -644,7 +644,7 @@ Edit `ofelia/config.ini` to change schedules or enable invoice cleanup. Changes 
 | Path | Type | Description |
 |------|------|-------------|
 | `./output` | bind (rw) | Downloaded invoices appear directly on the host |
-| `./ksefcli.yaml` | bind (ro) | Edit on the host; container reads it without restart |
+| `./ksefcli.yaml` | bind (rw) | Edited by the GUI and on the host; changes are reflected immediately |
 | `./ofelia/config.ini` | bind (ro) | Ofelia job scheduler configuration |
 | `ksefcli-cache` | named volume | Session tokens and GUI preferences — survive `docker compose down/up` |
 | `traefik-acme` | named volume | Let's Encrypt TLS certificates — preserved across restarts |

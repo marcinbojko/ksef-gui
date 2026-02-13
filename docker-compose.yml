@@ -66,7 +66,7 @@ services:
       - front
       - back
     volumes:
-      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro
+      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml
       - ./output:/data
       - ksefcli-cache:/root/.cache/ksefcli
     environment:
