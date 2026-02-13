@@ -1,15 +1,101 @@
+---
+# KSeFCli — production docker-compose
+# Requires: .env (copy from .env.example), ksefcli.yaml, traefik network
+#
+# External network "proxy" is expected to already exist (created by a shared
+# Traefik stack). If you run Traefik in this compose too, remove the
+# "external: true" line and add the traefik service from .env.example.
+#
+# Usage:
+#   cp .env.example .env && $EDITOR .env
+#   docker compose up -d
+
 services:
+
+  # ── KSeF GUI ─────────────────────────────────────────────────────────────
   ksefcli:
-    build: .
-    ports:
-      - "8150:8150"
+    image: ghcr.io/marcinbojko/ksef-gui:${KSEFCLI_TAG:-latest}
+    build:
+      context: .
+      args:
+        VERSION: ${KSEFCLI_TAG:-dev}
+    container_name: ksefcli
+    restart: unless-stopped
+    stop_grace_period: 15s
+    expose:
+      - "${KSEFCLI_PORT:-18150}"
+    networks:
+      - proxy
+      - internal
     volumes:
-      - ./output:/data
       - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro
+      - ./output:/data
       - ksefcli-cache:/root/.cache/ksefcli
     environment:
-      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
-    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+      TZ: ${TZ:-UTC}
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "true"
+    command:
+      - Gui
+      - --lan
+      - -o
+      - /data
+      - --pdf
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:${KSEFCLI_PORT:-18150}/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      # HTTP router — redirect to HTTPS
+      traefik.http.routers.ksefcli.entrypoints: http
+      traefik.http.routers.ksefcli.rule: Host(`${KSEFCLI_HOSTNAME}`)
+      traefik.http.routers.ksefcli.middlewares: redirect-to-https@docker
+      # HTTPS router
+      traefik.http.routers.ksefcli-secure.entrypoints: https
+      traefik.http.routers.ksefcli-secure.rule: Host(`${KSEFCLI_HOSTNAME}`)
+      traefik.http.routers.ksefcli-secure.tls: "true"
+      traefik.http.routers.ksefcli-secure.tls.certresolver: ${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+      traefik.http.routers.ksefcli-secure.middlewares: ksefcli-auth@docker
+      traefik.http.routers.ksefcli-secure.service: ksefcli
+      # Service
+      traefik.http.services.ksefcli.loadbalancer.server.port: "${KSEFCLI_PORT:-18150}"
+      # Basic-auth middleware (generate hash with: htpasswd -nb user pass)
+      traefik.http.middlewares.ksefcli-auth.basicauth.users: "${KSEFCLI_BASICAUTH_USERS:-}"
+      # HTTPS redirect middleware
+      traefik.http.middlewares.redirect-to-https.redirectscheme.scheme: https
+      traefik.http.middlewares.redirect-to-https.redirectscheme.permanent: "true"
 
+  # ── Ofelia — job scheduler ────────────────────────────────────────────────
+  ofelia:
+    image: mcuadros/ofelia:${OFELIA_TAG:-latest}
+    container_name: ofelia
+    restart: unless-stopped
+    depends_on:
+      ksefcli:
+        condition: service_healthy
+    networks:
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./ofelia/config.ini:/etc/ofelia/config.ini:ro
+    command:
+      - daemon
+      - --config=/etc/ofelia/config.ini
+    labels:
+      traefik.enable: "false"
+
+# ── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  proxy:
+    external: true      # shared Traefik network — create with: docker network create proxy
+  internal:
+    driver: bridge
+    internal: true      # ksefcli ↔ ofelia only; no direct internet access
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
 volumes:
   ksefcli-cache:
+    driver: local
