@@ -228,7 +228,7 @@ public class GuiCommand : IWithConfigCommand
                 exportPdf = prefs.ExportPdf ?? true,
                 customFilenames = prefs.CustomFilenames ?? false,
                 separateByNip = prefs.SeparateByNip ?? false,
-                profileNip = _setupRequired ? "" : Config().Nip,
+                profileName = ActiveProfile,
                 selectedProfile = ActiveProfile,
                 allProfiles = _allProfiles,
                 lanPort = prefs.LanPort ?? DefaultLanPort,
@@ -297,10 +297,9 @@ public class GuiCommand : IWithConfigCommand
             string outputDir = string.IsNullOrWhiteSpace(checkParams.OutputDir) ? OutputDir : checkParams.OutputDir;
             if (checkParams.SeparateByNip)
             {
-                string nip = Config().Nip;
-                if (!string.IsNullOrEmpty(nip))
+                if (!string.IsNullOrEmpty(ActiveProfile))
                 {
-                    outputDir = Path.Combine(outputDir, nip);
+                    outputDir = Path.Combine(outputDir, ActiveProfile);
                 }
             }
 
@@ -585,10 +584,9 @@ public class GuiCommand : IWithConfigCommand
         string outputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
         if (dlParams.SeparateByNip)
         {
-            string nip = Config().Nip;
-            if (!string.IsNullOrEmpty(nip))
+            if (!string.IsNullOrEmpty(ActiveProfile))
             {
-                outputDir = Path.Combine(outputDir, nip);
+                outputDir = Path.Combine(outputDir, ActiveProfile);
             }
         }
         Directory.CreateDirectory(outputDir);

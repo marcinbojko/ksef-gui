@@ -140,7 +140,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 - Wybór katalogu wyjściowego (przeglądarka folderów)
 - Formaty eksportu: XML (domyślnie włączony), PDF (włączony przy `--pdf`), JSON
 - Własny schemat nazw: `YYYY-MM-DD-Sprzedawca-Waluta-NumerKSeF`
-- "Separuj po NIP" — tworzy podkatalog dla każdego NIP
+- "Separuj po profilu" — tworzy podkatalog o nazwie aktywnego profilu
 
 **Status tokenu**
 - Wyświetla czas ważności tokenu dostępu i tokenu odświeżania
@@ -151,7 +151,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 
 Zakładka **Ogólne**:
 - Katalog wyjściowy, formaty eksportu (XML / PDF / JSON), schemat nazw plików
-- Separacja po NIP
+- Separacja po profilu (podkatalog = nazwa aktywnego profilu)
 - Port LAN (zmiana wymaga restartu)
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
 - **Auto-odświeżanie** — cykliczne wyszukiwanie w tle co N minut (0 = wyłączone); gdy pojawiają się nowe faktury, wyświetlane są powiadomienia (pasek tytułu, toast, powiadomienie systemowe przeglądarki)
@@ -382,7 +382,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 - Folder picker for output directory
 - Export formats: XML (default on), PDF (on with `--pdf`), JSON (default off)
 - Custom filename pattern: `YYYY-MM-DD-SellerName-Currency-KsefNumber`
-- "Separate by NIP" — creates a subdirectory per NIP
+- "Separate by profile" — creates a subdirectory named after the active profile
 
 **Token status**
 - Displays access token and refresh token expiry times
@@ -393,7 +393,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 
 **General** tab:
 - Output directory, export formats (XML / PDF / JSON), filename style
-- Separate-by-NIP option
+- Separate-by-profile option (subdirectory = active profile name)
 - LAN port (change takes effect on next start)
 - Active profile selection (persisted across sessions; switching takes effect immediately without restart)
 - **Auto-refresh** — background search every N minutes (0 = disabled); when new invoices appear, notifications are shown (page title badge, in-page toast, browser Web Notification)
