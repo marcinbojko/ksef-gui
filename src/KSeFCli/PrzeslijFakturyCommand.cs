@@ -122,18 +122,6 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
             maxAttempts: 30,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        // logger.LogInformation("4) Oczekiwanie na trwały zapis faktury w repozytorium KSeF");
-        // SessionInvoicesResponse sessionInvoices = await AsyncPollingUtils.PollWithBackoffAsync(
-        // action: () => ksefClient.GetSessionInvoicesAsync(
-        //     referenceNumber,
-        //     accessToken,
-        //     cancellationToken: cancellationToken),
-        // result => result is not null && result.Invoices.First().PermanentStorageDate is not null,
-        // initialDelay: TimeSpan.FromSeconds(1),
-        // maxDelay: TimeSpan.FromSeconds(5),
-        // maxAttempts: 30,
-        // cancellationToken: cancellationToken).ConfigureAwait(false);
-
         Log.LogInformation("8. Getting information about submitted invoices");
         await PobranieInformacjiNaTematPrzeslanychFaktur(ksefClient, referenceNumber, accessToken, cancellationToken).ConfigureAwait(false);
 

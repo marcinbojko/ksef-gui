@@ -858,6 +858,10 @@ body.dark .pref-label{color:#aaa}
           <span class="pref-label">Testuj powiadomienia</span>
           <button class="btn-sm btn-prefs" onclick="sendSampleNotification()">&#128276; Wyślij testowe</button>
         </div>
+        <div class="pref-row">
+          <span class="pref-label">Format logów konsoli</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog" onchange="savePrefs()"> JSON</label>
+        </div>
       </div>
     </div>
     <div class="modal-footer" style="justify-content:flex-end">
@@ -966,6 +970,7 @@ async function loadPrefs() {
       if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
       if (p.detailsDarkMode) { $('detailsDarkMode').checked = true; }
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
+      if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
       startAutoRefresh(parseInt($('autoRefreshMinutes').value) || 0);
       if (p.profileName) $('profileNameLabel').textContent = '(' + p.profileName + ')';
@@ -1073,7 +1078,8 @@ function savePrefs() {
     pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
     lanPort: parseInt($('lanPort').value) || 8150,
-    autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0
+    autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0,
+    jsonConsoleLog: $('jsonConsoleLog').checked
   };
   const mins = prefs.autoRefreshMinutes;
   startAutoRefresh(mins);

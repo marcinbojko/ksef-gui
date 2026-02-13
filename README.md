@@ -165,6 +165,7 @@ Zakładka **Wygląd**:
 - Trzy niezależne tryby ciemne: interfejs GUI, podgląd faktury (HTML), szczegóły faktury
 - Schemat kolorów PDF: Granatowy / Zielony / Szary
 - Przycisk *Wyślij testowe powiadomienie* — weryfikacja uprawnień do powiadomień przeglądarki
+- Przełącznik formatu logów konsoli: czytelny dla człowieka (domyślnie) lub JSON (dla CI/systemd)
 
 Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
 
@@ -413,6 +414,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 - Three independent dark modes: GUI interface, invoice HTML preview, invoice details panel
 - PDF colour scheme: Navy / Forest / Slate
 - *Send test notification* button — verify browser notification permissions
+- Console log format toggle: human-readable (default) or JSON (for CI/systemd)
 
 Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
 

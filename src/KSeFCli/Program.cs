@@ -53,6 +53,10 @@ internal class Program
                         cmd.ConfigureLogging();
                         return await cmd.ExecuteAsync(cts.Token).ConfigureAwait(false);
                     }
+                    catch (OperationCanceledException)
+                    {
+                        return 130;
+                    }
                     catch (Exception ex)
                     {
                         Console.Error.WriteLine(ex.ToString());

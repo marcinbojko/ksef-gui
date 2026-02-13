@@ -11,7 +11,7 @@ public static class Log
 
     public static ILogger<object> Logger { get; private set; } = Microsoft.Extensions.Logging.Abstractions.NullLogger<object>.Instance;
 
-    public static void ConfigureLogging(bool verbose = false, bool quiet = false)
+    public static void ConfigureLogging(bool verbose = false, bool quiet = false, bool jsonConsole = false)
     {
         LogEventLevel consoleLevel = quiet
             ? LogEventLevel.Warning
@@ -25,13 +25,21 @@ public static class Log
         System.IO.Directory.CreateDirectory(logDir);
         string logPath = System.IO.Path.Combine(logDir, "ksefcli-.log");
 
-        Serilog.Log.Logger = new LoggerConfiguration()
+        var consoleConfig = new LoggerConfiguration()
             .MinimumLevel.Is(verbose ? LogEventLevel.Debug : LogEventLevel.Information)
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-            .MinimumLevel.Override("System", LogEventLevel.Warning)
-            .WriteTo.Console(
+            .MinimumLevel.Override("System", LogEventLevel.Warning);
+
+        if (jsonConsole)
+            consoleConfig = consoleConfig.WriteTo.Console(
                 formatter: new CompactJsonFormatter(),
-                restrictedToMinimumLevel: consoleLevel)
+                restrictedToMinimumLevel: consoleLevel);
+        else
+            consoleConfig = consoleConfig.WriteTo.Console(
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+                restrictedToMinimumLevel: consoleLevel);
+
+        Serilog.Log.Logger = consoleConfig
             .WriteTo.File(
                 new JsonFormatter(renderMessage: true),
                 logPath,
@@ -42,7 +50,7 @@ public static class Log
 
         _loggerFactory?.Dispose();
         _loggerFactory = LoggerFactory.Create(builder =>
-            builder.AddSerilog(Serilog.Log.Logger, dispose: true));
+            builder.AddSerilog(Serilog.Log.Logger, dispose: false));
 
         Logger = _loggerFactory.CreateLogger<object>();
     }

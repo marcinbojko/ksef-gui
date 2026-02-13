@@ -55,7 +55,8 @@ public class GuiCommand : IWithConfigCommand
         bool? PreviewDarkMode = null,
         bool? DetailsDarkMode = null,
         string? PdfColorScheme = null,
-        int? AutoRefreshMinutes = null);
+        int? AutoRefreshMinutes = null,
+        bool? JsonConsoleLog = null);
 
     private record ProfileEditorData(
         string Name,
@@ -123,6 +124,7 @@ public class GuiCommand : IWithConfigCommand
         // Check if config file exists before doing anything else
         _setupRequired = !File.Exists(Path.GetFullPath(ConfigFile));
         GuiPrefs savedPrefs = LoadPrefs();
+        Log.ConfigureLogging(Verbose, Quiet, savedPrefs.JsonConsoleLog ?? false);
         if (_setupRequired)
         {
             Log.LogInformation("No config file found. Opening setup wizard in GUI.");
@@ -237,6 +239,7 @@ public class GuiCommand : IWithConfigCommand
                 detailsDarkMode = prefs.DetailsDarkMode ?? false,
                 pdfColorScheme = prefs.PdfColorScheme ?? "navy",
                 autoRefreshMinutes = prefs.AutoRefreshMinutes ?? 0,
+                jsonConsoleLog = prefs.JsonConsoleLog ?? false,
                 setupRequired = _setupRequired,
             });
         };
@@ -245,6 +248,7 @@ public class GuiCommand : IWithConfigCommand
             using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement root = doc.RootElement;
             string? newProfile = root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null;
+            bool jsonConsoleLog = root.TryGetProperty("jsonConsoleLog", out JsonElement jcl) && jcl.GetBoolean();
             Log.LogDebug($"SavePrefs: selectedProfile={newProfile ?? "(null)"}, activeProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
             SavePrefs(new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
@@ -259,8 +263,10 @@ public class GuiCommand : IWithConfigCommand
                 PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null,
                 DetailsDarkMode: root.TryGetProperty("detailsDarkMode", out JsonElement ddm) ? ddm.GetBoolean() : null,
                 PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null,
-                AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null
+                AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
+                JsonConsoleLog: jsonConsoleLog
             ));
+            Log.ConfigureLogging(Verbose, Quiet, jsonConsoleLog);
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
             {
                 string previousProfile = ActiveProfile;
