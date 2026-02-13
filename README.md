@@ -196,27 +196,80 @@ Po zapisaniu profilu — wszystkie przyciski odblokowują się bez restartu.
 
 ### Docker / serwer domowy
 
-Dla uruchomienia na serwerze, NAS lub w środowisku Docker:
+Dla uruchomienia na serwerze, NAS lub w środowisku Docker compose dostarcza kompletny stos produkcyjny: Traefik jako reverse proxy z TLS oraz Ofelia jako harmonogram zadań.
+
+#### Szybki start
 
 ```bash
-cp .env.example .env   # uzupełnij KSEFCLI_HOSTNAME i opcjonalnie KSEFCLI_BASICAUTH_USERS
+# 1. Skopiuj plik zmiennych środowiskowych i uzupełnij wartości
+cp .env.example .env
+$EDITOR .env
+
+# 2. Upewnij się, że plik konfiguracji ksefcli istnieje
+#    (jeśli nie — GUI wygeneruje szablon przy pierwszym uruchomieniu)
+touch ksefcli.yaml
+
+# 3. Uruchom stos
 docker compose up -d
 ```
 
-#### Architektura
+> **Wymaganie DNS:** `KSEFCLI_HOSTNAME` musi wskazywać na adres IP hosta przed uruchomieniem — Traefik użyje go do uzyskania certyfikatu TLS od Let's Encrypt.
 
-| Serwis | Rola |
-|--------|------|
-| **ksefcli** | GUI nasłuchuje na porcie `18150`, wystawione przez Traefik |
-| **Traefik** | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, opcjonalne basic-auth |
-| **Ofelia** | Harmonogram zadań — rotacja logów, health-probe, opcjonalne czyszczenie starych faktur |
+#### Architektura stosu
+
+```
+Internet
+   │  :80 (redirect → HTTPS)
+   │  :443 (TLS)
+   ▼
+┌─────────┐   sieć front   ┌──────────┐
+│ Traefik │ ◄────────────► │ ksefcli  │
+│  proxy  │                │ :18150   │
+└─────────┘                └──────────┘
+                                 │
+                           sieć back (internal)
+                                 │
+                            ┌─────────┐
+                            │ Ofelia  │
+                            │scheduler│
+                            └─────────┘
+```
+
+| Serwis | Obraz | Rola |
+|--------|-------|------|
+| **Traefik** | `traefik:v3.3.7` | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, opcjonalne basic-auth middleware |
+| **ksefcli** | `ghcr.io/marcinbojko/ksef-gui:latest` | GUI nasłuchuje na porcie `18150`, wystawione wyłącznie przez Traefik |
+| **Ofelia** | `mcuadros/ofelia:latest` | Harmonogram zadań — rotacja logów, health-probe, opcjonalne czyszczenie starych faktur |
+
+#### Traefik — konfiguracja TLS i routingu
+
+Traefik jest konfigurowany w całości przez argumenty CLI w `docker-compose.yml` (brak osobnego pliku `traefik.yml`):
+
+| Funkcja | Konfiguracja |
+|---------|-------------|
+| HTTP→HTTPS redirect | EntryPoint `http` z trwałym przekierowaniem na `https` |
+| Certyfikaty TLS | ACME TLS Challenge — certyfikaty przechowywane w woluminie `traefik-acme` |
+| Routing | Docker provider — trasy definiowane przez labels na kontenerze |
+| Basic-auth | Middleware `ksefcli-auth` — aktywny gdy ustawione `KSEFCLI_BASICAUTH_USERS` |
+| Dashboard | Wyłączony (`--api.dashboard=false`) |
+
+**Generowanie hasła basic-auth** (zainstaluj `apache2-utils`):
+
+```bash
+htpasswd -nb admin secretpassword
+# Wynik: admin:$apr1$xyz...
+# W pliku .env znaki $ muszą być podwojone: admin:$$apr1$$xyz...
+KSEFCLI_BASICAUTH_USERS=admin:$$apr1$$xyz...
+```
 
 #### Sieć
 
-Compose definiuje dwie wewnętrzne sieci (nie wymagają wcześniejszego tworzenia):
+Compose definiuje dwie wewnętrzne sieci — nie wymagają wcześniejszego tworzenia ani zewnętrznych zasobów:
 
-- **front** — Traefik ↔ ksefcli (ruch publiczny)
-- **back** (izolowana, bez dostępu do internetu) — ksefcli ↔ ofelia
+| Sieć | Typ | Połączone serwisy | Cel |
+|------|-----|-------------------|-----|
+| `front` | bridge | Traefik, ksefcli | Ruch publiczny przez reverse proxy |
+| `back` | bridge (internal) | ksefcli, Ofelia | Zadania cykliczne, brak bezpośredniego internetu |
 
 #### Zmienne środowiskowe (`.env`)
 
@@ -225,28 +278,36 @@ Skopiuj `.env.example` i dostosuj:
 | Zmienna | Opis | Domyślnie |
 |---------|------|-----------|
 | `TZ` | Strefa czasowa | `Europe/Warsaw` |
-| `TRAEFIK_TAG` | Tag obrazu Traefik | `v3.3` |
-| `ACME_EMAIL` | E-mail do rejestracji Let's Encrypt (wymagany) | — |
+| `TRAEFIK_TAG` | Tag obrazu Traefik | `v3.3.7` |
+| `ACME_EMAIL` | E-mail do rejestracji Let's Encrypt (**wymagany**) | — |
 | `TRAEFIK_CERT_RESOLVER` | Nazwa resolwera (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
 | `KSEFCLI_TAG` | Tag obrazu Docker | `latest` |
-| `KSEFCLI_PORT` | Port wewnętrzny | `18150` |
+| `KSEFCLI_PORT` | Port wewnętrzny kontenera | `18150` |
 | `KSEFCLI_HOSTNAME` | Hostname za Traefik (np. `ksef.example.com`) | — |
-| `KSEFCLI_BASICAUTH_USERS` | Hash basic-auth (`htpasswd -nb user pass`) | wyłączone |
+| `KSEFCLI_BASICAUTH_USERS` | Hash basic-auth — wygeneruj przez `htpasswd -nb user pass`, `$` → `$$` | wyłączone |
 | `OFELIA_TAG` | Tag obrazu Ofelia | `latest` |
 
 #### Ofelia — zadania cykliczne (`ofelia/config.ini`)
 
-| Zadanie | Harmonogram | Opis |
-|---------|-------------|------|
-| `log-rotate` | `@daily` | Usuwa logi Serilog starsze niż 7 dni |
-| `health-check` | `@every 5m` | Restartuje kontener jeśli healthcheck zawiedzie |
-| `cleanup-old-invoices` | `@weekly` *(wyłączone)* | Usuwa faktury starsze niż 365 dni |
+Ofelia wykonuje zadania bezpośrednio w kontenerze `ksefcli` (`job-exec`) lub przez Docker API (`job-run`):
 
-#### Woluminy i pliki
+| Zadanie | Typ | Harmonogram | Opis |
+|---------|-----|-------------|------|
+| `log-rotate` | `job-exec` | `@daily` | Usuwa pliki logów Serilog (`ksefcli-*.log`) starsze niż 7 dni |
+| `health-check` | `job-run` | `@every 5m` | Sprawdza status healthcheck; restartuje kontener gdy nie jest `healthy` |
+| `cleanup-old-invoices` | `job-exec` | `@weekly` *(wyłączone)* | Usuwa pliki `.xml`/`.pdf`/`.json` starsze niż 365 dni — odkomentuj i dostosuj |
 
-- `./output` — pobrane faktury pojawiają się bezpośrednio na hoście
-- `./ksefcli.yaml` — edytujesz lokalnie, kontener odczytuje (`:ro`)
-- `ksefcli-cache` — wolumin nazwany; tokeny i preferencje przeżywają `docker compose down/up`
+Edytuj `ofelia/config.ini` żeby zmienić harmonogramy lub włączyć czyszczenie faktur. Zmiany wymagają `docker compose restart ofelia`.
+
+#### Woluminy i pliki hosta
+
+| Ścieżka | Typ | Opis |
+|---------|-----|------|
+| `./output` | bind (rw) | Pobrane faktury pojawiają się bezpośrednio na hoście |
+| `./ksefcli.yaml` | bind (ro) | Edytujesz lokalnie; kontener odczytuje bez restartu |
+| `./ofelia/config.ini` | bind (ro) | Konfiguracja harmonogramu zadań Ofelia |
+| `ksefcli-cache` | named volume | Tokeny sesji i preferencje GUI — przeżywają `docker compose down/up` |
+| `traefik-acme` | named volume | Certyfikaty TLS Let's Encrypt — zachowane między restartami |
 
 ### Eksport PDF
 
@@ -471,27 +532,80 @@ After saving a profile, all buttons re-enable — no restart needed.
 
 ### Docker / home server
 
-For running on a server, NAS, or in a Docker environment:
+For running on a server, NAS, or in a Docker environment the compose file provides a full production stack: Traefik as the TLS-terminating reverse proxy and Ofelia as the job scheduler.
+
+#### Quick start
 
 ```bash
-cp .env.example .env   # set KSEFCLI_HOSTNAME and optionally KSEFCLI_BASICAUTH_USERS
+# 1. Copy the environment file and fill in your values
+cp .env.example .env
+$EDITOR .env
+
+# 2. Make sure the ksefcli config file exists
+#    (if absent, the GUI generates a template on first run)
+touch ksefcli.yaml
+
+# 3. Bring the stack up
 docker compose up -d
 ```
 
-#### Architecture
+> **DNS requirement:** `KSEFCLI_HOSTNAME` must resolve to the host IP before startup — Traefik uses it to obtain a TLS certificate from Let's Encrypt.
 
-| Service | Role |
-|---------|------|
-| **ksefcli** | GUI listening on port `18150`, exposed via Traefik |
-| **Traefik** | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, optional basic-auth |
-| **Ofelia** | Job scheduler — log rotation, health probe, optional old-invoice cleanup |
+#### Stack architecture
+
+```
+Internet
+   │  :80 (redirect → HTTPS)
+   │  :443 (TLS)
+   ▼
+┌─────────┐   front network   ┌──────────┐
+│ Traefik │ ◄───────────────► │ ksefcli  │
+│  proxy  │                   │ :18150   │
+└─────────┘                   └──────────┘
+                                    │
+                          back network (internal)
+                                    │
+                               ┌─────────┐
+                               │ Ofelia  │
+                               │scheduler│
+                               └─────────┘
+```
+
+| Service | Image | Role |
+|---------|-------|------|
+| **Traefik** | `traefik:v3.3.7` | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, optional basic-auth middleware |
+| **ksefcli** | `ghcr.io/marcinbojko/ksef-gui:latest` | GUI listening on port `18150`, exposed exclusively through Traefik |
+| **Ofelia** | `mcuadros/ofelia:latest` | Job scheduler — log rotation, health probe, optional old-invoice cleanup |
+
+#### Traefik — TLS and routing configuration
+
+Traefik is configured entirely via CLI arguments in `docker-compose.yml` (no separate `traefik.yml` needed):
+
+| Feature | Configuration |
+|---------|--------------|
+| HTTP→HTTPS redirect | `http` entrypoint with permanent redirect to `https` |
+| TLS certificates | ACME TLS Challenge — stored in the `traefik-acme` named volume |
+| Routing | Docker provider — routes defined by labels on the ksefcli container |
+| Basic-auth | `ksefcli-auth` middleware — active when `KSEFCLI_BASICAUTH_USERS` is set |
+| Dashboard | Disabled (`--api.dashboard=false`) |
+
+**Generating a basic-auth password** (requires `apache2-utils`):
+
+```bash
+htpasswd -nb admin secretpassword
+# Output: admin:$apr1$xyz...
+# In .env, dollar signs must be doubled: admin:$$apr1$$xyz...
+KSEFCLI_BASICAUTH_USERS=admin:$$apr1$$xyz...
+```
 
 #### Networks
 
-Two internal networks (no pre-creation required):
+Two internal networks defined by compose — no external resources or pre-creation required:
 
-- **front** — Traefik ↔ ksefcli (public-facing traffic)
-- **back** (isolated, no direct internet) — ksefcli ↔ ofelia only
+| Network | Type | Connected services | Purpose |
+|---------|------|--------------------|---------|
+| `front` | bridge | Traefik, ksefcli | Public-facing traffic through the reverse proxy |
+| `back` | bridge (internal) | ksefcli, Ofelia | Scheduled tasks, no direct internet access |
 
 #### Environment variables (`.env`)
 
@@ -500,28 +614,36 @@ Copy `.env.example` and adjust:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TZ` | Timezone | `Europe/Warsaw` |
-| `TRAEFIK_TAG` | Traefik image tag | `v3.3` |
-| `ACME_EMAIL` | Let's Encrypt registration email (required) | — |
+| `TRAEFIK_TAG` | Traefik image tag | `v3.3.7` |
+| `ACME_EMAIL` | Let's Encrypt registration email (**required**) | — |
 | `TRAEFIK_CERT_RESOLVER` | Cert resolver name (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
 | `KSEFCLI_TAG` | Docker image tag | `latest` |
-| `KSEFCLI_PORT` | Internal port | `18150` |
+| `KSEFCLI_PORT` | Internal container port | `18150` |
 | `KSEFCLI_HOSTNAME` | Hostname behind Traefik (e.g. `ksef.example.com`) | — |
-| `KSEFCLI_BASICAUTH_USERS` | Basic-auth hash (`htpasswd -nb user pass`) | disabled |
+| `KSEFCLI_BASICAUTH_USERS` | Basic-auth hash — generate with `htpasswd -nb user pass`, escape `$` → `$$` | disabled |
 | `OFELIA_TAG` | Ofelia image tag | `latest` |
 
 #### Ofelia scheduled jobs (`ofelia/config.ini`)
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| `log-rotate` | `@daily` | Deletes Serilog log files older than 7 days |
-| `health-check` | `@every 5m` | Restarts container if healthcheck fails |
-| `cleanup-old-invoices` | `@weekly` *(disabled)* | Deletes invoices older than 365 days |
+Ofelia runs tasks directly inside the `ksefcli` container (`job-exec`) or via the Docker API (`job-run`):
 
-#### Volumes and files
+| Job | Type | Schedule | Description |
+|-----|------|----------|-------------|
+| `log-rotate` | `job-exec` | `@daily` | Deletes Serilog rolling log files (`ksefcli-*.log`) older than 7 days |
+| `health-check` | `job-run` | `@every 5m` | Checks healthcheck status; restarts the container if not `healthy` |
+| `cleanup-old-invoices` | `job-exec` | `@weekly` *(disabled)* | Deletes `.xml`/`.pdf`/`.json` files older than 365 days — uncomment and adjust |
 
-- `./output` — downloaded invoices appear directly on the host
-- `./ksefcli.yaml` — edit on the host; the container reads it (`:ro`)
-- `ksefcli-cache` — named volume; tokens and preferences survive `docker compose down/up`
+Edit `ofelia/config.ini` to change schedules or enable invoice cleanup. Changes require `docker compose restart ofelia`.
+
+#### Volumes and host files
+
+| Path | Type | Description |
+|------|------|-------------|
+| `./output` | bind (rw) | Downloaded invoices appear directly on the host |
+| `./ksefcli.yaml` | bind (ro) | Edit on the host; container reads it without restart |
+| `./ofelia/config.ini` | bind (ro) | Ofelia job scheduler configuration |
+| `ksefcli-cache` | named volume | Session tokens and GUI preferences — survive `docker compose down/up` |
+| `traefik-acme` | named volume | Let's Encrypt TLS certificates — preserved across restarts |
 
 ### PDF export
 
