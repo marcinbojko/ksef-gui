@@ -130,7 +130,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 **Wyszukiwanie faktur**
 - Typ podmiotu: Sprzedawca / Nabywca / Subject3 / Authorized
 - Zakres dat (wybieracz miesięcy), typ daty: Wystawienie / Sprzedaż / PermanentStorage
-- Filtrowanie po walucie
+- Filtrowanie po walucie — przyciski walut budowane dynamicznie na podstawie wyników wyszukiwania
 
 **Tabela wyników**
 - Numer KSeF, numer faktury, data wystawienia, sprzedawca, nabywca, kwota brutto, waluta
@@ -378,7 +378,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 **Invoice search**
 - Subject type: Sprzedawca (seller) / Nabywca (buyer) / Subject3 / Authorized
 - Date range (month picker), date type: Issue / Invoicing / PermanentStorage
-- Per-currency filter chips
+- Per-currency filter chips — built dynamically from the current search results
 
 **Results table**
 - KSeF number, invoice number, issue date, seller, buyer, gross amount, currency
