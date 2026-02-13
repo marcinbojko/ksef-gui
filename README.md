@@ -125,10 +125,12 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 
 ### Funkcje GUI
 
+![Główny ekran](images/mainscreen.png)
+
 **Wyszukiwanie faktur**
 - Typ podmiotu: Sprzedawca / Nabywca / Subject3 / Authorized
 - Zakres dat (wybieracz miesięcy), typ daty: Wystawienie / Sprzedaż / PermanentStorage
-- Filtrowanie po walucie
+- Filtrowanie po walucie — przyciski walut budowane dynamicznie na podstawie wyników wyszukiwania
 
 **Tabela wyników**
 - Numer KSeF, numer faktury, data wystawienia, sprzedawca, nabywca, kwota brutto, waluta
@@ -140,7 +142,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 - Wybór katalogu wyjściowego (przeglądarka folderów)
 - Formaty eksportu: XML (domyślnie włączony), PDF (włączony przy `--pdf`), JSON
 - Własny schemat nazw: `YYYY-MM-DD-Sprzedawca-Waluta-NumerKSeF`
-- "Separuj po NIP" — tworzy podkatalog dla każdego NIP
+- "Separuj po NIP" — tworzy podkatalog według NIP aktywnego profilu
 
 **Status tokenu**
 - Wyświetla czas ważności tokenu dostępu i tokenu odświeżania
@@ -151,7 +153,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 
 Zakładka **Ogólne**:
 - Katalog wyjściowy, formaty eksportu (XML / PDF / JSON), schemat nazw plików
-- Separacja po NIP
+- Separacja po NIP (podkatalog = NIP aktywnego profilu)
 - Port LAN (zmiana wymaga restartu)
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
 - **Auto-odświeżanie** — cykliczne wyszukiwanie w tle co N minut (0 = wyłączone); gdy pojawiają się nowe faktury, wyświetlane są powiadomienia (pasek tytułu, toast, powiadomienie systemowe przeglądarki)
@@ -163,8 +165,11 @@ Zakładka **Wygląd**:
 - Trzy niezależne tryby ciemne: interfejs GUI, podgląd faktury (HTML), szczegóły faktury
 - Schemat kolorów PDF: Granatowy / Zielony / Szary
 - Przycisk *Wyślij testowe powiadomienie* — weryfikacja uprawnień do powiadomień przeglądarki
+- Przełącznik formatu logów konsoli: czytelny dla człowieka (domyślnie) lub JSON (dla CI/systemd)
 
 Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
+
+![Preferencje](images/prefs.png)
 
 **✎ Konfiguracja** (edytor w przeglądarce)
 - Edycja profili: nazwa, NIP, środowisko, metoda uwierzytelnienia
@@ -172,6 +177,8 @@ Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
 - Pola certyfikatu (plik klucza, plik certyfikatu, hasło/env/plik)
 - Dodawanie i usuwanie profili
 - Zmiany zapisywane natychmiast do `ksefcli.yaml`; lista profili odświeżana bez restartu
+
+![Konfiguracja](images/config.png)
 
 ### Kreator pierwszego uruchomienia
 
@@ -367,10 +374,12 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 
 ### GUI features
 
+![Main screen](images/mainscreen.png)
+
 **Invoice search**
 - Subject type: Sprzedawca (seller) / Nabywca (buyer) / Subject3 / Authorized
 - Date range (month picker), date type: Issue / Invoicing / PermanentStorage
-- Per-currency filter chips
+- Per-currency filter chips — built dynamically from the current search results
 
 **Results table**
 - KSeF number, invoice number, issue date, seller, buyer, gross amount, currency
@@ -382,7 +391,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 - Folder picker for output directory
 - Export formats: XML (default on), PDF (on with `--pdf`), JSON (default off)
 - Custom filename pattern: `YYYY-MM-DD-SellerName-Currency-KsefNumber`
-- "Separate by NIP" — creates a subdirectory per NIP
+- "Separate by NIP" — creates a subdirectory named after the active profile's NIP
 
 **Token status**
 - Displays access token and refresh token expiry times
@@ -393,7 +402,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 
 **General** tab:
 - Output directory, export formats (XML / PDF / JSON), filename style
-- Separate-by-NIP option
+- Separate-by-NIP option (subdirectory = active profile's NIP)
 - LAN port (change takes effect on next start)
 - Active profile selection (persisted across sessions; switching takes effect immediately without restart)
 - **Auto-refresh** — background search every N minutes (0 = disabled); when new invoices appear, notifications are shown (page title badge, in-page toast, browser Web Notification)
@@ -405,8 +414,11 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 - Three independent dark modes: GUI interface, invoice HTML preview, invoice details panel
 - PDF colour scheme: Navy / Forest / Slate
 - *Send test notification* button — verify browser notification permissions
+- Console log format toggle: human-readable (default) or JSON (for CI/systemd)
 
 Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
+
+![Preferences](images/prefs.png)
 
 **✎ Konfiguracja** (in-browser config editor)
 - Edit profiles: name, NIP, environment, auth method
@@ -414,6 +426,8 @@ Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
 - Certificate fields (key file, cert file, password / env var / file)
 - Add and delete profiles
 - Saves immediately to `ksefcli.yaml`; profile dropdown refreshes without restart
+
+![Configuration](images/config.png)
 
 ### First-run wizard
 

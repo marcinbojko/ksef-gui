@@ -186,13 +186,13 @@ public abstract class IWithConfigCommand : IGlobalCommand
         AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
         long timestampMs = challenge.Timestamp.ToUnixTimeMilliseconds();
         string ksefToken = config.Token ?? throw new InvalidOperationException("KSeF token is missing");
-        Log.LogInformation("1. Preparing and encrypting token");
+        Log.LogInformation("2. Preparing and encrypting token");
         // Przygotuj "token|timestamp" i zaszyfruj RSA-OAEP SHA-256 zgodnie z wymaganiem API
         string tokenWithTimestamp = $"{ksefToken}|{timestampMs}";
         byte[] tokenBytes = System.Text.Encoding.UTF8.GetBytes(tokenWithTimestamp);
         byte[] encrypted = cryptographyService.EncryptKsefTokenWithRSAUsingPublicKey(tokenBytes);
         string encryptedTokenB64 = Convert.ToBase64String(encrypted);
-        Log.LogInformation("2. Submitting KSeF token authentication request");
+        Log.LogInformation("3. Submitting KSeF token authentication request");
         Trace.Assert(!string.IsNullOrEmpty(config.Nip), "--nip jest empty");
         AuthenticationKsefTokenRequest request = new AuthenticationKsefTokenRequest
         {
@@ -206,7 +206,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
             AuthorizationPolicy = null
         };
         SignatureResponse signature = await ksefClient.SubmitKsefTokenAuthRequestAsync(request, new CancellationToken()).ConfigureAwait(false);
-        Log.LogInformation("3. Checking authentication status");
+        Log.LogInformation("4. Checking authentication status");
         DateTime startTime = DateTime.UtcNow;
         TimeSpan timeout = TimeSpan.FromMinutes(2);
         AuthStatus status;
@@ -225,7 +225,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         {
             throw new InvalidOperationException($"Authentication failed or timed out. {StatusInfoToString(status.Status)}");
         }
-        Log.LogInformation("4. Obtaining access token");
+        Log.LogInformation("5. Obtaining access token");
         AuthenticationOperationStatusResponse tokenResponse = await ksefClient.GetAccessTokenAsync(signature.AuthenticationToken.Token).ConfigureAwait(false);
         return tokenResponse;
     }
@@ -246,31 +246,31 @@ public abstract class IWithConfigCommand : IGlobalCommand
         X509Certificate2 certificate = publicCert.MergeWithPemKey(config.Certificate.Private_Key!, config.Certificate.Password);
 
         // 1. Get Auth Challenge
-        Log.LogInformation("[2] Getting authentication challenge from KSeF...");
+        Log.LogInformation("[1] Getting authentication challenge from KSeF...");
         AuthenticationChallengeResponse challengeResponse = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
         Log.LogInformation($"    Challenge: {challengeResponse.Challenge}");
         // 2. Prepare and Sign AuthTokenRequest
-        Log.LogInformation("[3] Building AuthTokenRequest (builder)...");
+        Log.LogInformation("[2] Building AuthTokenRequest (builder)...");
         AuthenticationTokenRequest authTokenRequest = AuthTokenRequestBuilder
             .Create()
             .WithChallenge(challengeResponse.Challenge)
             .WithContext(AuthenticationTokenContextIdentifierType.Nip, config.Nip)
             .WithIdentifierType(config.Certificate!.SubjectIdentifierType)
             .Build();
-        // 4) Serializacja do XML
-        Log.LogInformation("[4] Serializing request to XML (unsigned)...");
+        // 3. Serialize to XML
+        Log.LogInformation("[3] Serializing request to XML (unsigned)...");
         string unsignedXml = AuthenticationTokenRequestSerializer.SerializeToXmlString(authTokenRequest);
         PrintXmlToConsole(unsignedXml, "XML before signature");
-        Log.LogInformation("[6] Signing XML (XAdES)...");
-
+        // 4. Sign XML (XAdES)
+        Log.LogInformation("[4] Signing XML (XAdES)...");
         string signedXml = SignatureService.Sign(unsignedXml, certificate);
         PrintXmlToConsole(signedXml, "XML after signature (XAdES)");
-        // 7) Send signed XML to KSeF
-        Log.LogInformation("[7] Sending signed XML to KSeF...");
+        // 5. Send signed XML to KSeF
+        Log.LogInformation("[5] Sending signed XML to KSeF...");
         SignatureResponse submission = await ksefClient.SubmitXadesAuthRequestAsync(signedXml, verifyCertificateChain: false).ConfigureAwait(false);
         Log.LogInformation($"    ReferenceNumber: {submission.ReferenceNumber}");
-        // 8) Poll status
-        Log.LogInformation("[8] Polling authentication operation status...");
+        // 6. Poll status
+        Log.LogInformation("[6] Polling authentication operation status...");
         DateTime startTime = DateTime.UtcNow;
         TimeSpan timeout = TimeSpan.FromMinutes(2);
         AuthStatus status;
@@ -288,8 +288,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
         {
             throw new InvalidOperationException($"Authentication failed or timed out. {StatusInfoToString(status.Status)}");
         }
-        // 9) Get access token
-        Log.LogInformation("[9] Getting access token...");
+        // 7. Get access token
+        Log.LogInformation("[7] Getting access token...");
         AuthenticationOperationStatusResponse tokenResponse = await ksefClient.GetAccessTokenAsync(submission.AuthenticationToken.Token).ConfigureAwait(false);
         return tokenResponse;
     }
