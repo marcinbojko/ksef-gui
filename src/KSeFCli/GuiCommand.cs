@@ -53,7 +53,9 @@ public class GuiCommand : IWithConfigCommand
         int? LanPort = null,
         bool? DarkMode = null,
         bool? PreviewDarkMode = null,
-        string? PdfColorScheme = null);
+        bool? DetailsDarkMode = null,
+        string? PdfColorScheme = null,
+        int? AutoRefreshMinutes = null);
 
     private record ProfileEditorData(
         string Name,
@@ -107,7 +109,7 @@ public class GuiCommand : IWithConfigCommand
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Config load warning (starting in setup mode): {ex.Message}");
+            Log.LogWarning($"Config load warning (starting in setup mode): {ex.Message}");
             scope = new ServiceCollection().BuildServiceProvider().CreateScope();
         }
         using (scope)
@@ -123,7 +125,7 @@ public class GuiCommand : IWithConfigCommand
         GuiPrefs savedPrefs = LoadPrefs();
         if (_setupRequired)
         {
-            Console.WriteLine("No config file found. Opening setup wizard in GUI.");
+            Log.LogInformation("No config file found. Opening setup wizard in GUI.");
             ConfigLoader.WriteTemplate(ConfigFile);
         }
         else
@@ -150,7 +152,7 @@ public class GuiCommand : IWithConfigCommand
             {
                 ActiveProfile = savedPrefs.SelectedProfile;
                 string restoredNip = _allProfiles.TryGetValue(ActiveProfile, out string? n) ? n : "?";
-                Console.WriteLine($"Restored profile from preferences: {ActiveProfile} (NIP {restoredNip})");
+                Log.LogInformation($"Restored profile from preferences: {ActiveProfile} (NIP {restoredNip})");
             }
         }
 
@@ -182,7 +184,7 @@ public class GuiCommand : IWithConfigCommand
             catch (Exception ex)
             {
                 // Saved/override profile no longer exists — clear it and let YAML decide
-                Console.WriteLine($"Profile '{ActiveProfile}' could not be loaded: {ex.Message}. Falling back to YAML active profile.");
+                Log.LogWarning($"Profile '{ActiveProfile}' could not be loaded: {ex.Message}. Falling back to YAML active profile.");
                 ActiveProfile = "";
                 ResetCachedConfig();
                 try
@@ -194,7 +196,7 @@ public class GuiCommand : IWithConfigCommand
                 }
                 catch (Exception ex2)
                 {
-                    Console.WriteLine($"Config load warning (entering setup mode): {ex2.Message}");
+                    Log.LogWarning($"Config load warning (entering setup mode): {ex2.Message}");
                     _setupRequired = true;
                     _scope = scope;
                     _ksefClient = null;
@@ -212,7 +214,7 @@ public class GuiCommand : IWithConfigCommand
         server.OnInvoiceDetails = InvoiceDetailsAsync;
         server.OnQuit = () =>
         {
-            Console.WriteLine("GUI: user requested quit.");
+            Log.LogInformation("GUI: user requested quit.");
             Environment.Exit(0);
         };
         server.OnLoadPrefs = () =>
@@ -232,7 +234,9 @@ public class GuiCommand : IWithConfigCommand
                 lanPort = prefs.LanPort ?? DefaultLanPort,
                 darkMode = prefs.DarkMode ?? false,
                 previewDarkMode = prefs.PreviewDarkMode ?? false,
+                detailsDarkMode = prefs.DetailsDarkMode ?? false,
                 pdfColorScheme = prefs.PdfColorScheme ?? "navy",
+                autoRefreshMinutes = prefs.AutoRefreshMinutes ?? 0,
                 setupRequired = _setupRequired,
             });
         };
@@ -241,7 +245,7 @@ public class GuiCommand : IWithConfigCommand
             using JsonDocument doc = JsonDocument.Parse(json);
             JsonElement root = doc.RootElement;
             string? newProfile = root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null;
-            Console.WriteLine($"OnSavePrefs: selectedProfile={newProfile ?? "(null)"}, ActiveProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
+            Log.LogDebug($"SavePrefs: selectedProfile={newProfile ?? "(null)"}, activeProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
             SavePrefs(new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
                 ExportXml: root.TryGetProperty("exportXml", out JsonElement ex) ? ex.GetBoolean() : null,
@@ -253,7 +257,9 @@ public class GuiCommand : IWithConfigCommand
                 LanPort: root.TryGetProperty("lanPort", out JsonElement lp) ? lp.GetInt32() : null,
                 DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
                 PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null,
-                PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null
+                DetailsDarkMode: root.TryGetProperty("detailsDarkMode", out JsonElement ddm) ? ddm.GetBoolean() : null,
+                PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null,
+                AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null
             ));
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
             {
@@ -269,7 +275,7 @@ public class GuiCommand : IWithConfigCommand
                     _ksefClient = switchedClient;
                     _cachedInvoices = null; // clear only after successful switch
                     string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
-                    Console.WriteLine($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
+                    Log.LogInformation($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
                 }
                 catch
                 {
@@ -404,7 +410,7 @@ public class GuiCommand : IWithConfigCommand
                 string configPath = Path.GetFullPath(ConfigFile);
                 Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
                 File.WriteAllText(configPath, ConfigLoader.Serialize(newConfig));
-                Console.WriteLine($"Config saved: {configPath} ({profiles.Count} profile(s), active={data.ActiveProfile})");
+                Log.LogInformation($"Config saved: {configPath} ({profiles.Count} profile(s), active={data.ActiveProfile})");
 
                 // Reload profile list for the profile dropdown
                 _allProfiles.Clear();
@@ -445,10 +451,10 @@ public class GuiCommand : IWithConfigCommand
         };
 
         server.Start(cancellationToken);
-        Console.WriteLine($"GUI running at {server.LocalUrl}");
+        Log.LogInformation($"GUI running at {server.LocalUrl}");
         if (Lan)
         {
-            Console.WriteLine($"LAN access enabled — accessible on all network interfaces, port {server.Port}");
+            Log.LogInformation($"LAN access enabled — accessible on all network interfaces, port {server.Port}");
         }
 
         server.OpenBrowser();
@@ -647,7 +653,7 @@ public class GuiCommand : IWithConfigCommand
                     string tmpXml = Path.Combine(workDir, $"{fileName}.xml");
                     await File.WriteAllTextAsync(tmpXml, invoiceXml, ct).ConfigureAwait(false);
                     File.Move(tmpXml, Path.Combine(outputDir, $"{fileName}.xml"), overwrite: true);
-                    Console.WriteLine($"Saved invoice {inv.KsefNumber} to {Path.Combine(outputDir, $"{fileName}.xml")}");
+                    Log.LogInformation($"Saved invoice {inv.KsefNumber} to {Path.Combine(outputDir, $"{fileName}.xml")}");
                 }
 
                 if (wantPdf)
@@ -662,7 +668,7 @@ public class GuiCommand : IWithConfigCommand
                     await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
                     string finalPdf = Path.Combine(outputDir, $"{fileName}.pdf");
                     File.Move(tmpPdf, finalPdf, overwrite: true);
-                    Console.WriteLine($"Saved PDF for {inv.KsefNumber} to {finalPdf}");
+                    Log.LogInformation($"Saved PDF for {inv.KsefNumber} to {finalPdf}");
 
                     if (_server != null)
                     {

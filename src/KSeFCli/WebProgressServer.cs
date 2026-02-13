@@ -472,7 +472,14 @@ button:disabled{opacity:.4;cursor:default}
 .cfg-pw-wrap button{padding:.3rem .5rem;font-size:.8rem}
 .btn-danger{background:#c62828;color:#fff}
 .btn-danger:hover:not(:disabled){background:#b71c1c}
-.prefs-panel{border-left:3px solid #546e7a}
+.prefs-modal{width:480px;max-height:80vh}
+.prefs-tabs{display:flex;border-bottom:2px solid #e0e0e0;background:#fafafa;padding:0 1rem;gap:0}
+.prefs-tab{background:none;border:none;border-bottom:3px solid transparent;border-radius:0;padding:.55rem 1rem;font-size:.85rem;font-weight:600;color:#666;cursor:pointer;margin-bottom:-2px;transition:color .15s,border-color .15s}
+.prefs-tab:hover{color:#333}
+.prefs-tab.active{color:#1976d2;border-bottom-color:#1976d2}
+.pref-row{display:flex;align-items:flex-start;gap:1rem;padding:.55rem 0;border-bottom:1px solid #f0f0f0}
+.pref-row:last-child{border-bottom:none}
+.pref-label{font-size:.82rem;font-weight:600;color:#555;min-width:175px;flex-shrink:0;padding-top:.15rem}
 .status{padding:.6rem .8rem;border-radius:8px;margin-bottom:.75rem;font-weight:500;font-size:.9rem}
 .status.info{background:#e3f2fd;color:#1565c0}
 .status.done{background:#e8f5e9;color:#2e7d32}
@@ -675,6 +682,37 @@ body.dark .cfg-field label{color:#aaa}
 body.dark .cfg-field input,body.dark .cfg-field select{background:#2a2a2a;border-color:#444;color:#e0e0e0}
 body.dark .token-info{color:#888}
 body.dark .sort-arrow{color:#666}
+/* Prefs modal dark */
+body.dark .prefs-tabs{background:#252525;border-bottom-color:#444}
+body.dark .prefs-tab{color:#aaa}
+body.dark .prefs-tab:hover{color:#e0e0e0}
+body.dark .prefs-tab.active{color:#64b5f6;border-bottom-color:#64b5f6}
+body.dark .pref-row{border-bottom-color:#2a2a2a}
+body.dark .pref-label{color:#aaa}
+/* Details dark mode (independent of GUI dark mode) */
+.detail-popover.details-dark{background:#1e1e1e;color:#e0e0e0}
+.detail-popover.details-dark .dp-header{background:#252525;border-bottom-color:#444}
+.detail-popover.details-dark .dp-header h3{color:#e0e0e0}
+.detail-popover.details-dark .dp-close{color:#888}
+.detail-popover.details-dark .dp-close:hover{color:#e0e0e0}
+.detail-popover.details-dark .dp-section h4{color:#aaa;border-bottom-color:#333}
+.detail-popover.details-dark .dp-label{color:#aaa}
+.detail-popover.details-dark .dp-val{color:#e0e0e0}
+.detail-popover.details-dark th{background:#252525;border-bottom-color:#444;color:#aaa}
+.detail-popover.details-dark td{border-bottom-color:#333;color:#e0e0e0}
+.detail-popover.details-dark .dp-loading{color:#666}
+/* Force light on details popover when details-dark is off (overrides body.dark) */
+.detail-popover:not(.preview-popover):not(.details-dark){background:#fff;color:#333;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-header{background:#fafafa;border-bottom-color:#e0e0e0}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-header h3{color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-close{color:#888}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-close:hover{color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-section h4{color:#555;border-bottom-color:#eee}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-label{color:#555}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-val{color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) th{background:#fafafa;border-bottom-color:#e0e0e0;color:#555}
+.detail-popover:not(.preview-popover):not(.details-dark) td{border-bottom-color:#eee;color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-loading{color:#999}
 </style>
 </head>
 <body>
@@ -716,43 +754,92 @@ body.dark .sort-arrow{color:#666}
   <button class="btn-config" id="btnConfig" onclick="openConfigEditor()" title="Edytor konfiguracji">&#9998; Konfiguracja</button>
   <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
 </div>
-<div class="search-form prefs-panel" id="prefsPanel" style="padding:.6rem 1rem;gap:.8rem;display:none;flex-wrap:wrap">
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="darkMode" onchange="toggleDarkMode()"> Tryb ciemny</label>
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="previewDarkMode" onchange="savePrefs()"> Podglad ciemny</label>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <div class="field">
-    <label>Katalog wyjsciowy</label>
-    <div style="display:flex;gap:.3rem">
-      <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:240px" onchange="savePrefs()">
-      <button class="btn-primary" type="button" onclick="openBrowser()" style="padding:.4rem .6rem;font-size:.8rem" title="Wybierz folder">&#128193;</button>
+<div class="modal-overlay" id="prefsModal" onclick="onPrefsOverlayClick(event)">
+  <div class="modal prefs-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>&#9881; Preferencje</h2>
+      <button class="modal-close" onclick="closePrefs()">&times;</button>
+    </div>
+    <div class="prefs-tabs">
+      <button class="prefs-tab active" id="ptab-general" onclick="switchPrefsTab('general',this)">Ogólne</button>
+      <button class="prefs-tab" id="ptab-export" onclick="switchPrefsTab('export',this)">Eksport</button>
+      <button class="prefs-tab" id="ptab-appearance" onclick="switchPrefsTab('appearance',this)">Wygląd</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:.6rem 1rem">
+      <div class="prefs-pane" id="pane-general">
+        <div class="pref-row">
+          <span class="pref-label">Katalog wyjściowy</span>
+          <div style="display:flex;gap:.3rem">
+            <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:220px" onchange="savePrefs()">
+            <button class="btn-primary" type="button" onclick="openBrowser()" style="padding:.4rem .6rem;font-size:.8rem" title="Wybierz folder">&#128193;</button>
+          </div>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Separuj po NIP</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="separateByNip" onchange="savePrefs()"> <span id="profileNipLabel"></span></label>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Nazwy plików</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="customFilenames" onchange="savePrefs()"> data-sprzedawca-waluta-ksef</label>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Auto-odświeżanie (min)</span>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <input id="autoRefreshMinutes" type="number" value="0" min="0" max="1440" step="1"
+                   style="width:5rem" onchange="savePrefs()"
+                   title="0 = wyłączone, 1–1440 minut">
+            <span style="font-size:.75rem;color:#999">0 = wyłączone</span>
+          </div>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Port LAN</span>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <input id="lanPort" type="number" value="8150" min="1024" max="65535" style="width:80px" onchange="savePrefs()">
+            <span style="font-size:.75rem;color:#999">wymaga restartu</span>
+          </div>
+        </div>
+      </div>
+      <div class="prefs-pane" id="pane-export" style="display:none">
+        <div class="pref-row">
+          <span class="pref-label">Formaty eksportu</span>
+          <div style="display:flex;gap:.9rem;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expXml" checked onchange="savePrefs()"> XML</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expPdf" checked onchange="savePrefs()"> PDF</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expJson" onchange="savePrefs()"> JSON</label>
+          </div>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Schemat kolorów PDF</span>
+          <select id="pdfColorScheme" onchange="savePrefs()">
+            <option value="navy">Granatowy</option>
+            <option value="forest">Zielony</option>
+            <option value="slate">Szary</option>
+          </select>
+        </div>
+      </div>
+      <div class="prefs-pane" id="pane-appearance" style="display:none">
+        <div class="pref-row">
+          <span class="pref-label">Tryb ciemny (GUI)</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="darkMode" onchange="toggleDarkMode()"> Włącz</label>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Podgląd faktury ciemny</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode" onchange="savePrefs()"> Włącz</label>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Szczegóły faktury ciemne</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="detailsDarkMode" onchange="savePrefs()"> Włącz</label>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Testuj powiadomienia</span>
+          <button class="btn-sm btn-prefs" onclick="sendSampleNotification()">&#128276; Wyślij testowe</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end">
+      <button class="btn-prefs" onclick="savePrefs();closePrefs()" style="padding:.4rem 1.2rem">Zapisz preferencje</button>
     </div>
   </div>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="separateByNip" onchange="savePrefs()"> Separuj po NIP (<span id="profileNipLabel"></span>)</label>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="customFilenames" onchange="savePrefs()"> Nazwy plikow: data-sprzedawca-waluta-ksef</label>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <span style="font-size:.78rem;font-weight:600;color:#555">Eksport:</span>
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer"><input type="checkbox" id="expXml" checked onchange="savePrefs()"> XML</label>
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer"><input type="checkbox" id="expPdf" checked onchange="savePrefs()"> PDF</label>
-  <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem;cursor:pointer"><input type="checkbox" id="expJson" onchange="savePrefs()"> JSON</label>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <div class="field" style="flex-direction:row;align-items:center;gap:.3rem">
-    <label style="font-size:.78rem;font-weight:600;color:#555;white-space:nowrap">Schemat kolorów PDF:</label>
-    <select id="pdfColorScheme" style="font-size:.8rem;padding:.2rem .4rem" onchange="savePrefs()">
-      <option value="navy">Granatowy</option>
-      <option value="forest">Zielony</option>
-      <option value="slate">Szary</option>
-    </select>
-  </div>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <div class="field" style="flex-direction:row;align-items:center;gap:.3rem">
-    <label style="font-size:.78rem;font-weight:600;color:#555;white-space:nowrap">Port LAN:</label>
-    <input id="lanPort" type="number" value="8150" min="1024" max="65535" style="width:70px;font-size:.8rem;padding:.2rem .4rem" onchange="savePrefs()">
-    <span style="font-size:.7rem;color:#999">(restart)</span>
-  </div>
-  <span style="color:#ccc;margin:0 .3rem">|</span>
-  <button class="btn-sm btn-prefs" onclick="savePrefs();$('prefsPanel').style.display='none'" style="padding:.3rem .8rem">Zapisz preferencje</button>
 </div>
 <div id="setupBanner" style="display:none;align-items:center;gap:.8rem;background:#fff3e0;border:1px solid #ffb300;border-radius:8px;padding:.7rem 1rem;margin-bottom:.5rem;font-size:.9rem;color:#6d4c00">
   <span>&#9888;</span>
@@ -822,6 +909,9 @@ let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es 
 let activeCurrencies = new Set();
 let selectedInvoices = new Set();
 let fileStatus = [];
+let autoRefreshTimer = null;
+let knownInvoiceKsefNumbers = null; // null = not yet baselined; Set after first search
+let lastSearchParams = null;        // params of last successful search; null = no search yet
 
 // Set default month to current month
 (function initDates() {
@@ -850,7 +940,10 @@ async function loadPrefs() {
       if (p.lanPort) $('lanPort').value = p.lanPort;
       if (p.darkMode) { $('darkMode').checked = true; document.body.classList.add('dark'); }
       if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
+      if (p.detailsDarkMode) { $('detailsDarkMode').checked = true; }
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
+      $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
+      startAutoRefresh(parseInt($('autoRefreshMinutes').value) || 0);
       if (p.profileNip) $('profileNipLabel').textContent = p.profileNip;
       // Populate profile dropdown
       if (p.allProfiles) {
@@ -952,10 +1045,15 @@ function savePrefs() {
     separateByNip: $('separateByNip').checked,
     darkMode: $('darkMode').checked,
     previewDarkMode: $('previewDarkMode').checked,
+    detailsDarkMode: $('detailsDarkMode').checked,
     pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
-    lanPort: parseInt($('lanPort').value) || 8150
+    lanPort: parseInt($('lanPort').value) || 8150,
+    autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0
   };
+  const mins = prefs.autoRefreshMinutes;
+  startAutoRefresh(mins);
+  if (mins > 0) requestNotificationPermission();
   fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) }).catch(() => {});
 }
 
@@ -977,10 +1075,15 @@ function onProfileChange() {
   fetchTokenStatus();
 }
 
-function togglePrefs() {
-  const panel = $('prefsPanel');
-  const visible = panel.style.display !== 'none';
-  panel.style.display = visible ? 'none' : 'flex';
+function togglePrefs() { openPrefs(); }
+function openPrefs() { $('prefsModal').classList.add('visible'); }
+function closePrefs() { $('prefsModal').classList.remove('visible'); }
+function onPrefsOverlayClick(e) { if (e.target === $('prefsModal')) closePrefs(); }
+function switchPrefsTab(name, btn) {
+  document.querySelectorAll('.prefs-pane').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.prefs-tab').forEach(t => t.classList.remove('active'));
+  $('pane-' + name).style.display = 'block';
+  btn.classList.add('active');
 }
 
 // ---- Config editor ----
@@ -1451,6 +1554,9 @@ async function doSearch() {
     searchRunning = false;
     btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true;
     checkExisting();
+    // Capture params for cyclic refresh; re-baseline known set on every manual search
+    lastSearchParams = { subjectType: $('subjectType').value, fromDate: $('fromDate').value, toDate: $('toDate').value, dateType: $('dateType').value };
+    knownInvoiceKsefNumbers = new Set(invoices.map(i => i.ksefNumber));
   } catch (err) {
     searchRunning = false;
     setStatus('Blad: ' + err.message, 'error');
@@ -1575,7 +1681,7 @@ async function showDetails(idx, event) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDetails(); });
 
   const pop = document.createElement('div');
-  pop.className = 'detail-popover' + ($('previewDarkMode').checked ? ' preview-dark' : '');
+  pop.className = 'detail-popover' + ($('detailsDarkMode').checked ? ' details-dark' : '');
   pop.innerHTML = '<div class="dp-header"><h3>Szczegoly faktury</h3><button class="dp-close" onclick="closeDetails()">&times;</button></div><div class="dp-body"><div class="dp-loading"><span class="spinner">&#8635;</span> Pobieranie...</div></div>';
   overlay.appendChild(pop);
   document.body.appendChild(overlay);
@@ -1756,6 +1862,82 @@ async function checkExisting() {
     fileStatus = await res.json();
     renderTable();
   } catch {}
+}
+
+// --- Auto-refresh ---
+function startAutoRefresh(minutes) {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = null;
+  if (!minutes || minutes < 1) return;
+  autoRefreshTimer = setInterval(() => { if (lastSearchParams) silentRefresh(); }, minutes * 60 * 1000);
+}
+
+async function silentRefresh() {
+  if (!lastSearchParams) return;
+  try {
+    const res = await fetch('/search', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({}, lastSearchParams, { source: 'auto' }))
+    });
+    if (!res.ok) return;
+    const fresh = await res.json();
+    fresh.forEach((inv, i) => inv._idx = i);
+    detectNewInvoices(fresh);
+    invoices = fresh;
+    buildCurrencyFilter();
+    renderTable();
+    checkExisting();
+  } catch(e) { /* silent */ }
+}
+
+function detectNewInvoices(fresh) {
+  if (knownInvoiceKsefNumbers === null) {
+    knownInvoiceKsefNumbers = new Set(fresh.map(i => i.ksefNumber));
+    return;
+  }
+  const newOnes = fresh.filter(i => !knownInvoiceKsefNumbers.has(i.ksefNumber));
+  if (newOnes.length === 0) return;
+  fresh.forEach(i => knownInvoiceKsefNumbers.add(i.ksefNumber));
+  const n = newOnes.length;
+  const msg = 'Znaleziono ' + n + ' now' + (n === 1 ? 'ą fakturę' : (n < 5 ? 'e faktury' : 'ych faktur')) + '!';
+  document.title = '(' + n + ' nowych) KSeFCli';
+  window.addEventListener('focus', () => { document.title = 'KSeFCli'; }, { once: true });
+  showNewInvoiceToast(msg);
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    new Notification('KSeFCli', { body: msg });
+  }
+}
+
+function showNewInvoiceToast(msg) {
+  let toast = document.getElementById('newInvoiceToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'newInvoiceToast';
+    toast.style.cssText = 'position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:#1976d2;color:#fff;padding:.6rem 1.4rem;border-radius:.5rem;font-weight:600;font-size:.95rem;box-shadow:0 2px 12px rgba(0,0,0,.25);z-index:9999;cursor:pointer;transition:opacity .4s';
+    toast.onclick = () => { toast.style.opacity = 0; setTimeout(() => toast.remove(), 400); };
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = 1;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = 0; setTimeout(() => toast.remove(), 400); }, 8000);
+}
+
+function requestNotificationPermission() {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function sendSampleNotification() {
+  requestNotificationPermission();
+  const msg = 'Znaleziono 3 nowe faktury!';
+  document.title = '(3 nowych) KSeFCli';
+  window.addEventListener('focus', () => { document.title = 'KSeFCli'; }, { once: true });
+  showNewInvoiceToast(msg);
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    new Notification('KSeFCli', { body: msg });
+  }
 }
 
 // --- Quit ---
