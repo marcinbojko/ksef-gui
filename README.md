@@ -147,12 +147,22 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 - Kolorowy przycisk *Autoryzuj* (zielony / pomarańczowy / czerwony)
 - Ponowna autoryzacja bez restartu
 
-**⚙ Preferencje**
-- Katalog wyjściowy, formaty eksportu, schemat nazw plików
-- Tryb ciemny, tryb ciemny podglądu faktury
-- Schemat kolorów PDF: Granatowy / Zielony / Szary
+**⚙ Preferencje** (panel z zakładkami)
+
+Zakładka **Ogólne**:
+- Katalog wyjściowy, formaty eksportu (XML / PDF / JSON), schemat nazw plików
+- Separacja po NIP
 - Port LAN (zmiana wymaga restartu)
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
+- **Auto-odświeżanie** — cykliczne wyszukiwanie w tle co N minut (0 = wyłączone); gdy pojawiają się nowe faktury, wyświetlane są powiadomienia (pasek tytułu, toast, powiadomienie systemowe przeglądarki)
+
+Zakładka **Eksport**:
+- Szczegółowe opcje eksportu plików
+
+Zakładka **Wygląd**:
+- Trzy niezależne tryby ciemne: interfejs GUI, podgląd faktury (HTML), szczegóły faktury
+- Schemat kolorów PDF: Granatowy / Zielony / Szary
+- Przycisk *Wyślij testowe powiadomienie* — weryfikacja uprawnień do powiadomień przeglądarki
 
 Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
 
@@ -379,12 +389,22 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 - Colour-coded Autoryzuj button (green / orange / red)
 - Re-authenticate without restarting
 
-**⚙ Preferences**
-- Output directory, export formats, filename style
-- Dark mode toggle, invoice preview dark mode
-- PDF colour scheme: Navy / Forest / Slate
+**⚙ Preferences** (tabbed panel)
+
+**General** tab:
+- Output directory, export formats (XML / PDF / JSON), filename style
+- Separate-by-NIP option
 - LAN port (change takes effect on next start)
 - Active profile selection (persisted across sessions; switching takes effect immediately without restart)
+- **Auto-refresh** — background search every N minutes (0 = disabled); when new invoices appear, notifications are shown (page title badge, in-page toast, browser Web Notification)
+
+**Export** tab:
+- Detailed file export options
+
+**Appearance** tab:
+- Three independent dark modes: GUI interface, invoice HTML preview, invoice details panel
+- PDF colour scheme: Navy / Forest / Slate
+- *Send test notification* button — verify browser notification permissions
 
 Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
 
