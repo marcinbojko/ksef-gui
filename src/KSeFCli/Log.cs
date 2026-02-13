@@ -25,19 +25,23 @@ public static class Log
         System.IO.Directory.CreateDirectory(logDir);
         string logPath = System.IO.Path.Combine(logDir, "ksefcli-.log");
 
-        var consoleConfig = new LoggerConfiguration()
+        LoggerConfiguration consoleConfig = new LoggerConfiguration()
             .MinimumLevel.Is(verbose ? LogEventLevel.Debug : LogEventLevel.Information)
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning);
 
         if (jsonConsole)
+        {
             consoleConfig = consoleConfig.WriteTo.Console(
                 formatter: new CompactJsonFormatter(),
                 restrictedToMinimumLevel: consoleLevel);
+        }
         else
+        {
             consoleConfig = consoleConfig.WriteTo.Console(
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
                 restrictedToMinimumLevel: consoleLevel);
+        }
 
         Serilog.Log.Logger = consoleConfig
             .WriteTo.File(
