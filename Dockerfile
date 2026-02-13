@@ -40,6 +40,9 @@ LABEL org.opencontainers.image.licenses="GPL-3.0"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
+# Create config and cache directories so bind mounts land correctly
+RUN mkdir -p /root/.config/ksefcli /root/.cache/ksefcli /data
+
 WORKDIR /output
 
 COPY --from=build /src/src/KSeFCli/bin/Release/net10.0/linux-x64/publish/   linux-x64/
