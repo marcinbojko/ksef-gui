@@ -205,13 +205,15 @@ Dla uruchomienia na serwerze, NAS lub w środowisku Docker compose dostarcza kom
 cp .env.example .env
 $EDITOR .env
 
-# 2. Upewnij się, że plik konfiguracji ksefcli istnieje
-#    (jeśli nie — GUI wygeneruje szablon przy pierwszym uruchomieniu)
+# 2. Utwórz pusty plik konfiguracyjny (WYMAGANE przed pierwszym uruchomieniem)
+#    Pominięcie tego kroku powoduje, że Docker tworzy katalog zamiast pliku!
 touch ksefcli.yaml
 
 # 3. Uruchom stos
 docker compose up -d
 ```
+
+> **Ważne — `ksefcli.yaml`:** Ten krok jest obowiązkowy. Jeśli `ksefcli.yaml` nie istnieje jako plik, Docker automatycznie tworzy **katalog** o tej nazwie, co uniemożliwia uruchomienie kontenera. Pusty plik jest wystarczający — GUI wygeneruje w nim szablon konfiguracji przy pierwszym uruchomieniu.
 
 > **Wymaganie DNS:** `KSEFCLI_HOSTNAME` musi wskazywać na adres IP hosta przed uruchomieniem — Traefik użyje go do uzyskania certyfikatu TLS od Let's Encrypt.
 
@@ -541,13 +543,15 @@ For running on a server, NAS, or in a Docker environment the compose file provid
 cp .env.example .env
 $EDITOR .env
 
-# 2. Make sure the ksefcli config file exists
-#    (if absent, the GUI generates a template on first run)
+# 2. Create an empty config file (REQUIRED before first run)
+#    Skipping this step causes Docker to create a directory instead of a file!
 touch ksefcli.yaml
 
 # 3. Bring the stack up
 docker compose up -d
 ```
+
+> **Important — `ksefcli.yaml`:** This step is mandatory. If `ksefcli.yaml` does not exist as a file, Docker will automatically create a **directory** with that name, which prevents the container from starting. An empty file is sufficient — the GUI will write a config template into it on first run.
 
 > **DNS requirement:** `KSEFCLI_HOSTNAME` must resolve to the host IP before startup — Traefik uses it to obtain a TLS certificate from Let's Encrypt.
 
