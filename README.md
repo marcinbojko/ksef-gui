@@ -140,7 +140,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 - Wybór katalogu wyjściowego (przeglądarka folderów)
 - Formaty eksportu: XML (domyślnie włączony), PDF (włączony przy `--pdf`), JSON
 - Własny schemat nazw: `YYYY-MM-DD-Sprzedawca-Waluta-NumerKSeF`
-- "Separuj po profilu" — tworzy podkatalog o nazwie aktywnego profilu
+- "Separuj po NIP" — tworzy podkatalog według NIP aktywnego profilu
 
 **Status tokenu**
 - Wyświetla czas ważności tokenu dostępu i tokenu odświeżania
@@ -382,7 +382,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 - Folder picker for output directory
 - Export formats: XML (default on), PDF (on with `--pdf`), JSON (default off)
 - Custom filename pattern: `YYYY-MM-DD-SellerName-Currency-KsefNumber`
-- "Separate by profile" — creates a subdirectory named after the active profile
+- "Separate by NIP" — creates a subdirectory named after the active profile's NIP
 
 **Token status**
 - Displays access token and refresh token expiry times
@@ -393,7 +393,7 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 
 **General** tab:
 - Output directory, export formats (XML / PDF / JSON), filename style
-- Separate-by-profile option (subdirectory = active profile name)
+- Separate-by-NIP option (subdirectory = active profile's NIP)
 - LAN port (change takes effect on next start)
 - Active profile selection (persisted across sessions; switching takes effect immediately without restart)
 - **Auto-refresh** — background search every N minutes (0 = disabled); when new invoices appear, notifications are shown (page title badge, in-page toast, browser Web Notification)

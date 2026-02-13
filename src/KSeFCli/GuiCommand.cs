@@ -297,9 +297,10 @@ public class GuiCommand : IWithConfigCommand
             string outputDir = string.IsNullOrWhiteSpace(checkParams.OutputDir) ? OutputDir : checkParams.OutputDir;
             if (checkParams.SeparateByNip)
             {
-                if (!string.IsNullOrEmpty(ActiveProfile))
+                string nip = Config().Nip;
+                if (!string.IsNullOrEmpty(nip))
                 {
-                    outputDir = Path.Combine(outputDir, ActiveProfile);
+                    outputDir = Path.Combine(outputDir, nip);
                 }
             }
 
@@ -584,9 +585,10 @@ public class GuiCommand : IWithConfigCommand
         string outputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
         if (dlParams.SeparateByNip)
         {
-            if (!string.IsNullOrEmpty(ActiveProfile))
+            string nip = Config().Nip;
+            if (!string.IsNullOrEmpty(nip))
             {
-                outputDir = Path.Combine(outputDir, ActiveProfile);
+                outputDir = Path.Combine(outputDir, nip);
             }
         }
         Directory.CreateDirectory(outputDir);

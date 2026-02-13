@@ -799,7 +799,7 @@ body.dark .pref-label{color:#aaa}
           </div>
         </div>
         <div class="pref-row">
-          <span class="pref-label">Separuj po profilu</span>
+          <span class="pref-label">Separuj po NIP</span>
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="separateByNip" onchange="savePrefs()"> <span id="profileNameLabel"></span></label>
         </div>
         <div class="pref-row">
