@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace KSeFCli;
 
-internal record SearchParams(string SubjectType, string From, string? To, string DateType);
+internal record SearchParams(string SubjectType, string From, string? To, string DateType, string? Source = null);
 internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null);
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip);
 
@@ -638,10 +638,34 @@ body.dark .btn-details:hover{border-color:#64b5f6;color:#64b5f6;background:#0d21
 .detail-popover.preview-dark th{background:#252525;border-bottom-color:#444;color:#aaa}
 .detail-popover.preview-dark td{border-bottom-color:#333;color:#e0e0e0}
 .detail-popover.preview-dark .dp-loading{color:#666}
+/* --- Details dark mode (independent of GUI dark mode) --- */
+.detail-popover.details-dark{background:#1e1e1e;color:#e0e0e0}
+.detail-popover.details-dark .dp-header{background:#252525;border-bottom-color:#444}
+.detail-popover.details-dark .dp-header h3{color:#e0e0e0}
+.detail-popover.details-dark .dp-close{color:#888}
+.detail-popover.details-dark .dp-close:hover{color:#e0e0e0}
+.detail-popover.details-dark .dp-section h4{color:#aaa;border-bottom-color:#333}
+.detail-popover.details-dark .dp-label{color:#aaa}
+.detail-popover.details-dark .dp-val{color:#e0e0e0}
+.detail-popover.details-dark th{background:#252525;border-bottom-color:#444;color:#aaa}
+.detail-popover.details-dark td{border-bottom-color:#333;color:#e0e0e0}
+.detail-popover.details-dark .dp-loading{color:#666}
 body.dark .btn-preview{border-color:#555;color:#aaa}
 body.dark .btn-preview:hover{border-color:#81c784;color:#81c784;background:#1b3a1b}
 body.dark tr.has-files>td{background:rgba(129,199,132,.06)}
 body.dark tr.has-files:hover>td{background:rgba(129,199,132,.12)}
+/* Force light styles on details popover when details-dark is off (overrides body.dark) */
+.detail-popover:not(.preview-popover):not(.details-dark){background:#fff;color:#333;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-header{background:#fafafa;border-bottom-color:#e0e0e0}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-header h3{color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-close{color:#888}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-close:hover{color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-section h4{color:#555;border-bottom-color:#eee}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-label{color:#555}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-val{color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) th{background:#fafafa;border-bottom-color:#e0e0e0;color:#555}
+.detail-popover:not(.preview-popover):not(.details-dark) td{border-bottom-color:#eee;color:#333}
+.detail-popover:not(.preview-popover):not(.details-dark) .dp-loading{color:#999}
 /* Force light styles on preview popover when preview-dark is off (overrides body.dark) */
 .detail-popover.preview-popover:not(.preview-dark){background:#fff;color:#333;box-shadow:0 8px 30px rgba(0,0,0,.25)}
 .detail-popover.preview-popover:not(.preview-dark) .dp-header{background:#fafafa;border-bottom-color:#e0e0e0}
@@ -1561,6 +1585,106 @@ async function doSearch() {
     searchRunning = false;
     setStatus('Blad: ' + err.message, 'error');
     updateAuthButton();
+  }
+}
+
+// ── Auto-refresh ─────────────────────────────────────────────────────────────
+
+function startAutoRefresh(minutes) {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  if (!minutes || minutes < 1) return;
+  autoRefreshTimer = setInterval(() => { if (lastSearchParams) silentRefresh(); }, minutes * 60 * 1000);
+}
+
+async function silentRefresh() {
+  if (!lastSearchParams) return;
+  // Refresh session token if it expires within 1 minute
+  if (tokenExpiry && (tokenExpiry - Date.now()) < 60 * 1000) {
+    console.info('[auto-refresh] Access token expiring in <1 min — refreshing session before search');
+    try {
+      const authRes = await fetch('/auth', { method: 'POST' });
+      if (!authRes.ok) {
+        console.warn('[auto-refresh] Token refresh failed — skipping this cycle');
+        return;
+      }
+      await fetchTokenStatus();
+      console.info('[auto-refresh] Session refreshed. New expiry:', tokenExpiry?.toLocaleTimeString());
+    } catch(e) {
+      console.warn('[auto-refresh] Token refresh error:', e);
+      return;
+    }
+  }
+  console.info('[auto-refresh] Cyclic search started at', new Date().toLocaleTimeString());
+  try {
+    const params = Object.assign({}, lastSearchParams, { source: 'auto' });
+    const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
+    if (!res.ok) return;
+    const fresh = await res.json();
+    fresh.forEach((inv, i) => inv._idx = i);
+    console.info('[auto-refresh] Cyclic search complete —', fresh.length, 'invoices');
+    detectNewInvoices(fresh);
+    invoices = fresh;
+    total = invoices.length;
+    countLabel.textContent = total + ' faktur';
+    buildCurrencyFilter();
+    renderTable();
+    checkExisting();
+  } catch(e) { /* silent — do not disrupt user */ }
+}
+
+function detectNewInvoices(fresh) {
+  if (knownInvoiceKsefNumbers === null) {
+    knownInvoiceKsefNumbers = new Set(fresh.map(i => i.ksefNumber));
+    return;
+  }
+  const newOnes = fresh.filter(i => !knownInvoiceKsefNumbers.has(i.ksefNumber));
+  if (newOnes.length === 0) return;
+  fresh.forEach(i => knownInvoiceKsefNumbers.add(i.ksefNumber));
+  const n = newOnes.length;
+  const msg = 'Znaleziono ' + n + ' now' + (n === 1 ? 'ą fakturę' : (n < 5 ? 'e faktury' : 'ych faktur')) + '!';
+  // 1. Page title badge — cleared on next focus
+  document.title = '(' + n + ' nowych) KSeFCli';
+  window.addEventListener('focus', () => { document.title = 'KSeFCli'; }, { once: true });
+  // 2. In-page toast
+  showNewInvoiceToast(msg);
+  // 3. OS notification
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    new Notification('KSeFCli', { body: msg });
+  }
+}
+
+function showNewInvoiceToast(msg) {
+  let toast = document.getElementById('newInvoiceToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'newInvoiceToast';
+    toast.style.cssText = 'position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:#1976d2;color:#fff;padding:.6rem 1.4rem;border-radius:.5rem;font-weight:600;font-size:.95rem;box-shadow:0 2px 12px rgba(0,0,0,.25);z-index:9999;cursor:pointer;transition:opacity .4s';
+    toast.onclick = () => { toast.style.opacity = 0; setTimeout(() => toast.remove(), 400); };
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = 1;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = 0; setTimeout(() => toast.remove(), 400); }, 8000);
+}
+
+function requestNotificationPermission() {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function sendSampleNotification() {
+  requestNotificationPermission();
+  const msg = 'Znaleziono 3 nowe faktury!';
+  // 1. Page title badge
+  document.title = '(3 nowych) KSeFCli';
+  window.addEventListener('focus', () => { document.title = 'KSeFCli'; }, { once: true });
+  // 2. In-page toast
+  showNewInvoiceToast(msg);
+  // 3. OS notification
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    new Notification('KSeFCli', { body: msg });
   }
 }
 

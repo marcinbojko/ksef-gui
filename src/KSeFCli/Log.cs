@@ -1,52 +1,55 @@
 using Microsoft.Extensions.Logging;
 
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Compact;
+using Serilog.Formatting.Json;
+
 public static class Log
 {
     private static ILoggerFactory? _loggerFactory;
 
-    public static ILogger Logger { get; private set; } = default!;
+    public static ILogger<object> Logger { get; private set; } = default!;
 
     public static void ConfigureLogging(bool verbose = false, bool quiet = false)
     {
+        LogEventLevel consoleLevel = quiet
+            ? LogEventLevel.Warning
+            : verbose
+                ? LogEventLevel.Debug
+                : LogEventLevel.Information;
+
+        string logDir = System.IO.Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            ".cache", "ksefcli");
+        System.IO.Directory.CreateDirectory(logDir);
+        string logPath = System.IO.Path.Combine(logDir, "ksefcli-.log");
+
+        Serilog.Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Is(verbose ? LogEventLevel.Debug : LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .MinimumLevel.Override("System", LogEventLevel.Warning)
+            .WriteTo.Console(
+                formatter: new CompactJsonFormatter(),
+                restrictedToMinimumLevel: consoleLevel)
+            .WriteTo.File(
+                new JsonFormatter(renderMessage: true),
+                logPath,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                shared: true)
+            .CreateLogger();
+
         _loggerFactory = LoggerFactory.Create(builder =>
-        {
-            LogLevel ksefCliLevel = LogLevel.Information;
-            LogLevel microsoftLevel = LogLevel.Warning;
-            LogLevel systemLevel = LogLevel.Warning;
+            builder.AddSerilog(Serilog.Log.Logger, dispose: false));
 
-            if (verbose)
-            {
-                ksefCliLevel = LogLevel.Debug;
-                microsoftLevel = LogLevel.Debug;
-                systemLevel = LogLevel.Debug;
-            }
-
-            if (quiet)
-            {
-                ksefCliLevel = LogLevel.Warning;
-            }
-
-            builder.AddFilter("KSeFCli", ksefCliLevel)
-                   .AddFilter("Microsoft", microsoftLevel)
-                   .AddFilter("System", systemLevel)
-                   .AddConsole(options =>
-                   {
-                       options.LogToStandardErrorThreshold = LogLevel.Trace;
-                   })
-                   .AddSimpleConsole(options =>
-                   {
-                       options.SingleLine = true;
-                       options.TimestampFormat = "HH:mm:ss ";
-                   });
-        });
-
-        Logger = _loggerFactory.CreateLogger("KSeFCli");
+        Logger = _loggerFactory.CreateLogger<object>();
     }
 
-    public static void LogTrace(string message) => Logger.LogTrace(message);
-    public static void LogDebug(string message) => Logger.LogDebug(message);
-    public static void LogInformation(string message) => Logger.LogInformation(message);
-    public static void LogWarning(string message) => Logger.LogWarning(message);
-    public static void LogError(string message) => Logger.LogError(message);
-    public static void LogCritical(string message) => Logger.LogCritical(message);
+    public static void LogTrace(string message) => Logger.LogTrace("{Message}", message);
+    public static void LogDebug(string message) => Logger.LogDebug("{Message}", message);
+    public static void LogInformation(string message) => Logger.LogInformation("{Message}", message);
+    public static void LogWarning(string message) => Logger.LogWarning("{Message}", message);
+    public static void LogError(string message) => Logger.LogError("{Message}", message);
+    public static void LogCritical(string message) => Logger.LogCritical("{Message}", message);
 }

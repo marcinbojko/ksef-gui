@@ -135,7 +135,7 @@ public class SzukajFakturCommand : IWithConfigCommand
 
     public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
-        Log.LogInformation("Szukanie faktur...");
+        Log.LogInformation("Searching for invoices...");
         IKSeFClient ksefClient = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
         List<InvoiceSummary> invoices = await SzukajFaktury(

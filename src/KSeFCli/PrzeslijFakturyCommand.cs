@@ -42,15 +42,15 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
     {
         EncryptionData encryptionData = cryptographyService.GetEncryptionData();
 
-        Log.LogInformation("1. Przygotowanie paczki ZIP");
+        Log.LogInformation("1. Building ZIP package");
         (byte[] zipBytes, FileMetadata zipMeta) =
             BatchUtils.BuildZip(invoices, cryptographyService);
 
-        Log.LogInformation("2. Podział binarny paczki ZIP na części oraz 3. Zaszyfrowanie części paczki");
+        Log.LogInformation("2. Binary split of ZIP package into parts and 3. Encrypting parts");
         List<BatchPartSendingInfo> encryptedParts =
             BatchUtils.EncryptAndSplit(zipBytes, encryptionData, cryptographyService);
 
-        Log.LogInformation("4. Otwarcie sesji wsadowej");
+        Log.LogInformation("4. Opening batch session");
         OpenBatchSessionRequest openBatchRequest =
             BatchUtils.BuildOpenBatchRequest(zipMeta, encryptionData, encryptedParts);
 
@@ -107,16 +107,16 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
         string referenceNumber = result.ReferenceNumber;
         Log.LogInformation($"ReferenceNumber={result.ReferenceNumber}");
 
-        Log.LogInformation("5. Przesłanie zadeklarowanych części paczki");
+        Log.LogInformation("5. Sending declared package parts");
         await ksefClient.SendBatchPartsAsync(result.OpenBatchSessionResponse, result.EncryptedParts).ConfigureAwait(false);
 
-        Log.LogInformation("6. Zamknięcie sesji wsadowej");
+        Log.LogInformation("6. Closing batch session");
         await ksefClient.CloseBatchSessionAsync(result.ReferenceNumber, accessToken).ConfigureAwait(false);
 
         /* ---------------------------------------------------------------------- */
-        Log.LogInformation("sesja-sprawdzenie-stanu-i-pobranie-upo.md");
+        Log.LogInformation("session-check-status-and-get-upo.md");
 
-        Log.LogInformation("4) Oczekiwanie na przetworzenie faktury");
+        Log.LogInformation("4) Waiting for invoice processing");
         SessionStatusResponse sessionStatus = await AsyncPollingUtils.PollWithBackoffAsync(
             action: () => ksefClient.GetSessionStatusAsync(referenceNumber, accessToken, cancellationToken),
             result => result is not null && result.SuccessfulInvoiceCount is not null,
@@ -137,7 +137,7 @@ public class PrzeslijFakturyCommand : IWithConfigCommand
         // maxAttempts: 30,
         // cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        Log.LogInformation("3. Pobranie informacji na temat przesłanych faktur");
+        Log.LogInformation("3. Getting information about submitted invoices");
         await PobranieInformacjiNaTematPrzeslanychFaktur(ksefClient, referenceNumber, accessToken, cancellationToken).ConfigureAwait(false);
 
         return 0;

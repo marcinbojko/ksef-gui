@@ -110,7 +110,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
     {
         Log.LogInformation($"----- {title} -----");
         Log.LogInformation(xml);
-        Log.LogInformation($"----- KONIEC: {title} -----\n");
+        Log.LogInformation($"----- END: {title} -----\n");
     }
 
 
@@ -186,13 +186,13 @@ public abstract class IWithConfigCommand : IGlobalCommand
         AuthenticationChallengeResponse challenge = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
         long timestampMs = challenge.Timestamp.ToUnixTimeMilliseconds();
         string ksefToken = config.Token ?? throw new InvalidOperationException("KSeF token is missing");
-        Log.LogInformation("1. Przygotowanie i szyfrowanie tokena");
+        Log.LogInformation("1. Preparing and encrypting token");
         // Przygotuj "token|timestamp" i zaszyfruj RSA-OAEP SHA-256 zgodnie z wymaganiem API
         string tokenWithTimestamp = $"{ksefToken}|{timestampMs}";
         byte[] tokenBytes = System.Text.Encoding.UTF8.GetBytes(tokenWithTimestamp);
         byte[] encrypted = cryptographyService.EncryptKsefTokenWithRSAUsingPublicKey(tokenBytes);
         string encryptedTokenB64 = Convert.ToBase64String(encrypted);
-        Log.LogInformation("2. Wysłanie żądania uwierzytelnienia tokenem KSeF");
+        Log.LogInformation("2. Submitting KSeF token authentication request");
         Trace.Assert(!string.IsNullOrEmpty(config.Nip), "--nip jest empty");
         AuthenticationKsefTokenRequest request = new AuthenticationKsefTokenRequest
         {
@@ -206,14 +206,14 @@ public abstract class IWithConfigCommand : IGlobalCommand
             AuthorizationPolicy = null
         };
         SignatureResponse signature = await ksefClient.SubmitKsefTokenAuthRequestAsync(request, new CancellationToken()).ConfigureAwait(false);
-        Log.LogInformation("3. Sprawdzenie statusu uwierzytelniania");
+        Log.LogInformation("3. Checking authentication status");
         DateTime startTime = DateTime.UtcNow;
         TimeSpan timeout = TimeSpan.FromMinutes(2);
         AuthStatus status;
         do
         {
             status = await ksefClient.GetAuthStatusAsync(signature.ReferenceNumber, signature.AuthenticationToken.Token).ConfigureAwait(false);
-            Log.LogInformation($"      Status: {StatusInfoToString(status.Status)} | upłynęło: {DateTime.UtcNow - startTime:mm\\:ss}");
+            Log.LogInformation($"      Status: {StatusInfoToString(status.Status)} | elapsed: {DateTime.UtcNow - startTime:mm\\:ss}");
             if (status.Status.Code != 200)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
@@ -223,9 +223,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
         while (status.Status.Code == 100 && (DateTime.UtcNow - startTime) < timeout);
         if (status.Status.Code != 200)
         {
-            throw new InvalidOperationException($"Uwierzytelnienie nie powiodło się lub przekroczono czas oczekiwania. {StatusInfoToString(status.Status)}");
+            throw new InvalidOperationException($"Authentication failed or timed out. {StatusInfoToString(status.Status)}");
         }
-        Log.LogInformation("4. Uzyskanie tokena dostępowego (accessToken)");
+        Log.LogInformation("4. Obtaining access token");
         AuthenticationOperationStatusResponse tokenResponse = await ksefClient.GetAccessTokenAsync(signature.AuthenticationToken.Token).ConfigureAwait(false);
         return tokenResponse;
     }
@@ -246,11 +246,11 @@ public abstract class IWithConfigCommand : IGlobalCommand
         X509Certificate2 certificate = publicCert.MergeWithPemKey(config.Certificate.Private_Key!, config.Certificate.Password);
 
         // 1. Get Auth Challenge
-        Log.LogInformation("[2] Pobieranie wyzwania (challenge) z KSeF...");
+        Log.LogInformation("[2] Getting authentication challenge from KSeF...");
         AuthenticationChallengeResponse challengeResponse = await ksefClient.GetAuthChallengeAsync().ConfigureAwait(false);
         Log.LogInformation($"    Challenge: {challengeResponse.Challenge}");
         // 2. Prepare and Sign AuthTokenRequest
-        Log.LogInformation("[3] Budowanie AuthTokenRequest (builder)...");
+        Log.LogInformation("[3] Building AuthTokenRequest (builder)...");
         AuthenticationTokenRequest authTokenRequest = AuthTokenRequestBuilder
             .Create()
             .WithChallenge(challengeResponse.Challenge)
@@ -258,26 +258,26 @@ public abstract class IWithConfigCommand : IGlobalCommand
             .WithIdentifierType(config.Certificate!.SubjectIdentifierType)
             .Build();
         // 4) Serializacja do XML
-        Log.LogInformation("[4] Serializacja żądania do XML (unsigned)...");
+        Log.LogInformation("[4] Serializing request to XML (unsigned)...");
         string unsignedXml = AuthenticationTokenRequestSerializer.SerializeToXmlString(authTokenRequest);
-        PrintXmlToConsole(unsignedXml, "XML przed podpisem");
-        Log.LogInformation("[6] Podpisywanie XML (XAdES)...");
+        PrintXmlToConsole(unsignedXml, "XML before signature");
+        Log.LogInformation("[6] Signing XML (XAdES)...");
 
         string signedXml = SignatureService.Sign(unsignedXml, certificate);
-        PrintXmlToConsole(signedXml, "XML po podpisie (XAdES)");
-        // 7) Przesłanie podpisanego XML do KSeF
-        Log.LogInformation("[7] Wysyłanie podpisanego XML do KSeF...");
+        PrintXmlToConsole(signedXml, "XML after signature (XAdES)");
+        // 7) Send signed XML to KSeF
+        Log.LogInformation("[7] Sending signed XML to KSeF...");
         SignatureResponse submission = await ksefClient.SubmitXadesAuthRequestAsync(signedXml, verifyCertificateChain: false).ConfigureAwait(false);
         Log.LogInformation($"    ReferenceNumber: {submission.ReferenceNumber}");
-        // 8) Odpytanie o status
-        Log.LogInformation("[8] Odpytanie o status operacji uwierzytelnienia...");
+        // 8) Poll status
+        Log.LogInformation("[8] Polling authentication operation status...");
         DateTime startTime = DateTime.UtcNow;
         TimeSpan timeout = TimeSpan.FromMinutes(2);
         AuthStatus status;
         do
         {
             status = await ksefClient.GetAuthStatusAsync(submission.ReferenceNumber, submission.AuthenticationToken.Token).ConfigureAwait(false);
-            Log.LogInformation($"      Status: {StatusInfoToString(status.Status)} | upłynęło: {DateTime.UtcNow - startTime:mm\\:ss}");
+            Log.LogInformation($"      Status: {StatusInfoToString(status.Status)} | elapsed: {DateTime.UtcNow - startTime:mm\\:ss}");
             if (status.Status.Code != 200)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
@@ -286,10 +286,10 @@ public abstract class IWithConfigCommand : IGlobalCommand
         while (status.Status.Code == 100 && (DateTime.UtcNow - startTime) < timeout);
         if (status.Status.Code != 200)
         {
-            throw new InvalidOperationException($"Uwierzytelnienie nie powiodło się lub przekroczono czas oczekiwania. {StatusInfoToString(status.Status)}");
+            throw new InvalidOperationException($"Authentication failed or timed out. {StatusInfoToString(status.Status)}");
         }
-        // 9) Pobranie access token
-        Log.LogInformation("[9] Pobieranie access token...");
+        // 9) Get access token
+        Log.LogInformation("[9] Getting access token...");
         AuthenticationOperationStatusResponse tokenResponse = await ksefClient.GetAccessTokenAsync(submission.AuthenticationToken.Token).ConfigureAwait(false);
         return tokenResponse;
     }
