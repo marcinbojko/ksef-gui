@@ -366,4 +366,3 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return cryptographyService;
     }
 }
-

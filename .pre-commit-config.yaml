@@ -1,0 +1,30 @@
+repos:
+  # ── Standard file hygiene ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ── .NET: format + build ─────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: dotnet-format
+        name: dotnet format (verify no changes)
+        language: system
+        entry: dotnet format src/KSeFCli/KSeFCli.csproj --verify-no-changes -v minimal
+        pass_filenames: false
+        types_or: [c#, file]
+        files: ^src/KSeFCli/.*\.(cs|csproj|editorconfig)$
+
+      - id: dotnet-build
+        name: dotnet build (Release)
+        language: system
+        entry: dotnet build src/KSeFCli/KSeFCli.csproj -c Release
+        pass_filenames: false
+        types_or: [c#, file]
+        files: ^src/KSeFCli/.*\.(cs|csproj)$

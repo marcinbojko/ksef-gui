@@ -212,7 +212,10 @@ public class GuiCommand : IWithConfigCommand
 
         int lanPort = PortOverride ?? savedPrefs.LanPort ?? DefaultLanPort;
         bool listenOnAll = Lan || (savedPrefs.ListenOnAll ?? false);
-        using WebProgressServer server = new WebProgressServer(lan: listenOnAll, port: lanPort);
+        using WebProgressServer server = new WebProgressServer(lan: listenOnAll, port: lanPort)
+        {
+            AllowedRoot = Path.GetFullPath(OutputDir),
+        };
         _server = server;
 
         server.OnSearch = SearchAsync;
