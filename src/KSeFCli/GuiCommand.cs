@@ -123,6 +123,12 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
+    /// <summary>
+    /// Start and run the GUI web server, initialize configuration and profile state, and wait until cancellation.
+    /// </summary>
+    /// <param name="scope">The DI scope created by the caller; used as the initial service scope for configuration loading and may be replaced during initialization.</param>
+    /// <param name="cancellationToken">Token that cancels the running server and causes the method to return.</param>
+    /// <returns>0 on normal exit.</returns>
     public override async Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         // Check if config file exists before doing anything else
