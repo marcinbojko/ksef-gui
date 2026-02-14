@@ -1,7 +1,10 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using CommandLine;
 using CommandLine.Text;
+
+[assembly: InternalsVisibleTo("KSeFCli.Tests")]
 
 namespace KSeFCli;
 

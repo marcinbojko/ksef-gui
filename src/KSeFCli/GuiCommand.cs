@@ -745,10 +745,12 @@ public class GuiCommand : IWithConfigCommand
         return $"{date}-{seller}-{currency}-{ksef}";
     }
 
-    private static string SanitizeFileName(string name)
+    internal static string SanitizeFileName(string name)
     {
-        char[] invalid = Path.GetInvalidFileNameChars();
-        string sanitized = string.Join("", name.Select(c => Array.IndexOf(invalid, c) >= 0 || c == ' ' ? '_' : c));
+        // Path.GetInvalidFileNameChars() is OS-specific; ':' is missing on Linux but invalid on Windows.
+        // Include it explicitly for cross-platform filename compatibility.
+        HashSet<char> invalid = new HashSet<char>(Path.GetInvalidFileNameChars()) { ':', '*', '?', '"', '<', '>', '|' };
+        string sanitized = string.Join("", name.Select(c => invalid.Contains(c) || c == ' ' ? '_' : c));
         if (sanitized.Length > 60)
         {
             sanitized = sanitized[..60];

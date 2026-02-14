@@ -69,7 +69,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
     /// Discards the cached config, profile, and token store so they are reloaded from disk on next access.
     /// Call after modifying the config file at runtime (e.g. from the GUI config editor).
     /// </summary>
-    protected void ResetCachedConfig()
+    protected internal void ResetCachedConfig()
     {
         _cachedConfig = new Lazy<KsefCliConfig>(() => ConfigLoader.Load(ConfigFile, ActiveProfile));
         _cachedProfile = new Lazy<ProfileConfig>(() =>
@@ -80,7 +80,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         _tokenStore = new Lazy<TokenStore>(() => new TokenStore(TokenCache));
     }
 
-    protected TokenStore GetTokenStore() => _tokenStore.Value;
+    protected internal TokenStore GetTokenStore() => _tokenStore.Value;
 
     public ProfileConfig Config() => _cachedProfile.Value;
 
@@ -121,7 +121,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return await ExecuteInScopeAsync(scope, cancellationToken).ConfigureAwait(false);
     }
 
-    protected void LogConfigSource()
+    protected internal void LogConfigSource()
     {
         string cfgPath = System.IO.Path.GetFullPath(ConfigFile);
         string? envVar = System.Environment.GetEnvironmentVariable("KSEFCLI_CONFIG");
@@ -337,7 +337,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
         };
     }
 
-    protected IServiceScope GetScope()
+    protected internal IServiceScope GetScope()
     {
         ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();

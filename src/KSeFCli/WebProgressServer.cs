@@ -432,7 +432,7 @@ internal sealed class WebProgressServer : IDisposable
             string errJson = JsonSerializer.Serialize(new { error = ex.Message });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
             ctx.Response.ContentType = "application/json; charset=utf-8";
-            ctx.Response.StatusCode = 500;
+            ctx.Response.StatusCode = 200;
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
         }
