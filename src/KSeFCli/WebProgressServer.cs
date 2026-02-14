@@ -52,12 +52,27 @@ internal sealed class WebProgressServer : IDisposable
 
     public bool Lan { get; }
 
+    /// <summary>
+    /// Root directory that constrains /browse and /mkdir endpoints.
+    /// Defaults to the filesystem root (unrestricted). Set to the configured output
+    /// directory to prevent path traversal outside that tree.
+    /// </summary>
+    public string AllowedRoot { get; init; } = "/";
+
     public WebProgressServer(bool lan = false, int port = 0)
     {
         Lan = lan;
         Port = port > 0 ? port : GetRandomPort();
         string host = lan ? "+" : "localhost";
         _listener.Prefixes.Add($"http://{host}:{Port}/");
+    }
+
+    private void AssertWithinAllowedRoot(string fullPath)
+    {
+        string root = Path.GetFullPath(AllowedRoot);
+        string rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootWithSep, StringComparison.Ordinal) && fullPath != root)
+            throw new UnauthorizedAccessException($"Path is outside the allowed directory.");
     }
 
     public void Start(CancellationToken cancellationToken)
@@ -250,6 +265,7 @@ internal sealed class WebProgressServer : IDisposable
             {
                 string dirPath = ctx.Request.QueryString["path"] ?? Directory.GetCurrentDirectory();
                 dirPath = Path.GetFullPath(dirPath);
+                AssertWithinAllowedRoot(dirPath);
                 if (!Directory.Exists(dirPath))
                 {
                     throw new DirectoryNotFoundException($"Directory not found: {dirPath}");
@@ -279,6 +295,7 @@ internal sealed class WebProgressServer : IDisposable
                 string dirPath = doc.RootElement.GetProperty("path").GetString()
                     ?? throw new InvalidOperationException("Missing path");
                 dirPath = Path.GetFullPath(dirPath);
+                AssertWithinAllowedRoot(dirPath);
                 Directory.CreateDirectory(dirPath);
                 return JsonSerializer.Serialize(new { ok = true, path = dirPath });
             }).ConfigureAwait(false);
