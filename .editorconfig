@@ -91,6 +91,10 @@ dotnet_diagnostic.CA1859.severity = suggestion
 # W testach umozliwiamy nazwy zawierające '_'
 dotnet_diagnostic.CA1707.severity = none
 
+[src/KSeFCli.Tests/**]
+# CA2007 conflicts with xUnit1030: test methods must not call ConfigureAwait(false)
+dotnet_diagnostic.CA2007.severity = none
+
 [thirdparty/**]
 dotnet_diagnostic.CA*.severity = none
 dotnet_diagnostic.IDE*.severity = none

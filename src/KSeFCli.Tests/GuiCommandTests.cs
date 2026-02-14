@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 
 using Xunit;
@@ -124,7 +123,7 @@ public class GuiCommandTests : IDisposable
     [Fact]
     public void ProfileEditorData_HasRequiredFields()
     {
-        Type profileEditorType = typeof(GuiCommand).GetNestedType("ProfileEditorData", System.Reflection.BindingFlags.NonPublic);
+        Type? profileEditorType = typeof(GuiCommand).GetNestedType("ProfileEditorData", System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(profileEditorType);
         Assert.NotNull(profileEditorType.GetProperty("Name"));
         Assert.NotNull(profileEditorType.GetProperty("Nip"));
@@ -135,7 +134,7 @@ public class GuiCommandTests : IDisposable
     [Fact]
     public void ConfigEditorData_HasRequiredFields()
     {
-        Type configEditorType = typeof(GuiCommand).GetNestedType("ConfigEditorData", System.Reflection.BindingFlags.NonPublic);
+        Type? configEditorType = typeof(GuiCommand).GetNestedType("ConfigEditorData", System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(configEditorType);
         Assert.NotNull(configEditorType.GetProperty("ActiveProfile"));
         Assert.NotNull(configEditorType.GetProperty("ConfigFilePath"));
@@ -145,7 +144,7 @@ public class GuiCommandTests : IDisposable
     [Fact]
     public void GuiPrefs_HasAllExpectedFields()
     {
-        Type prefsType = typeof(GuiCommand).GetNestedType("GuiPrefs", System.Reflection.BindingFlags.NonPublic);
+        Type? prefsType = typeof(GuiCommand).GetNestedType("GuiPrefs", System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(prefsType);
         Assert.NotNull(prefsType.GetProperty("OutputDir"));
         Assert.NotNull(prefsType.GetProperty("ExportXml"));
