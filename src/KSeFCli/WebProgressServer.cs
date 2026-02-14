@@ -262,7 +262,9 @@ internal sealed class WebProgressServer : IDisposable
                     ? allowedRoot : allowedRoot + Path.DirectorySeparatorChar;
                 dirPath = Path.GetFullPath(dirPath);
                 if (!dirPath.StartsWith(allowedRootWithSep, StringComparison.Ordinal) && dirPath != allowedRoot)
+                {
                     throw new UnauthorizedAccessException("Path is outside the allowed directory.");
+                }
                 if (!Directory.Exists(dirPath))
                 {
                     throw new DirectoryNotFoundException($"Directory not found: {dirPath}");
@@ -296,7 +298,9 @@ internal sealed class WebProgressServer : IDisposable
                     ? mkdirRoot : mkdirRoot + Path.DirectorySeparatorChar;
                 dirPath = Path.GetFullPath(dirPath);
                 if (!dirPath.StartsWith(mkdirRootWithSep, StringComparison.Ordinal) && dirPath != mkdirRoot)
+                {
                     throw new UnauthorizedAccessException("Path is outside the allowed directory.");
+                }
                 Directory.CreateDirectory(dirPath);
                 return JsonSerializer.Serialize(new { ok = true, path = dirPath });
             }).ConfigureAwait(false);
