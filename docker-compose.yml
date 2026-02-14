@@ -24,6 +24,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - traefik-acme:/etc/traefik/acme
     env_file:
       - path: ./traefik/dns-provider.env
@@ -49,7 +50,6 @@ services:
     expose:
       - "${KSEFCLI_PORT:-18150}"
     networks:
-      - front
       - back
     volumes:
       - ksefcli-config:/root/.config/ksefcli
@@ -117,8 +117,10 @@ services:
 # ── Networks ─────────────────────────────────────────────────────────────────
 networks:
   front:
+    name: front             # explicit name — no project prefix, matches traefik.yml network: front
     driver: bridge          # Traefik ↔ ksefcli (public-facing)
   back:
+    name: back
     driver: bridge
     internal: true          # ksefcli ↔ ofelia only; no direct internet access
 

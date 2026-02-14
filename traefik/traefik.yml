@@ -5,6 +5,9 @@
 # publicly reachable.  Provide DNS provider credentials in
 # ./traefik/dns-provider.env (copy from dns-provider.env.example).
 #
+# HTTP middlewares (local-only, hsts-header) live in traefik/dynamic.yml
+# which is loaded via the file provider below.
+#
 # Supported DNS providers:
 #   https://doc.traefik.io/traefik/https/acme/#providers
 
@@ -29,6 +32,9 @@ providers:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
     network: front
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
 
 entryPoints:
   http:
@@ -61,33 +67,4 @@ certificatesResolvers:
           - "1.1.1.1:53"
           - "8.8.8.8:53"
 
-tls:
-  options:
-    default:
-      minVersion: VersionTLS12
-      cipherSuites:
-        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
-        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
-        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-      sniStrict: false
-
-http:
-  middlewares:
-    # Restrict access to local network ranges only
-    local-only:
-      ipAllowList:
-        sourceRange:
-          - "127.0.0.1/32"
-          - "10.0.0.0/8"
-          - "172.16.0.0/12"
-          - "192.168.0.0/16"
-    hsts-header:
-      headers:
-        customResponseHeaders:
-          Strict-Transport-Security: "max-age=31536000"
-        stsseconds: 31536000
-        stsincludesubdomains: false
-        stspreload: false
+# TLS options are defined in dynamic.yml (loaded via the file provider above)
