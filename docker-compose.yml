@@ -1,6 +1,6 @@
 ---
-# KSeFCli — production docker-compose
-# Includes: Traefik (reverse proxy), ksefcli (GUI), Ofelia (scheduler)
+# KSeFCli — local network docker-compose (NOT intended for internet exposure)
+# Includes: Traefik (local reverse proxy), ksefcli (GUI), Ofelia (scheduler)
 #
 # Usage:
 #   cp .env.example .env && $EDITOR .env
@@ -99,7 +99,7 @@ services:
       traefik.http.routers.ksefcli-secure.rule: Host(`${KSEFCLI_HOSTNAME}`)
       traefik.http.routers.ksefcli-secure.tls: "true"
       traefik.http.routers.ksefcli-secure.tls.certresolver: ${TRAEFIK_CERT_RESOLVER:-letsencrypt}
-      traefik.http.routers.ksefcli-secure.middlewares: ksefcli-auth@docker
+      # traefik.http.routers.ksefcli-secure.middlewares: ksefcli-auth@docker #Optional Auth
       traefik.http.routers.ksefcli-secure.service: ksefcli
       # Service
       traefik.http.services.ksefcli.loadbalancer.server.port: "${KSEFCLI_PORT:-18150}"

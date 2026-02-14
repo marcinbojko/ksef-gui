@@ -196,7 +196,9 @@ Po zapisaniu profilu — wszystkie przyciski odblokowują się bez restartu.
 
 ### Docker / serwer domowy
 
-Dla uruchomienia na serwerze, NAS lub w środowisku Docker compose dostarcza kompletny stos produkcyjny: Traefik jako reverse proxy z TLS oraz Ofelia jako harmonogram zadań.
+Dla uruchomienia na serwerze domowym lub NAS w sieci lokalnej. Compose dostarcza Traefik jako reverse proxy oraz Ofelia jako harmonogram zadań.
+
+> **Aplikacja nie jest przeznaczona do wystawienia w internecie.** Powinna działać wyłącznie w sieci lokalnej (LAN) lub przez VPN.
 
 #### Szybki start
 
@@ -209,14 +211,12 @@ $EDITOR .env
 docker compose up -d
 ```
 
-> **Wymaganie DNS:** `KSEFCLI_HOSTNAME` musi wskazywać na adres IP hosta przed uruchomieniem — Traefik użyje go do uzyskania certyfikatu TLS od Let's Encrypt.
-
 #### Architektura stosu
 
 ```
-Internet
-   │  :80 (redirect → HTTPS)
-   │  :443 (TLS)
+Sieć lokalna (LAN)
+   │  :80
+   │  :443 (opcjonalne TLS)
    ▼
 ┌─────────┐   sieć front   ┌──────────┐
 │ Traefik │ ◄────────────► │ ksefcli  │
@@ -233,23 +233,23 @@ Internet
 
 | Serwis | Obraz | Rola |
 |--------|-------|------|
-| **Traefik** | `traefik:v3.3.7` | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, opcjonalne basic-auth middleware |
+| **Traefik** | `traefik:v3.3.7` | Reverse proxy w sieci lokalnej — routing, opcjonalne TLS, opcjonalne basic-auth |
 | **ksefcli** | `ghcr.io/marcinbojko/ksef-gui:latest` | GUI nasłuchuje na porcie `18150`, wystawione wyłącznie przez Traefik |
 | **Ofelia** | `mcuadros/ofelia:latest` | Harmonogram zadań — rotacja logów, health-probe, opcjonalne czyszczenie starych faktur |
 
-#### Traefik — konfiguracja TLS i routingu
+#### Traefik — konfiguracja routingu
 
 Traefik jest konfigurowany w całości przez argumenty CLI w `docker-compose.yml` (brak osobnego pliku `traefik.yml`):
 
 | Funkcja | Konfiguracja |
 |---------|-------------|
 | HTTP→HTTPS redirect | EntryPoint `http` z trwałym przekierowaniem na `https` |
-| Certyfikaty TLS | ACME TLS Challenge — certyfikaty przechowywane w woluminie `traefik-acme` |
+| Certyfikaty TLS | ACME TLS Challenge — opcjonalne, tylko gdy `ACME_EMAIL` ustawiony |
 | Routing | Docker provider — trasy definiowane przez labels na kontenerze |
-| Basic-auth | Middleware `ksefcli-auth` — aktywny gdy ustawione `KSEFCLI_BASICAUTH_USERS` |
+| Basic-auth | *(opcjonalne)* Middleware `ksefcli-auth` — odkomentuj w `docker-compose.yml` i ustaw `KSEFCLI_BASICAUTH_USERS` |
 | Dashboard | Wyłączony (`--api.dashboard=false`) |
 
-**Generowanie hasła basic-auth** (zainstaluj `apache2-utils`):
+**Generowanie hasła basic-auth** (opcjonalne, zainstaluj `apache2-utils`):
 
 ```bash
 htpasswd -nb admin secretpassword
@@ -264,8 +264,8 @@ Compose definiuje dwie wewnętrzne sieci — nie wymagają wcześniejszego tworz
 
 | Sieć | Typ | Połączone serwisy | Cel |
 |------|-----|-------------------|-----|
-| `front` | bridge | Traefik, ksefcli | Ruch publiczny przez reverse proxy |
-| `back` | bridge (internal) | ksefcli, Ofelia | Zadania cykliczne, brak bezpośredniego internetu |
+| `front` | bridge | Traefik, ksefcli | Ruch lokalny przez reverse proxy |
+| `back` | bridge (internal) | ksefcli, Ofelia | Zadania cykliczne, izolowane od sieci |
 
 #### Zmienne środowiskowe (`.env`)
 
@@ -275,12 +275,12 @@ Skopiuj `.env.example` i dostosuj:
 |---------|------|-----------|
 | `TZ` | Strefa czasowa | `Europe/Warsaw` |
 | `TRAEFIK_TAG` | Tag obrazu Traefik | `v3.3.7` |
-| `ACME_EMAIL` | E-mail do rejestracji Let's Encrypt (**wymagany**) | — |
+| `ACME_EMAIL` | E-mail do rejestracji Let's Encrypt *(opcjonalne — tylko z publicznym DNS)* | — |
 | `TRAEFIK_CERT_RESOLVER` | Nazwa resolwera (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
 | `KSEFCLI_TAG` | Tag obrazu Docker | `latest` |
 | `KSEFCLI_PORT` | Port wewnętrzny kontenera | `18150` |
-| `KSEFCLI_HOSTNAME` | Hostname za Traefik (np. `ksef.example.com`) | — |
-| `KSEFCLI_BASICAUTH_USERS` | Hash basic-auth — wygeneruj przez `htpasswd -nb user pass`, `$` → `$$` | wyłączone |
+| `KSEFCLI_HOSTNAME` | Hostname za Traefik (np. `ksef.nas.local`) | — |
+| `KSEFCLI_BASICAUTH_USERS` | *(opcjonalne)* Hash basic-auth — wygeneruj przez `htpasswd -nb user pass`, `$` → `$$` | wyłączone |
 | `OFELIA_TAG` | Tag obrazu Ofelia | `latest` |
 
 #### Ofelia — zadania cykliczne (`ofelia/config.ini`)
@@ -528,7 +528,9 @@ After saving a profile, all buttons re-enable — no restart needed.
 
 ### Docker / home server
 
-For running on a server, NAS, or in a Docker environment the compose file provides a full production stack: Traefik as the TLS-terminating reverse proxy and Ofelia as the job scheduler.
+For running on a home server or NAS on a local network. The compose file includes Traefik as a reverse proxy and Ofelia as a job scheduler.
+
+> **This app is not intended to be exposed to the internet.** It should run on a local network (LAN) or behind a VPN only.
 
 #### Quick start
 
@@ -541,14 +543,12 @@ $EDITOR .env
 docker compose up -d
 ```
 
-> **DNS requirement:** `KSEFCLI_HOSTNAME` must resolve to the host IP before startup — Traefik uses it to obtain a TLS certificate from Let's Encrypt.
-
 #### Stack architecture
 
 ```
-Internet
-   │  :80 (redirect → HTTPS)
-   │  :443 (TLS)
+Local network (LAN)
+   │  :80
+   │  :443 (optional TLS)
    ▼
 ┌─────────┐   front network   ┌──────────┐
 │ Traefik │ ◄───────────────► │ ksefcli  │
@@ -565,23 +565,23 @@ Internet
 
 | Service | Image | Role |
 |---------|-------|------|
-| **Traefik** | `traefik:v3.3.7` | Reverse proxy — TLS (Let's Encrypt), HTTP→HTTPS redirect, optional basic-auth middleware |
+| **Traefik** | `traefik:v3.3.7` | Local reverse proxy — routing, optional TLS, optional basic-auth |
 | **ksefcli** | `ghcr.io/marcinbojko/ksef-gui:latest` | GUI listening on port `18150`, exposed exclusively through Traefik |
 | **Ofelia** | `mcuadros/ofelia:latest` | Job scheduler — log rotation, health probe, optional old-invoice cleanup |
 
-#### Traefik — TLS and routing configuration
+#### Traefik — routing configuration
 
 Traefik is configured entirely via CLI arguments in `docker-compose.yml` (no separate `traefik.yml` needed):
 
 | Feature | Configuration |
 |---------|--------------|
 | HTTP→HTTPS redirect | `http` entrypoint with permanent redirect to `https` |
-| TLS certificates | ACME TLS Challenge — stored in the `traefik-acme` named volume |
+| TLS certificates | ACME TLS Challenge — optional, only when `ACME_EMAIL` is set |
 | Routing | Docker provider — routes defined by labels on the ksefcli container |
-| Basic-auth | `ksefcli-auth` middleware — active when `KSEFCLI_BASICAUTH_USERS` is set |
+| Basic-auth | *(optional)* `ksefcli-auth` middleware — uncomment in `docker-compose.yml` and set `KSEFCLI_BASICAUTH_USERS` |
 | Dashboard | Disabled (`--api.dashboard=false`) |
 
-**Generating a basic-auth password** (requires `apache2-utils`):
+**Generating a basic-auth password** (optional, requires `apache2-utils`):
 
 ```bash
 htpasswd -nb admin secretpassword
@@ -596,8 +596,8 @@ Two internal networks defined by compose — no external resources or pre-creati
 
 | Network | Type | Connected services | Purpose |
 |---------|------|--------------------|---------|
-| `front` | bridge | Traefik, ksefcli | Public-facing traffic through the reverse proxy |
-| `back` | bridge (internal) | ksefcli, Ofelia | Scheduled tasks, no direct internet access |
+| `front` | bridge | Traefik, ksefcli | Local traffic through the reverse proxy |
+| `back` | bridge (internal) | ksefcli, Ofelia | Scheduled tasks, isolated from the network |
 
 #### Environment variables (`.env`)
 
@@ -607,12 +607,12 @@ Copy `.env.example` and adjust:
 |----------|-------------|---------|
 | `TZ` | Timezone | `Europe/Warsaw` |
 | `TRAEFIK_TAG` | Traefik image tag | `v3.3.7` |
-| `ACME_EMAIL` | Let's Encrypt registration email (**required**) | — |
+| `ACME_EMAIL` | Let's Encrypt registration email *(optional — only with public DNS)* | — |
 | `TRAEFIK_CERT_RESOLVER` | Cert resolver name (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
 | `KSEFCLI_TAG` | Docker image tag | `latest` |
 | `KSEFCLI_PORT` | Internal container port | `18150` |
-| `KSEFCLI_HOSTNAME` | Hostname behind Traefik (e.g. `ksef.example.com`) | — |
-| `KSEFCLI_BASICAUTH_USERS` | Basic-auth hash — generate with `htpasswd -nb user pass`, escape `$` → `$$` | disabled |
+| `KSEFCLI_HOSTNAME` | Hostname behind Traefik (e.g. `ksef.nas.local`) | — |
+| `KSEFCLI_BASICAUTH_USERS` | *(optional)* Basic-auth hash — generate with `htpasswd -nb user pass`, escape `$` → `$$` | disabled |
 | `OFELIA_TAG` | Ofelia image tag | `latest` |
 
 #### Ofelia scheduled jobs (`ofelia/config.ini`)
