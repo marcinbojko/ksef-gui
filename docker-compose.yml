@@ -79,10 +79,10 @@ services:
       traefik.enable: "true"
       # HTTP router (redirect handled by Traefik entrypoint)
       traefik.http.routers.ksefcli.entrypoints: http
-      traefik.http.routers.ksefcli.rule: Host(`${KSEFCLI_HOSTNAME}`)
+      traefik.http.routers.ksefcli.rule: Host(`${KSEFCLI_HOSTNAME:-ksef.nas.local}`)
       # HTTPS router
       traefik.http.routers.ksefcli-secure.entrypoints: https
-      traefik.http.routers.ksefcli-secure.rule: Host(`${KSEFCLI_HOSTNAME}`)
+      traefik.http.routers.ksefcli-secure.rule: Host(`${KSEFCLI_HOSTNAME:-ksef.nas.local}`)
       traefik.http.routers.ksefcli-secure.tls: "true"
       traefik.http.routers.ksefcli-secure.tls.certresolver: letsencrypt
       # Middlewares from traefik/traefik.yml (always on: local-only IP filter + HSTS)
