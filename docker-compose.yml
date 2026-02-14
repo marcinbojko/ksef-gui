@@ -118,11 +118,10 @@ services:
 networks:
   front:
     name: front             # explicit name — no project prefix, matches traefik.yml network: front
-    driver: bridge          # Traefik ↔ ksefcli (public-facing)
+    driver: bridge          # Traefik public-facing ingress
   back:
     name: back
     driver: bridge
-    internal: true          # ksefcli ↔ ofelia only; no direct internet access
 
 # ── Volumes ───────────────────────────────────────────────────────────────────
 volumes:
