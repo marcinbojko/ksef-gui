@@ -53,11 +53,18 @@ internal sealed class WebProgressServer : IDisposable
     public bool Lan { get; }
 
     /// <summary>
-    /// Root directory that constrains /browse and /mkdir endpoints.
-    /// Defaults to the filesystem root (unrestricted). Set to the configured output
-    /// directory to prevent path traversal outside that tree.
+    /// Restricts the /mkdir endpoint to this directory tree.
+    /// Set to the configured output directory so users cannot create directories
+    /// outside the data area. Defaults to the filesystem root (unrestricted).
     /// </summary>
-    public string AllowedRoot { get; init; } = "/";
+    public string MkdirRoot { get; init; } = "/";
+
+    /// <summary>
+    /// Directory shown when the file-system picker opens with no prior path.
+    /// Defaults to the user's home directory.
+    /// </summary>
+    public string DefaultBrowseDir { get; init; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     public WebProgressServer(bool lan = false, int port = 0)
     {
@@ -256,14 +263,12 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, () =>
             {
-                string dirPath = ctx.Request.QueryString["path"] ?? Directory.GetCurrentDirectory();
-                string allowedRoot = Path.GetFullPath(AllowedRoot);
-                string allowedRootWithSep = allowedRoot.EndsWith(Path.DirectorySeparatorChar)
-                    ? allowedRoot : allowedRoot + Path.DirectorySeparatorChar;
-                dirPath = Path.GetFullPath(dirPath);
-                if (!dirPath.StartsWith(allowedRootWithSep, StringComparison.Ordinal) && dirPath != allowedRoot)
+                string rawPath = ctx.Request.QueryString["path"] ?? DefaultBrowseDir;
+                string fsRoot = Path.GetPathRoot(Path.GetFullPath(rawPath)) ?? "/";
+                string dirPath = Path.GetFullPath(rawPath);
+                if (!dirPath.StartsWith(fsRoot, StringComparison.Ordinal))
                 {
-                    throw new UnauthorizedAccessException("Path is outside the allowed directory.");
+                    throw new UnauthorizedAccessException("Path is outside the filesystem root.");
                 }
                 if (!Directory.Exists(dirPath))
                 {
@@ -293,7 +298,7 @@ internal sealed class WebProgressServer : IDisposable
                 using JsonDocument doc = JsonDocument.Parse(body);
                 string dirPath = doc.RootElement.GetProperty("path").GetString()
                     ?? throw new InvalidOperationException("Missing path");
-                string mkdirRoot = Path.GetFullPath(AllowedRoot);
+                string mkdirRoot = Path.GetFullPath(MkdirRoot);
                 string mkdirRootWithSep = mkdirRoot.EndsWith(Path.DirectorySeparatorChar)
                     ? mkdirRoot : mkdirRoot + Path.DirectorySeparatorChar;
                 dirPath = Path.GetFullPath(dirPath);

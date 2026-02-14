@@ -212,9 +212,13 @@ public class GuiCommand : IWithConfigCommand
 
         int lanPort = PortOverride ?? savedPrefs.LanPort ?? DefaultLanPort;
         bool listenOnAll = Lan || (savedPrefs.ListenOnAll ?? false);
+        string resolvedOutputDir = Path.GetFullPath(OutputDir);
         using WebProgressServer server = new WebProgressServer(lan: listenOnAll, port: lanPort)
         {
-            AllowedRoot = Path.GetFullPath(OutputDir),
+            MkdirRoot = resolvedOutputDir,
+            DefaultBrowseDir = Directory.Exists(resolvedOutputDir)
+                ? resolvedOutputDir
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
         _server = server;
 
