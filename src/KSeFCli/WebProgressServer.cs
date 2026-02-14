@@ -67,13 +67,6 @@ internal sealed class WebProgressServer : IDisposable
         _listener.Prefixes.Add($"http://{host}:{Port}/");
     }
 
-    private void AssertWithinAllowedRoot(string fullPath)
-    {
-        string root = Path.GetFullPath(AllowedRoot);
-        string rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootWithSep, StringComparison.Ordinal) && fullPath != root)
-            throw new UnauthorizedAccessException($"Path is outside the allowed directory.");
-    }
 
     public void Start(CancellationToken cancellationToken)
     {
@@ -264,8 +257,12 @@ internal sealed class WebProgressServer : IDisposable
             await HandleAction(ctx, ct, () =>
             {
                 string dirPath = ctx.Request.QueryString["path"] ?? Directory.GetCurrentDirectory();
+                string allowedRoot = Path.GetFullPath(AllowedRoot);
+                string allowedRootWithSep = allowedRoot.EndsWith(Path.DirectorySeparatorChar)
+                    ? allowedRoot : allowedRoot + Path.DirectorySeparatorChar;
                 dirPath = Path.GetFullPath(dirPath);
-                AssertWithinAllowedRoot(dirPath);
+                if (!dirPath.StartsWith(allowedRootWithSep, StringComparison.Ordinal) && dirPath != allowedRoot)
+                    throw new UnauthorizedAccessException("Path is outside the allowed directory.");
                 if (!Directory.Exists(dirPath))
                 {
                     throw new DirectoryNotFoundException($"Directory not found: {dirPath}");
@@ -294,8 +291,12 @@ internal sealed class WebProgressServer : IDisposable
                 using JsonDocument doc = JsonDocument.Parse(body);
                 string dirPath = doc.RootElement.GetProperty("path").GetString()
                     ?? throw new InvalidOperationException("Missing path");
+                string mkdirRoot = Path.GetFullPath(AllowedRoot);
+                string mkdirRootWithSep = mkdirRoot.EndsWith(Path.DirectorySeparatorChar)
+                    ? mkdirRoot : mkdirRoot + Path.DirectorySeparatorChar;
                 dirPath = Path.GetFullPath(dirPath);
-                AssertWithinAllowedRoot(dirPath);
+                if (!dirPath.StartsWith(mkdirRootWithSep, StringComparison.Ordinal) && dirPath != mkdirRoot)
+                    throw new UnauthorizedAccessException("Path is outside the allowed directory.");
                 Directory.CreateDirectory(dirPath);
                 return JsonSerializer.Serialize(new { ok = true, path = dirPath });
             }).ConfigureAwait(false);
