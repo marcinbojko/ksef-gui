@@ -178,7 +178,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            --build-arg VERSION=${{ steps.tag.outputs.tag }} \
+            --build-arg APP_VERSION=${{ steps.tag.outputs.tag }} \
             -t ksefcli:${{ steps.tag.outputs.tag }} .
 
       - name: Login to DockerHub

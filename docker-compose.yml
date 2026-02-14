@@ -1,15 +1,133 @@
+---
+# KSeFCli — local network docker-compose (NOT intended for internet exposure)
+# Includes: Traefik (local reverse proxy), ksefcli (GUI), Ofelia (scheduler)
+#
+# Usage:
+#   cp .env.example .env && $EDITOR .env
+#   docker compose up -d
+
 services:
-  ksefcli:
-    build: .
+
+  # ── Traefik — reverse proxy ───────────────────────────────────────────────
+  traefik:
+    image: traefik:${TRAEFIK_TAG:-v3.6.7}
+    container_name: traefik
+    restart: unless-stopped
+    stop_grace_period: 10s
     ports:
-      - "8150:8150"
+      - "80:80"
+      - "443:443"
+    networks:
+      - front
+      - back
     volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - traefik-acme:/etc/traefik/acme
+    env_file:
+      - path: ./traefik/dns-provider.env
+        required: false           # stack still starts without DNS credentials
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      traefik.enable: "false"
+
+  # ── KSeF GUI ─────────────────────────────────────────────────────────────
+  ksefcli:
+    image: ghcr.io/marcinbojko/ksef-gui:${KSEFCLI_TAG:-latest}
+    build:
+      context: .
+      args:
+        APP_VERSION: ${KSEFCLI_TAG:-latest}
+    container_name: ksefcli
+    restart: unless-stopped
+    stop_grace_period: 15s
+    expose:
+      - "${KSEFCLI_PORT:-18150}"
+    networks:
+      - back
+    volumes:
+      - ksefcli-config:/root/.config/ksefcli
       - ./output:/data
-      - ./ksefcli.yaml:/root/.config/ksefcli/ksefcli.yaml:ro
       - ksefcli-cache:/root/.cache/ksefcli
     environment:
-      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
-    command: ["Gui", "--lan", "-o", "/data", "--pdf"]
+      TZ: ${TZ:-UTC}
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "true"
+    command:
+      - Gui
+      - --lan
+      - --port
+      - "${KSEFCLI_PORT:-18150}"
+      - -o
+      - /data
+      - --pdf
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:${KSEFCLI_PORT:-18150}/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      traefik:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      # HTTP router (redirect handled by Traefik entrypoint)
+      traefik.http.routers.ksefcli.entrypoints: http
+      traefik.http.routers.ksefcli.rule: Host(`${KSEFCLI_HOSTNAME:-ksef.nas.local}`)
+      # HTTPS router
+      traefik.http.routers.ksefcli-secure.entrypoints: https
+      traefik.http.routers.ksefcli-secure.rule: Host(`${KSEFCLI_HOSTNAME:-ksef.nas.local}`)
+      traefik.http.routers.ksefcli-secure.tls: "true"
+      traefik.http.routers.ksefcli-secure.tls.certresolver: letsencrypt
+      # Middlewares from traefik/traefik.yml (always on: local-only IP filter + HSTS)
+      # Optional: append ,ksefcli-auth@docker to also enable basic-auth
+      traefik.http.routers.ksefcli-secure.middlewares: "local-only@file,hsts-header@file"
+      traefik.http.routers.ksefcli-secure.service: ksefcli
+      # Service
+      traefik.http.services.ksefcli.loadbalancer.server.port: "${KSEFCLI_PORT:-18150}"
+      # Basic-auth middleware (leave empty to disable)
+      # Generate hash: htpasswd -nb <user> <pass>  (double $ in .env)
+      traefik.http.middlewares.ksefcli-auth.basicauth.users: "${KSEFCLI_BASICAUTH_USERS:-}"
 
+  # ── Ofelia — job scheduler ────────────────────────────────────────────────
+  ofelia:
+    image: mcuadros/ofelia:${OFELIA_TAG:-latest}
+    container_name: ofelia
+    restart: unless-stopped
+    depends_on:
+      ksefcli:
+        condition: service_healthy
+    networks:
+      - back
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./ofelia/config.ini:/etc/ofelia/config.ini:ro
+    command:
+      - daemon
+      - --config=/etc/ofelia/config.ini
+    labels:
+      traefik.enable: "false"
+
+# ── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  front:
+    name: front             # explicit name — no project prefix, matches traefik.yml network: front
+    driver: bridge          # Traefik public-facing ingress
+  back:
+    name: back
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
 volumes:
+  ksefcli-config:
+    driver: local
   ksefcli-cache:
+    driver: local
+  traefik-acme:
+    driver: local

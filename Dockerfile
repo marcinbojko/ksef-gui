@@ -1,8 +1,8 @@
-ARG VERSION="dev"
+ARG APP_VERSION="dev"
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
-ARG VERSION
+ARG APP_VERSION
 
 WORKDIR /src
 
@@ -17,7 +17,7 @@ COPY src/ src/
 
 # Build all platform targets
 RUN set -e && \
-    ARGS="-c Release --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:InvariantGlobalization=true -p:SourceRevisionId=${VERSION}" && \
+    ARGS="-c Release --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:InvariantGlobalization=true -p:SourceRevisionId=${APP_VERSION}" && \
     dotnet publish src/KSeFCli/KSeFCli.csproj $ARGS -r linux-x64 && \
     dotnet publish src/KSeFCli/KSeFCli.csproj $ARGS -r win-x64 && \
     dotnet publish src/KSeFCli/KSeFCli.csproj $ARGS -r osx-x64 && \
@@ -26,11 +26,11 @@ RUN set -e && \
 # --- Final stage: ksefcli binaries only (PDF generation requires Node.js+npx at runtime) ---
 FROM debian:bookworm-slim
 
-ARG VERSION
+ARG APP_VERSION
 
-LABEL version="${VERSION}"
+LABEL version="${APP_VERSION}"
 LABEL release="ksefcli"
-LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.version="${APP_VERSION}"
 LABEL org.opencontainers.image.title="ksefcli"
 LABEL org.opencontainers.image.description="KSeF invoice downloader CLI and GUI"
 LABEL org.opencontainers.image.url="https://github.com/marcinbojko/ksef-gui"
@@ -38,7 +38,10 @@ LABEL org.opencontainers.image.source="https://github.com/marcinbojko/ksef-gui"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+    libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
+# Create cache and output directories (config dir managed by named volume)
+RUN mkdir -p /root/.cache/ksefcli /data
 
 WORKDIR /output
 
