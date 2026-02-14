@@ -1,5 +1,3 @@
-using System.IO;
-
 using Microsoft.Extensions.DependencyInjection;
 
 using Xunit;

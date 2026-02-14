@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 
@@ -446,7 +445,7 @@ public class WebProgressServerTests : IDisposable
         _server.OnTokenStatus = async () =>
         {
             Interlocked.Increment(ref callCount);
-            await Task.Delay(50).ConfigureAwait(false);
+            await Task.Delay(50);
             return new { valid = true };
         };
         CancellationTokenSource cts = new CancellationTokenSource();
@@ -457,7 +456,7 @@ public class WebProgressServerTests : IDisposable
         {
             tasks[i] = client.GetAsync($"{_server.LocalUrl}token-status");
         }
-        HttpResponseMessage[] responses = await Task.WhenAll(tasks).ConfigureAwait(false);
+        HttpResponseMessage[] responses = await Task.WhenAll(tasks);
         Assert.Equal(5, callCount);
         foreach (HttpResponseMessage response in responses)
         {
