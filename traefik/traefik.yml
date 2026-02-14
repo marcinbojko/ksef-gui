@@ -1,0 +1,93 @@
+# Traefik v3 static configuration — KSeFCli local deployment
+# NOT intended for direct internet exposure; runs on LAN / behind VPN.
+#
+# DNS challenge is used for ACME so port 443 does not need to be
+# publicly reachable.  Provide DNS provider credentials in
+# ./traefik/dns-provider.env (copy from dns-provider.env.example).
+#
+# Supported DNS providers:
+#   https://doc.traefik.io/traefik/https/acme/#providers
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+
+api:
+  dashboard: false
+
+ping: {}
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: front
+
+entryPoints:
+  http:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+          permanent: true
+  https:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 3600s
+        idleTimeout: 3600s
+        writeTimeout: 3600s
+
+# DNS challenge — does NOT require public port 443.
+# Set your email and DNS provider below; credentials go in dns-provider.env.
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: changeme@example.com   # ← replace with your e-mail
+      storage: /etc/traefik/acme/acme.json
+      dnsChallenge:
+        provider: cloudflare        # ← change to your DNS provider if needed
+        delayBeforeCheck: 60
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+      sniStrict: false
+
+http:
+  middlewares:
+    # Restrict access to local network ranges only
+    local-only:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+          - "192.168.0.0/16"
+    hsts-header:
+      headers:
+        customResponseHeaders:
+          Strict-Transport-Security: "max-age=31536000"
+        stsseconds: 31536000
+        stsincludesubdomains: false
+        stspreload: false

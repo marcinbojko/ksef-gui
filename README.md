@@ -233,21 +233,42 @@ Sieć lokalna (LAN)
 
 | Serwis | Obraz | Rola |
 |--------|-------|------|
-| **Traefik** | `traefik:v3.3.7` | Reverse proxy w sieci lokalnej — routing, opcjonalne TLS, opcjonalne basic-auth |
+| **Traefik** | `traefik:v3.6.7` | Reverse proxy w sieci lokalnej — routing, opcjonalne TLS, opcjonalne basic-auth |
 | **ksefcli** | `ghcr.io/marcinbojko/ksef-gui:latest` | GUI nasłuchuje na porcie `18150`, wystawione wyłącznie przez Traefik |
 | **Ofelia** | `mcuadros/ofelia:latest` | Harmonogram zadań — rotacja logów, health-probe, opcjonalne czyszczenie starych faktur |
 
-#### Traefik — konfiguracja routingu
+#### Traefik — konfiguracja
 
-Traefik jest konfigurowany w całości przez argumenty CLI w `docker-compose.yml` (brak osobnego pliku `traefik.yml`):
+Traefik jest konfigurowany przez plik statyczny `traefik/traefik.yml` (montowany do kontenera jako `/etc/traefik/traefik.yml`):
 
 | Funkcja | Konfiguracja |
 |---------|-------------|
 | HTTP→HTTPS redirect | EntryPoint `http` z trwałym przekierowaniem na `https` |
-| Certyfikaty TLS | ACME TLS Challenge — opcjonalne, tylko gdy `ACME_EMAIL` ustawiony |
+| Certyfikaty TLS | **DNS Challenge** — nie wymaga publicznego portu 443; działa w sieci lokalnej |
+| Provider DNS | Domyślnie Cloudflare; zmień w `traefik/traefik.yml` (`dnsChallenge.provider`) |
 | Routing | Docker provider — trasy definiowane przez labels na kontenerze |
-| Basic-auth | *(opcjonalne)* Middleware `ksefcli-auth` — odkomentuj w `docker-compose.yml` i ustaw `KSEFCLI_BASICAUTH_USERS` |
-| Dashboard | Wyłączony (`--api.dashboard=false`) |
+| IP allowlist | Middleware `local-only@file` — dostęp tylko z prywatnych zakresów IP |
+| HSTS | Middleware `hsts-header@file` — nagłówek `Strict-Transport-Security` |
+| Basic-auth | *(opcjonalne)* Dodaj `,ksefcli-auth@docker` do middlewares w labels kontenera |
+| Dashboard | Wyłączony (`dashboard: false`) |
+
+**Konfiguracja TLS/ACME** (`traefik/traefik.yml`):
+
+```yaml
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: changeme@example.com   # ← ustaw swój e-mail
+      dnsChallenge:
+        provider: cloudflare        # ← zmień na swojego dostawcę DNS
+```
+
+**Poświadczenia dostawcy DNS** (`traefik/dns-provider.env`):
+
+```bash
+cp traefik/dns-provider.env.example traefik/dns-provider.env
+$EDITOR traefik/dns-provider.env   # wpisz token API Cloudflare lub innego dostawcy
+```
 
 **Generowanie hasła basic-auth** (opcjonalne, zainstaluj `apache2-utils`):
 
@@ -274,9 +295,7 @@ Skopiuj `.env.example` i dostosuj:
 | Zmienna | Opis | Domyślnie |
 |---------|------|-----------|
 | `TZ` | Strefa czasowa | `Europe/Warsaw` |
-| `TRAEFIK_TAG` | Tag obrazu Traefik | `v3.3.7` |
-| `ACME_EMAIL` | E-mail do rejestracji Let's Encrypt *(opcjonalne — tylko z publicznym DNS)* | — |
-| `TRAEFIK_CERT_RESOLVER` | Nazwa resolwera (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
+| `TRAEFIK_TAG` | Tag obrazu Traefik | `v3.6.7` |
 | `KSEFCLI_TAG` | Tag obrazu Docker | `latest` |
 | `KSEFCLI_PORT` | Port wewnętrzny kontenera | `18150` |
 | `KSEFCLI_HOSTNAME` | Hostname za Traefik (np. `ksef.nas.local`) | — |
@@ -565,21 +584,42 @@ Local network (LAN)
 
 | Service | Image | Role |
 |---------|-------|------|
-| **Traefik** | `traefik:v3.3.7` | Local reverse proxy — routing, optional TLS, optional basic-auth |
+| **Traefik** | `traefik:v3.6.7` | Local reverse proxy — routing, optional TLS, optional basic-auth |
 | **ksefcli** | `ghcr.io/marcinbojko/ksef-gui:latest` | GUI listening on port `18150`, exposed exclusively through Traefik |
 | **Ofelia** | `mcuadros/ofelia:latest` | Job scheduler — log rotation, health probe, optional old-invoice cleanup |
 
-#### Traefik — routing configuration
+#### Traefik — configuration
 
-Traefik is configured entirely via CLI arguments in `docker-compose.yml` (no separate `traefik.yml` needed):
+Traefik is configured via the static file `traefik/traefik.yml` (mounted into the container at `/etc/traefik/traefik.yml`):
 
 | Feature | Configuration |
 |---------|--------------|
 | HTTP→HTTPS redirect | `http` entrypoint with permanent redirect to `https` |
-| TLS certificates | ACME TLS Challenge — optional, only when `ACME_EMAIL` is set |
+| TLS certificates | **DNS Challenge** — does not require public port 443; works on a local network |
+| DNS provider | Cloudflare by default; change in `traefik/traefik.yml` (`dnsChallenge.provider`) |
 | Routing | Docker provider — routes defined by labels on the ksefcli container |
-| Basic-auth | *(optional)* `ksefcli-auth` middleware — uncomment in `docker-compose.yml` and set `KSEFCLI_BASICAUTH_USERS` |
-| Dashboard | Disabled (`--api.dashboard=false`) |
+| IP allowlist | `local-only@file` middleware — access restricted to private IP ranges |
+| HSTS | `hsts-header@file` middleware — `Strict-Transport-Security` header |
+| Basic-auth | *(optional)* Append `,ksefcli-auth@docker` to the container's middlewares label |
+| Dashboard | Disabled (`dashboard: false`) |
+
+**TLS/ACME configuration** (`traefik/traefik.yml`):
+
+```yaml
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: changeme@example.com   # ← set your email
+      dnsChallenge:
+        provider: cloudflare        # ← change to your DNS provider if needed
+```
+
+**DNS provider credentials** (`traefik/dns-provider.env`):
+
+```bash
+cp traefik/dns-provider.env.example traefik/dns-provider.env
+$EDITOR traefik/dns-provider.env   # fill in your Cloudflare API token or other provider credentials
+```
 
 **Generating a basic-auth password** (optional, requires `apache2-utils`):
 
@@ -606,9 +646,7 @@ Copy `.env.example` and adjust:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TZ` | Timezone | `Europe/Warsaw` |
-| `TRAEFIK_TAG` | Traefik image tag | `v3.3.7` |
-| `ACME_EMAIL` | Let's Encrypt registration email *(optional — only with public DNS)* | — |
-| `TRAEFIK_CERT_RESOLVER` | Cert resolver name (`letsencrypt`, `cloudflare`…) | `letsencrypt` |
+| `TRAEFIK_TAG` | Traefik image tag | `v3.6.7` |
 | `KSEFCLI_TAG` | Docker image tag | `latest` |
 | `KSEFCLI_PORT` | Internal container port | `18150` |
 | `KSEFCLI_HOSTNAME` | Hostname behind Traefik (e.g. `ksef.nas.local`) | — |

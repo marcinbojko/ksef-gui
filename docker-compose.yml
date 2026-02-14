@@ -10,7 +10,7 @@ services:
 
   # ── Traefik — reverse proxy ───────────────────────────────────────────────
   traefik:
-    image: traefik:${TRAEFIK_TAG:-v3.3}
+    image: traefik:${TRAEFIK_TAG:-v3.6.7}
     container_name: traefik
     restart: unless-stopped
     stop_grace_period: 10s
@@ -23,25 +23,11 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - traefik-acme:/etc/traefik/acme
-    command:
-      - --log.level=INFO
-      - --log.format=json
-      - --accesslog=true
-      - --accesslog.format=json
-      - --api.dashboard=false
-      - --ping=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=front
-      - --entrypoints.http.address=:80
-      - --entrypoints.http.http.redirections.entrypoint.to=https
-      - --entrypoints.http.http.redirections.entrypoint.scheme=https
-      - --entrypoints.http.http.redirections.entrypoint.permanent=true
-      - --entrypoints.https.address=:443
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
-      - --certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json
-      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+    env_file:
+      - path: ./traefik/dns-provider.env
+        required: false           # stack still starts without DNS credentials
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -98,8 +84,10 @@ services:
       traefik.http.routers.ksefcli-secure.entrypoints: https
       traefik.http.routers.ksefcli-secure.rule: Host(`${KSEFCLI_HOSTNAME}`)
       traefik.http.routers.ksefcli-secure.tls: "true"
-      traefik.http.routers.ksefcli-secure.tls.certresolver: ${TRAEFIK_CERT_RESOLVER:-letsencrypt}
-      # traefik.http.routers.ksefcli-secure.middlewares: ksefcli-auth@docker #Optional Auth
+      traefik.http.routers.ksefcli-secure.tls.certresolver: letsencrypt
+      # Middlewares from traefik/traefik.yml (always on: local-only IP filter + HSTS)
+      # Optional: append ,ksefcli-auth@docker to also enable basic-auth
+      traefik.http.routers.ksefcli-secure.middlewares: "local-only@file,hsts-header@file"
       traefik.http.routers.ksefcli-secure.service: ksefcli
       # Service
       traefik.http.services.ksefcli.loadbalancer.server.port: "${KSEFCLI_PORT:-18150}"
