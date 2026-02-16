@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -449,7 +450,27 @@ internal static class KSeFInvoiceSanitizer
             schemas.Compile();
             return schemas;
         }
-        catch (Exception ex)
+        catch (XmlSchemaException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (XmlException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (System.IO.IOException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (System.Security.SecurityException ex)
         {
             Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
             return null;
@@ -573,12 +594,9 @@ internal static class KSeFInvoiceSanitizer
         }
 
         System.Text.StringBuilder sb = new(s.Length);
-        foreach (char c in s)
+        foreach (char c in s.Where(c => c >= 0x20 || c == '\t' || c == '\n' || c == '\r'))
         {
-            if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r')
-            {
-                sb.Append(c);
-            }
+            sb.Append(c);
         }
 
         string r = sb.ToString().Trim();
