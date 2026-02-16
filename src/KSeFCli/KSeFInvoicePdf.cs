@@ -1519,7 +1519,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     private static string FormatVatRate(string? rate)
     {
-        if (rate is null) return "—";
+        if (rate is null) { return "—"; }
         string t = rate.Trim();
         // Append % only for purely numeric tokens (e.g. "23", "8", "5", "0");
         // non-numeric codes ("0 KR", "0 WDT", "zw", "oo", "np I") are returned as-is.
