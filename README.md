@@ -131,6 +131,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 - Typ podmiotu: Sprzedawca / Nabywca / Subject3 / Authorized
 - Zakres dat (wybieracz miesięcy), typ daty: Wystawienie / Sprzedaż / PermanentStorage
 - Filtrowanie po walucie — przyciski walut budowane dynamicznie na podstawie wyników wyszukiwania
+- Limit wyświetlanych wierszy (5 / 10 / 50 / 100, domyślnie 50) z przyciskiem *Pokaż wszystkie*
 
 **Tabela wyników**
 - Numer KSeF, numer faktury, data wystawienia, sprzedawca, nabywca, kwota brutto, waluta
@@ -147,6 +148,7 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 **Status tokenu**
 - Wyświetla czas ważności tokenu dostępu i tokenu odświeżania
 - Kolorowy przycisk *Autoryzuj* (zielony / pomarańczowy / czerwony)
+- Automatyczne odświeżenie tokenu dostępu przy starcie aplikacji — jeśli token dostępu wygasł, ale token odświeżania jest ważny, aplikacja odnawia sesję bez interakcji użytkownika
 - Ponowna autoryzacja bez restartu
 
 **⚙ Preferencje** (panel z zakładkami)
@@ -154,8 +156,11 @@ Token długoterminowy uzyskasz w portalu KSeF: *Integracja → Tokeny*.
 Zakładka **Ogólne**:
 - Katalog wyjściowy, formaty eksportu (XML / PDF / JSON), schemat nazw plików
 - Separacja po NIP (podkatalog = NIP aktywnego profilu)
-- Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu)
-- **Auto-odświeżanie** — cykliczne wyszukiwanie w tle co N minut (0 = wyłączone); gdy pojawiają się nowe faktury, wyświetlane są powiadomienia (pasek tytułu, toast, powiadomienie systemowe przeglądarki)
+- Limit wyświetlanych faktur w tabeli (5 / 10 / 50 / 100)
+- Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu, lista faktur ładowana z pamięci podręcznej)
+- **Auto-odświeżanie** — cykliczne wyszukiwanie co N minut (0 = wyłączone):
+  - Aktywny profil: automatyczne odświeżanie w tle obsługiwane przez przeglądarkę
+  - Pozostałe profile oznaczone jako *Uwzględnij w auto-odświeżaniu* (patrz edytor konfiguracji): przeszukiwane w tle przez serwer C#, wyniki zapisywane do bazy danych; powiadomienie (systemowe lub badge🔔 w liście profili) gdy pojawią się nowe faktury
 
 Zakładka **Eksport**:
 - Szczegółowe opcje eksportu plików
@@ -179,10 +184,23 @@ Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
 - Edycja profili: nazwa, NIP, środowisko, metoda uwierzytelnienia
 - Pole tokenu z przełącznikiem widoczności
 - Pola certyfikatu (plik klucza, plik certyfikatu, hasło/env/plik)
+- **Uwzględnij w auto-odświeżaniu** — checkbox per profil; zaznaczone profile są przeszukiwane przez serwer w tle (domyślnie włączone dla wszystkich profili); wyniki są buforowane w SQLite (`~/.cache/ksefcli/db/invoice-cache.db`)
 - Dodawanie i usuwanie profili
 - Zmiany zapisywane natychmiast do `ksefcli.yaml`; lista profili odświeżana bez restartu
 
 ![Konfiguracja](images/config.png)
+
+### Pamięć podręczna faktur
+
+Wyniki wyszukiwania są zapisywane lokalnie w bazie SQLite:
+
+```
+~/.cache/ksefcli/db/invoice-cache.db
+```
+
+- Jedna linia na profil (klucz = SHA-256 konfiguracji profilu), zawsze nadpisywana
+- Przy przełączeniu profilu lista faktur jest natychmiast wczytywana z bazy — bez konieczności ponownego wyszukiwania
+- Wyszukiwanie ręczne nadpisuje buforowane parametry; auto-odświeżanie (tło) aktualizuje tylko listę faktur, nie zmieniając parametrów ostatniego wyszukiwania ręcznego
 
 ### Kreator pierwszego uruchomienia
 
@@ -218,7 +236,7 @@ Sieć lokalna (LAN)
    │  :80
    │  :443 (opcjonalne TLS)
    ▼
-┌─────────┐   sieć front   ┌──────────┐
+┌─────────┐   sieć back    ┌──────────┐
 │ Traefik │ ◄────────────► │ ksefcli  │
 │  proxy  │                │ :18150   │
 └─────────┘                └──────────┘
@@ -285,8 +303,8 @@ Compose definiuje dwie wewnętrzne sieci — nie wymagają wcześniejszego tworz
 
 | Sieć | Typ | Połączone serwisy | Cel |
 |------|-----|-------------------|-----|
-| `front` | bridge | Traefik, ksefcli | Ruch lokalny przez reverse proxy |
-| `back` | bridge (internal) | ksefcli, Ofelia | Zadania cykliczne, izolowane od sieci |
+| `front` | bridge | Traefik | Porty 80/443 wystawione na hoście — ruch zewnętrzny do Traefik |
+| `back` | bridge | Traefik, ksefcli, Ofelia | Komunikacja wewnętrzna: Traefik↔ksefcli oraz Ofelia↔ksefcli |
 
 #### Zmienne środowiskowe (`.env`)
 
@@ -318,11 +336,11 @@ Edytuj `ofelia/config.ini` żeby zmienić harmonogramy lub włączyć czyszczeni
 
 | Ścieżka | Typ | Opis |
 |---------|-----|------|
-| `./output` | bind (rw) | Pobrane faktury pojawiają się bezpośrednio na hoście |
+| `ksefcli-output` | named volume | Pobrane faktury — trwałe między restartami; domyślny katalog wyjściowy `/data` |
 | `ksefcli-config` | named volume | Konfiguracja ksefcli (`ksefcli.yaml`) — tworzona automatycznie przez aplikację |
-| `./ofelia/config.ini` | bind (ro) | Konfiguracja harmonogramu zadań Ofelia |
-| `ksefcli-cache` | named volume | Tokeny sesji i preferencje GUI — przeżywają `docker compose down/up` |
+| `ksefcli-cache` | named volume | Tokeny sesji, preferencje GUI i baza faktur SQLite — przeżywają `docker compose down/up` |
 | `traefik-acme` | named volume | Certyfikaty TLS Let's Encrypt — zachowane między restartami |
+| `./ofelia/config.ini` | bind (ro) | Konfiguracja harmonogramu zadań Ofelia |
 
 ### Eksport PDF
 
@@ -479,9 +497,10 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 ![Main screen](images/mainscreen.png)
 
 **Invoice search**
-- Subject type: Sprzedawca (seller) / Nabywca (buyer) / Subject3 / Authorized
+- Subject type: Seller / Buyer / Subject3 / Authorized
 - Date range (month picker), date type: Issue / Invoicing / PermanentStorage
 - Per-currency filter chips — built dynamically from the current search results
+- Display row limit (5 / 10 / 50 / 100, default 50) with a *Show all* button
 
 **Results table**
 - KSeF number, invoice number, issue date, seller, buyer, gross amount, currency
@@ -498,15 +517,19 @@ Obtain a long-term token from the KSeF portal under *Integracja → Tokeny*.
 **Token status**
 - Displays access token and refresh token expiry times
 - Colour-coded Autoryzuj button (green / orange / red)
-- Re-authenticate without restarting
+- **Automatic token refresh on startup** — if the access token is expired but the refresh token is still valid, the session is silently renewed without any user action
+- Re-authenticate manually without restarting
 
 **⚙ Preferences** (tabbed panel)
 
 **General** tab:
 - Output directory, export formats (XML / PDF / JSON), filename style
 - Separate-by-NIP option (subdirectory = active profile's NIP)
-- Active profile selection (persisted across sessions; switching takes effect immediately without restart)
-- **Auto-refresh** — background search every N minutes (0 = disabled); when new invoices appear, notifications are shown (page title badge, in-page toast, browser Web Notification)
+- Display row limit (5 / 10 / 50 / 100)
+- Active profile selection (persisted across sessions; switching takes effect immediately, invoice list loaded from cache)
+- **Auto-refresh** — background search every N minutes (0 = disabled):
+  - Active profile: browser-driven background refresh with live table updates
+  - Other profiles marked *Include in auto-refresh* (see config editor): searched in the background by the server, results written to SQLite; OS notification + 🔔 badge on the profile dropdown when new invoices arrive
 
 **Export** tab:
 - Detailed file export options
@@ -526,14 +549,27 @@ Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
 
 ![Preferences](images/prefs.png)
 
-**✎ Konfiguracja** (in-browser config editor)
+**✎ Config editor** (in-browser)
 - Edit profiles: name, NIP, environment, auth method
 - Token field with show/hide toggle
 - Certificate fields (key file, cert file, password / env var / file)
+- **Include in auto-refresh** checkbox per profile — enabled by default for all profiles; the server searches checked profiles in the background when auto-refresh is active, caching results in SQLite (`~/.cache/ksefcli/db/invoice-cache.db`)
 - Add and delete profiles
 - Saves immediately to `ksefcli.yaml`; profile dropdown refreshes without restart
 
 ![Configuration](images/config.png)
+
+### Invoice cache
+
+Search results are persisted locally in a SQLite database:
+
+```
+~/.cache/ksefcli/db/invoice-cache.db
+```
+
+- One row per profile (key = SHA-256 of the profile config), always overwritten on new search
+- Switching profiles immediately loads the cached invoice list — no re-search needed
+- A manual search overwrites both the invoice list and the search parameters; a background auto-refresh updates only the invoice list, preserving the user's last explicit search parameters
 
 ### First-run wizard
 
@@ -569,17 +605,17 @@ Local network (LAN)
    │  :80
    │  :443 (optional TLS)
    ▼
-┌─────────┐   front network   ┌──────────┐
-│ Traefik │ ◄───────────────► │ ksefcli  │
-│  proxy  │                   │ :18150   │
-└─────────┘                   └──────────┘
-                                    │
-                          back network (internal)
-                                    │
-                               ┌─────────┐
-                               │ Ofelia  │
-                               │scheduler│
-                               └─────────┘
+┌─────────┐   back network   ┌──────────┐
+│ Traefik │ ◄──────────────► │ ksefcli  │
+│  proxy  │                  │ :18150   │
+└─────────┘                  └──────────┘
+                                   │
+                           back network
+                                   │
+                              ┌─────────┐
+                              │ Ofelia  │
+                              │scheduler│
+                              └─────────┘
 ```
 
 | Service | Image | Role |
@@ -632,12 +668,12 @@ KSEFCLI_BASICAUTH_USERS=admin:$$apr1$$xyz...
 
 #### Networks
 
-Two internal networks defined by compose — no external resources or pre-creation required:
+Two networks defined by compose — no external resources or pre-creation required:
 
 | Network | Type | Connected services | Purpose |
 |---------|------|--------------------|---------|
-| `front` | bridge | Traefik, ksefcli | Local traffic through the reverse proxy |
-| `back` | bridge (internal) | ksefcli, Ofelia | Scheduled tasks, isolated from the network |
+| `front` | bridge | Traefik | Host ports 80/443 — external traffic into Traefik |
+| `back` | bridge | Traefik, ksefcli, Ofelia | Internal traffic: Traefik→ksefcli and Ofelia→ksefcli |
 
 #### Environment variables (`.env`)
 
@@ -669,17 +705,17 @@ Edit `ofelia/config.ini` to change schedules or enable invoice cleanup. Changes 
 
 | Path | Type | Description |
 |------|------|-------------|
-| `./output` | bind (rw) | Downloaded invoices appear directly on the host |
+| `ksefcli-output` | named volume | Downloaded invoices — persisted across restarts; default output path `/data` |
 | `ksefcli-config` | named volume | ksefcli configuration (`ksefcli.yaml`) — created automatically by the app |
-| `./ofelia/config.ini` | bind (ro) | Ofelia job scheduler configuration |
-| `ksefcli-cache` | named volume | Session tokens and GUI preferences — survive `docker compose down/up` |
+| `ksefcli-cache` | named volume | Session tokens, GUI preferences, and invoice SQLite cache — survive `docker compose down/up` |
 | `traefik-acme` | named volume | Let's Encrypt TLS certificates — preserved across restarts |
+| `./ofelia/config.ini` | bind (ro) | Ofelia job scheduler configuration |
 
 ### PDF export
 
 PDFs are rendered by a **native built-in engine** based on [QuestPDF](https://www.questpdf.com/) — a pure .NET library with no external dependencies.
 
-Node.js, git, and any external generator are no longer required. PDF export works identically on all platforms and inside Docker with no additional setup.
+Node.js, git, and any external generator are not required. PDF export works identically on all platforms and inside Docker with no additional setup.
 
 #### Colour schemes
 

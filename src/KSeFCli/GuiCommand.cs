@@ -35,15 +35,20 @@ public class GuiCommand : IWithConfigCommand
     public int? PortOverride { get; set; }
 
     private List<InvoiceSummary>? _cachedInvoices;
+    private SearchParams? _lastSearchParams;
     private IKSeFClient? _ksefClient;
     private IServiceScope? _scope;
     private WebProgressServer? _server;
+    private InvoiceCache _invoiceCache = null!; // initialized in RunAsync after logger is configured
     private Dictionary<string, string> _allProfiles = new(); // name → NIP
     private bool _setupRequired = false;
 
     private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
 
     private const int DefaultLanPort = 18150;
+
+    /// <summary>Persistent GUI-only preferences per profile name (not stored in YAML).</summary>
+    private record ProfilePrefs(bool? IncludeInAutoRefresh = null);
 
     private record GuiPrefs(
         string? OutputDir = null,
@@ -60,7 +65,9 @@ public class GuiCommand : IWithConfigCommand
         bool? DetailsDarkMode = null,
         string? PdfColorScheme = null,
         int? AutoRefreshMinutes = null,
-        bool? JsonConsoleLog = null);
+        bool? JsonConsoleLog = null,
+        int? DisplayLimit = null,
+        Dictionary<string, ProfilePrefs>? ProfilePrefs = null);
 
     private record ProfileEditorData(
         string Name,
@@ -72,7 +79,8 @@ public class GuiCommand : IWithConfigCommand
         string? CertCertificateFile,
         string? CertPassword,
         string? CertPasswordEnv,
-        string? CertPasswordFile);
+        string? CertPasswordFile,
+        bool IncludeInAutoRefresh = true);
 
     private record ConfigEditorData(
         string ActiveProfile,
@@ -129,6 +137,7 @@ public class GuiCommand : IWithConfigCommand
         _setupRequired = !File.Exists(Path.GetFullPath(ConfigFile));
         GuiPrefs savedPrefs = LoadPrefs();
         Log.ConfigureLogging(Verbose, Quiet, savedPrefs.JsonConsoleLog ?? false);
+        _invoiceCache = new InvoiceCache();
         if (_setupRequired)
         {
             Log.LogInformation("No config file found. Opening setup wizard in GUI.");
@@ -254,6 +263,8 @@ public class GuiCommand : IWithConfigCommand
                 pdfColorScheme = prefs.PdfColorScheme ?? "navy",
                 autoRefreshMinutes = prefs.AutoRefreshMinutes ?? 0,
                 jsonConsoleLog = prefs.JsonConsoleLog ?? false,
+                displayLimit = prefs.DisplayLimit ?? 50,
+                profilePrefs = prefs.ProfilePrefs ?? new Dictionary<string, ProfilePrefs>(),
                 setupRequired = _setupRequired,
             });
         };
@@ -279,7 +290,13 @@ public class GuiCommand : IWithConfigCommand
                 DetailsDarkMode: root.TryGetProperty("detailsDarkMode", out JsonElement ddm) ? ddm.GetBoolean() : null,
                 PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null,
                 AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
-                JsonConsoleLog: jsonConsoleLog
+                JsonConsoleLog: jsonConsoleLog,
+                DisplayLimit: root.TryGetProperty("displayLimit", out JsonElement dl) ? dl.GetInt32() : null,
+                ProfilePrefs: root.TryGetProperty("profilePrefs", out JsonElement pp)
+                    ? JsonSerializer.Deserialize<Dictionary<string, ProfilePrefs>>(
+                        pp.GetRawText(),
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    : null
             ));
             Log.ConfigureLogging(Verbose, Quiet, jsonConsoleLog);
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
@@ -295,8 +312,25 @@ public class GuiCommand : IWithConfigCommand
                     _scope = switchedScope;
                     _ksefClient = switchedClient;
                     _cachedInvoices = null; // clear only after successful switch
+                    _lastSearchParams = null;
                     string switchedNip = _allProfiles.TryGetValue(ActiveProfile, out string? switchedNipVal) ? switchedNipVal : "?";
                     Log.LogInformation($"Profile switched to: {ActiveProfile} (NIP {switchedNip})");
+
+                    // Load the new profile's cached invoices (if any)
+                    try
+                    {
+                        (List<InvoiceSummary>? cached, SearchParams? cachedParams, _) = _invoiceCache.Load(GetProfileCacheKey());
+                        if (cached != null && cached.Count > 0)
+                        {
+                            _cachedInvoices = cached;
+                            _lastSearchParams = cachedParams;
+                            Log.LogInformation($"[cache] profile-switch restore — {cached.Count} invoices loaded from DB for profile '{ActiveProfile}'");
+                        }
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        Log.LogWarning($"Failed to load invoice cache for new profile: {cacheEx.Message}");
+                    }
                 }
                 catch
                 {
@@ -338,7 +372,29 @@ public class GuiCommand : IWithConfigCommand
 
             return Task.FromResult<object>(result);
         };
-        server.OnTokenStatus = () =>
+        server.OnCachedInvoices = () =>
+        {
+            if (_cachedInvoices == null || _cachedInvoices.Count == 0)
+            {
+                return Task.FromResult<object>(new { invoices = Array.Empty<object>(), @params = (object?)null });
+            }
+
+            // Project SearchParams into camelCase anonymous object — SearchParams record
+            // serializes as PascalCase by default, which JS cannot read with data.params.from etc.
+            object? paramsObj = _lastSearchParams == null ? null : (object)new
+            {
+                subjectType = _lastSearchParams.SubjectType,
+                from = _lastSearchParams.From,
+                to = _lastSearchParams.To,
+                dateType = _lastSearchParams.DateType,
+            };
+            return Task.FromResult<object>(new
+            {
+                invoices = MapInvoicesToJson(_cachedInvoices),
+                @params = paramsObj,
+            });
+        };
+        server.OnTokenStatus = async () =>
         {
             try
             {
@@ -347,15 +403,29 @@ public class GuiCommand : IWithConfigCommand
                 TokenStore.Data? storedToken = tokenStore.GetToken(key);
                 if (storedToken != null)
                 {
-                    return Task.FromResult<object>(new
+                    // Auto-refresh if access token is expired/near-expiry but refresh token is valid
+                    if (storedToken.Response.AccessToken.ValidUntil < DateTime.UtcNow.AddMinutes(1)
+                        && storedToken.Response.RefreshToken.ValidUntil > DateTime.UtcNow.AddMinutes(1))
+                    {
+                        Log.LogInformation("GUI: token-status — access token expired, auto-refreshing");
+                        AuthenticationOperationStatusResponse refreshed =
+                            await TokenRefresh(_scope!, storedToken.Response.RefreshToken, CancellationToken.None).ConfigureAwait(false);
+                        tokenStore.SetToken(key, new TokenStore.Data(refreshed));
+                        storedToken = new TokenStore.Data(refreshed);
+                        Log.LogInformation($"GUI: token-status auto-refresh OK — access token valid until {refreshed.AccessToken.ValidUntil:HH:mm:ss}");
+                    }
+                    return (object)new
                     {
                         accessTokenValidUntil = storedToken.Response.AccessToken.ValidUntil.ToLocalTime().ToString("o"),
                         refreshTokenValidUntil = storedToken.Response.RefreshToken.ValidUntil.ToLocalTime().ToString("o"),
-                    });
+                    };
                 }
             }
-            catch { }
-            return Task.FromResult<object>(new { accessTokenValidUntil = (string?)null, refreshTokenValidUntil = (string?)null });
+            catch (Exception ex)
+            {
+                Log.LogWarning($"GUI: token-status check failed: {ex.Message}");
+            }
+            return (object)new { accessTokenValidUntil = (string?)null, refreshTokenValidUntil = (string?)null };
         };
 
         server.OnLoadConfig = () =>
@@ -373,6 +443,9 @@ public class GuiCommand : IWithConfigCommand
             {
                 rawConfig = new KsefCliConfig { ActiveProfile = "", Profiles = new() };
             }
+            // Include GUI-only per-profile prefs (not stored in YAML)
+            GuiPrefs loadedPrefs = LoadPrefs();
+            Dictionary<string, ProfilePrefs> ppMap = loadedPrefs.ProfilePrefs ?? [];
             ProfileEditorData[] profiles = rawConfig.Profiles
                 .Select(kvp => new ProfileEditorData(
                     Name: kvp.Key,
@@ -384,7 +457,8 @@ public class GuiCommand : IWithConfigCommand
                     CertCertificateFile: kvp.Value.Certificate?.Certificate_File,
                     CertPassword: kvp.Value.Certificate?.Password,
                     CertPasswordEnv: kvp.Value.Certificate?.Password_Env,
-                    CertPasswordFile: kvp.Value.Certificate?.Password_File))
+                    CertPasswordFile: kvp.Value.Certificate?.Password_File,
+                    IncludeInAutoRefresh: !ppMap.TryGetValue(kvp.Key, out ProfilePrefs? pp) || pp.IncludeInAutoRefresh != false))
                 .ToArray();
             return Task.FromResult<object>(new ConfigEditorData(
                 ActiveProfile: rawConfig.ActiveProfile,
@@ -460,6 +534,21 @@ public class GuiCommand : IWithConfigCommand
                     throw;
                 }
 
+                // Persist per-profile GUI prefs (includeInAutoRefresh) to gui-prefs.json (not YAML)
+                GuiPrefs existingPrefs = LoadPrefs();
+                Dictionary<string, ProfilePrefs> updatedPpMap = existingPrefs.ProfilePrefs
+                    ?? new Dictionary<string, ProfilePrefs>();
+                foreach (ProfileEditorData p in data.Profiles)
+                {
+                    updatedPpMap[p.Name] = new ProfilePrefs(IncludeInAutoRefresh: p.IncludeInAutoRefresh);
+                }
+                // Remove entries for profiles that no longer exist
+                foreach (string stale in updatedPpMap.Keys.Except(data.Profiles.Select(p => p.Name)).ToList())
+                {
+                    updatedPpMap.Remove(stale);
+                }
+                SavePrefs(existingPrefs with { ProfilePrefs = updatedPpMap });
+
                 // Clear setup mode — config now exists
                 _setupRequired = false;
 
@@ -473,9 +562,30 @@ public class GuiCommand : IWithConfigCommand
 
         server.Start(cancellationToken);
         Log.LogInformation($"GUI running at {server.LocalUrl}");
+        _ = Task.Run(() => RunBackgroundProfileRefreshAsync(cancellationToken), cancellationToken);
         if (Lan)
         {
             Log.LogInformation($"LAN access enabled — accessible on all network interfaces, port {server.Port}");
+        }
+
+        // Pre-populate invoice cache from SQLite so the browser table is filled on first open.
+        if (!_setupRequired)
+        {
+            try
+            {
+                string profileKey = GetProfileCacheKey();
+                (List<InvoiceSummary>? cached, SearchParams? cachedParams, DateTime? fetchedAt) = _invoiceCache.Load(profileKey);
+                if (cached != null && cached.Count > 0)
+                {
+                    _cachedInvoices = cached;
+                    _lastSearchParams = cachedParams;
+                    Log.LogInformation($"[cache] startup restore — {cached.Count} invoices loaded from DB (fetched {fetchedAt:u})");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"Failed to load invoice cache: {ex.Message}");
+            }
         }
 
         server.OpenBrowser();
@@ -489,51 +599,48 @@ public class GuiCommand : IWithConfigCommand
         return 0;
     }
 
-    private async Task<object> SearchAsync(SearchParams searchParams, CancellationToken ct)
+    /// <summary>Parses <see cref="SearchParams"/> into <see cref="InvoiceQueryFilters"/>.</summary>
+    private static async Task<InvoiceQueryFilters> BuildFiltersAsync(SearchParams sp, CancellationToken ct)
     {
-        ProfileConfig searchProfile = Config();
-        bool isCyclic = searchParams.Source == "auto";
-        Log.LogInformation(isCyclic
-            ? $"GUI: cyclic-search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]"
-            : $"GUI: search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]");
-        if (!Enum.TryParse(searchParams.SubjectType, true, out InvoiceSubjectType subjectType))
+        if (!Enum.TryParse(sp.SubjectType, true, out InvoiceSubjectType subjectType))
         {
-            subjectType = searchParams.SubjectType.ToLowerInvariant() switch
+            subjectType = sp.SubjectType?.ToLowerInvariant() switch
             {
                 "1" or "sprzedawca" => InvoiceSubjectType.Subject1,
                 "2" or "nabywca" => InvoiceSubjectType.Subject2,
                 "3" => InvoiceSubjectType.Subject3,
                 "4" => InvoiceSubjectType.SubjectAuthorized,
-                _ => throw new FormatException($"Invalid SubjectType: {searchParams.SubjectType}")
+                _ => throw new FormatException($"Invalid SubjectType: {sp.SubjectType}")
             };
         }
 
-        if (!Enum.TryParse(searchParams.DateType, true, out DateType dateType))
+        if (!Enum.TryParse(sp.DateType, true, out DateType dateType))
         {
-            throw new InvalidEnumArgumentException($"Invalid DateType: {searchParams.DateType}");
+            throw new InvalidEnumArgumentException($"Invalid DateType: {sp.DateType}");
         }
 
-        DateTime parsedFromDate = await ParseDate.Parse(searchParams.From).ConfigureAwait(false);
+        DateTime parsedFromDate = await ParseDate.Parse(sp.From).ConfigureAwait(false);
         DateTime? parsedToDate = null;
-        if (!string.IsNullOrEmpty(searchParams.To))
+        if (!string.IsNullOrEmpty(sp.To))
         {
-            parsedToDate = await ParseDate.Parse(searchParams.To).ConfigureAwait(false);
+            parsedToDate = await ParseDate.Parse(sp.To).ConfigureAwait(false);
         }
 
-        InvoiceQueryFilters filters = new InvoiceQueryFilters
+        return new InvoiceQueryFilters
         {
             SubjectType = subjectType,
-            DateRange = new DateRange
-            {
-                From = parsedFromDate,
-                To = parsedToDate,
-                DateType = dateType,
-            }
+            DateRange = new DateRange { From = parsedFromDate, To = parsedToDate, DateType = dateType },
         };
+    }
 
-        string accessToken = await GetAccessToken(_scope!, ct).ConfigureAwait(false);
-
-        List<InvoiceSummary> allInvoices = new();
+    /// <summary>Pages through the KSeF API and returns all invoice summaries matching the filters.</summary>
+    private static async Task<List<InvoiceSummary>> FetchAllPagesAsync(
+        IKSeFClient client,
+        InvoiceQueryFilters filters,
+        string accessToken,
+        CancellationToken ct)
+    {
+        List<InvoiceSummary> all = new();
         PagedInvoiceResponse pagedResponse;
         int currentOffset = 0;
         const int pageSize = 100;
@@ -547,7 +654,7 @@ public class GuiCommand : IWithConfigCommand
             {
                 try
                 {
-                    pagedResponse = await _ksefClient!.QueryInvoiceMetadataAsync(
+                    pagedResponse = await client.QueryInvoiceMetadataAsync(
                         filters,
                         accessToken,
                         pageOffset: currentOffset,
@@ -565,7 +672,7 @@ public class GuiCommand : IWithConfigCommand
 
             if (pagedResponse.Invoices != null)
             {
-                allInvoices.AddRange(pagedResponse.Invoices);
+                all.AddRange(pagedResponse.Invoices);
             }
 
             currentOffset += pageSize;
@@ -576,12 +683,156 @@ public class GuiCommand : IWithConfigCommand
             }
         } while (pagedResponse.HasMore == true);
 
-        Log.LogInformation(isCyclic
-            ? $"GUI: cyclic-search done — {allInvoices.Count} invoices"
-            : $"GUI: search done — {allInvoices.Count} invoices");
-        _cachedInvoices = allInvoices;
+        return all;
+    }
 
-        return allInvoices.Select(i => new
+    private async Task<object> SearchAsync(SearchParams searchParams, CancellationToken ct)
+    {
+        ProfileConfig searchProfile = Config();
+        bool isCyclic = searchParams.Source == "auto";
+        Log.LogInformation(isCyclic
+            ? $"[ksef-api] cyclic-search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]"
+            : $"[ksef-api] search [profile={ActiveProfile}, nip={searchProfile.Nip}, env={searchProfile.Environment}, subject={searchParams.SubjectType}, from={searchParams.From}, to={searchParams.To ?? "–"}]");
+
+        InvoiceQueryFilters filters = await BuildFiltersAsync(searchParams, ct).ConfigureAwait(false);
+        string accessToken = await GetAccessToken(_scope!, ct).ConfigureAwait(false);
+        List<InvoiceSummary> allInvoices = await FetchAllPagesAsync(_ksefClient!, filters, accessToken, ct).ConfigureAwait(false);
+
+        Log.LogInformation(isCyclic
+            ? $"[ksef-api] cyclic-search done — {allInvoices.Count} invoices"
+            : $"[ksef-api] search done — {allInvoices.Count} invoices");
+        _cachedInvoices = allInvoices;
+        // Cyclic searches keep the last manual params intact — only the invoice list is refreshed.
+        if (!isCyclic)
+        {
+            _lastSearchParams = searchParams with { Source = null };
+        }
+
+        try
+        {
+            string profileKey = GetProfileCacheKey();
+            if (isCyclic)
+            {
+                _invoiceCache.SaveInvoicesOnly(profileKey, allInvoices);
+            }
+            else
+            {
+                _invoiceCache.Save(profileKey, _lastSearchParams!, allInvoices);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"Failed to save invoice cache: {ex.Message}");
+        }
+
+        return MapInvoicesToJson(allInvoices);
+    }
+
+    private string GetProfileCacheKey()
+    {
+        try
+        {
+            return GetTokenStoreKey().ToCacheKey();
+        }
+        catch
+        {
+            return "default";
+        }
+    }
+
+    /// <summary>
+    /// Background task — every 30 s checks whether the auto-refresh interval has elapsed,
+    /// then refreshes all non-active profiles marked IncludeInAutoRefresh in gui-prefs.
+    /// Runs for the lifetime of the app (cancelled via <paramref name="ct"/>).
+    /// </summary>
+    private async Task RunBackgroundProfileRefreshAsync(CancellationToken ct)
+    {
+        DateTime lastRun = DateTime.MinValue;
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+
+            GuiPrefs prefs = LoadPrefs();
+            int minutes = prefs.AutoRefreshMinutes ?? 0;
+            if (minutes < 1)
+            {
+                continue;
+            }
+
+            if ((DateTime.UtcNow - lastRun).TotalMinutes < minutes)
+            {
+                continue;
+            }
+            lastRun = DateTime.UtcNow;
+
+            KsefCliConfig config;
+            try { config = CurrentConfig; }
+            catch { continue; }
+
+            Dictionary<string, ProfilePrefs> ppMap = prefs.ProfilePrefs ?? [];
+            foreach ((string name, ProfileConfig profile) in config.Profiles)
+            {
+                if (name == ActiveProfile)
+                {
+                    continue; // JS silentRefresh handles the active profile
+                }
+
+                if (ppMap.TryGetValue(name, out ProfilePrefs? pp) && pp.IncludeInAutoRefresh == false)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await RefreshProfileInBackgroundAsync(name, profile, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log.LogWarning($"[bg-refresh] Profile '{name}': {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, CancellationToken ct)
+    {
+        Log.LogInformation($"[bg-refresh] Profile '{name}' (NIP {profile.Nip}, env {profile.Environment}) starting");
+        using IServiceScope scope = GetScope(profile);
+        string accessToken = await GetAccessTokenForProfile(name, profile, scope, ct).ConfigureAwait(false);
+
+        string profileKey = new TokenStore.Key(name, profile).ToCacheKey();
+        (List<InvoiceSummary>? prev, SearchParams? cachedParams, _) = _invoiceCache.Load(profileKey);
+        HashSet<string> prevKeys = prev?.Select(i => i.KsefNumber).ToHashSet() ?? [];
+
+        // Use last manual search params for this profile, or default to "this month"
+        SearchParams sp = cachedParams ?? new SearchParams("Subject2", "thismonth", null, "Issue");
+        InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
+
+        IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
+        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct).ConfigureAwait(false);
+
+        _invoiceCache.SaveInvoicesOnly(profileKey, invoices);
+
+        int newCount = invoices.Count(i => !prevKeys.Contains(i.KsefNumber));
+        Log.LogInformation($"[bg-refresh] Profile '{name}': {invoices.Count} invoices, {newCount} new");
+
+        if (_server != null)
+        {
+            await _server.SendEventAsync("background_refresh", new
+            {
+                profileName = name,
+                count = invoices.Count,
+                newCount,
+            }).ConfigureAwait(false);
+        }
+    }
+
+    private static object MapInvoicesToJson(List<InvoiceSummary> invoices) =>
+        invoices.Select(i => new
         {
             ksefNumber = i.KsefNumber,
             invoiceNumber = i.InvoiceNumber,
@@ -594,7 +845,6 @@ public class GuiCommand : IWithConfigCommand
             vatAmount = i.VatAmount,
             currency = i.Currency,
         }).ToArray();
-    }
 
     private async Task DownloadAsync(DownloadParams dlParams, CancellationToken ct)
     {

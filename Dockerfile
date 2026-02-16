@@ -23,7 +23,7 @@ RUN set -e && \
     dotnet publish src/KSeFCli/KSeFCli.csproj $ARGS -r osx-x64 && \
     dotnet publish src/KSeFCli/KSeFCli.csproj $ARGS -r osx-arm64
 
-# --- Final stage: ksefcli binaries only (PDF generation requires Node.js+npx at runtime) ---
+# --- Final stage: ksefcli binaries (PDF renderer is built-in, no external tools needed) ---
 FROM debian:bookworm-slim
 
 ARG APP_VERSION

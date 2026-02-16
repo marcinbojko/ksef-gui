@@ -32,6 +32,10 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called to check which invoices already exist as files in the output directory.</summary>
     public Func<CheckExistingParams, Task<object>>? OnCheckExisting { get; set; }
 
+    /// <summary>Returns the last cached invoice list and search params for the current profile.
+    /// Used to pre-populate the table on page load without requiring a search.</summary>
+    public Func<Task<object>>? OnCachedInvoices { get; set; }
+
     /// <summary>Called when the user clicks "Zakoncz". Shuts down the server.</summary>
     public Action? OnQuit { get; set; }
 
@@ -354,6 +358,19 @@ internal sealed class WebProgressServer : IDisposable
                 CheckExistingParams checkParams = JsonSerializer.Deserialize<CheckExistingParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new CheckExistingParams(".", false, false);
                 object result = await OnCheckExisting(checkParams).ConfigureAwait(false);
+                return JsonSerializer.Serialize(result);
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/cached-invoices" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                if (OnCachedInvoices == null)
+                {
+                    return JsonSerializer.Serialize(new { invoices = Array.Empty<object>() });
+                }
+
+                object result = await OnCachedInvoices().ConfigureAwait(false);
                 return JsonSerializer.Serialize(result);
             }).ConfigureAwait(false);
         }
@@ -843,6 +860,18 @@ body.dark .pref-label{color:#aaa}
             <span style="font-size:.75rem;color:#999">0 = wyłączone</span>
           </div>
         </div>
+        <div class="pref-row">
+          <span class="pref-label">Wiersze na ekranie</span>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <select id="displayLimit" onchange="savePrefs();renderTable()">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+            <span style="font-size:.75rem;color:#999">domyślnie 50 — użyj &ldquo;Pokaż wszystkie&rdquo; aby zobaczyć więcej</span>
+          </div>
+        </div>
       </div>
       <div class="prefs-pane" id="pane-network" style="display:none">
         <div class="pref-row">
@@ -983,6 +1012,9 @@ let activeCurrencies = new Set();
 let selectedInvoices = new Set();
 let fileStatus = [];
 let autoRefreshTimer = null;
+let displayAll = false;
+let refreshRunning = false; // guard against concurrent silentRefresh() calls
+const profileBadges = {}; // profileName → unread new-invoice count for dropdown badge
 let knownInvoiceKsefNumbers = null; // null = not yet baselined; Set after first search
 let lastSearchParams = null;        // params of last successful search; null = no search yet
 
@@ -996,6 +1028,39 @@ let lastSearchParams = null;        // params of last successful search; null = 
   $('fromDate').max = maxMonth;
   $('toDate').max = maxMonth;
 })();
+
+async function loadCachedInvoices() {
+  try {
+    const res = await fetch('/cached-invoices');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.invoices || data.invoices.length === 0) return;
+    invoices = data.invoices;
+    for (let i = 0; i < invoices.length; i++) invoices[i]._idx = i;
+    total = invoices.length;
+    countLabel.textContent = total + ' faktur';
+    if (data.params) {
+      if (data.params.subjectType) $('subjectType').value = data.params.subjectType;
+      if (data.params.dateType) $('dateType').value = data.params.dateType;
+      const fromISO = data.params.from;
+      if (fromISO && fromISO !== 'thismonth') $('fromDate').value = fromISO.substring(0, 7);
+      if (data.params.to) $('toDate').value = data.params.to.substring(0, 7);
+      lastSearchParams = {
+        subjectType: data.params.subjectType,
+        fromDate: fromISO && fromISO !== 'thismonth' ? fromISO.substring(0, 7) : '',
+        toDate: data.params.to ? data.params.to.substring(0, 7) : '',
+        dateType: data.params.dateType
+      };
+      knownInvoiceKsefNumbers = new Set(invoices.map(i => i.ksefNumber));
+    }
+    buildCurrencyFilter();
+    displayAll = false;
+    renderTable();
+    downloadBar.style.display = total > 0 ? 'flex' : 'none';
+    checkExisting();
+    setStatus('Zaladowano ' + total + ' faktur z pamięci podręcznej.', 'idle');
+  } catch (e) { /* silent */ }
+}
 
 // Load saved preferences
 let currentSessionProfile = '';
@@ -1020,6 +1085,7 @@ async function loadPrefs() {
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
+      if (p.displayLimit) $('displayLimit').value = p.displayLimit;
       startAutoRefresh(parseInt($('autoRefreshMinutes').value) || 0);
       if (p.profileName) $('profileNameLabel').textContent = '(' + p.profileName + ')';
       // Populate profile dropdown
@@ -1042,6 +1108,7 @@ async function loadPrefs() {
   } catch {}
 }
 loadPrefs();
+loadCachedInvoices();
 
 function applySetupMode(required) {
   const banner = $('setupBanner');
@@ -1128,17 +1195,22 @@ function savePrefs() {
     lanPort: parseInt($('lanPort').value) || 18150,
     listenOnAll: $('listenAll').checked,
     autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0,
-    jsonConsoleLog: $('jsonConsoleLog').checked
+    jsonConsoleLog: $('jsonConsoleLog').checked,
+    displayLimit: parseInt($('displayLimit').value) || 50
   };
   const mins = prefs.autoRefreshMinutes;
   startAutoRefresh(mins);
   if (mins > 0) requestNotificationPermission();
-  fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) }).catch(() => {});
+  return fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) }).catch(() => {});
 }
 
-function onProfileChange() {
+async function onProfileChange() {
   const chosen = $('profileSelect').value;
-  savePrefs();
+  if (profileBadges[chosen]) {
+    delete profileBadges[chosen];
+    updateProfileSelectBadges();
+  }
+  await savePrefs();
   // Clear all results and token status immediately on profile switch
   tableWrap.innerHTML = '';
   invoices = []; total = 0; completed = 0; sortCol = null;
@@ -1150,8 +1222,11 @@ function onProfileChange() {
   downloadBar.style.display = 'none';
   progressWrap.classList.remove('visible');
   countLabel.textContent = '';
+  lastSearchParams = null;
+  knownInvoiceKsefNumbers = null;
   setStatus('Profil zmieniony na "' + chosen + '".', 'idle');
   fetchTokenStatus();
+  loadCachedInvoices();
 }
 
 function togglePrefs() { openPrefs(); }
@@ -1253,6 +1328,10 @@ function renderProfileCard(p, i) {
     '<div class="cfg-field"><label>Haslo z pliku (opcjonalnie)</label>' +
     '<input type="text" id="cfgCertPassFile' + i + '" value="' + esc(p.certPasswordFile||'') + '" placeholder="~/password.txt"></div>' +
     '</div>' +
+    '<div class="cfg-field" style="padding-top:.4rem;border-top:1px solid var(--border)">' +
+    '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
+    '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
+    ' Uwzględnij w auto-odświeżaniu (tło)</label></div>' +
     '</div>';
 }
 
@@ -1329,6 +1408,7 @@ async function saveConfigEditor() {
       certPassword: authMethod === 'certificate' ? (document.getElementById('cfgCertPass' + i)?.value || null) : null,
       certPasswordEnv: authMethod === 'certificate' ? (document.getElementById('cfgCertPassEnv' + i)?.value || null) : null,
       certPasswordFile: authMethod === 'certificate' ? (document.getElementById('cfgCertPassFile' + i)?.value || null) : null,
+      includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + i)?.checked || false,
     });
   }
   const payload = { activeProfile, configFilePath: cfgData.configFilePath, profiles };
@@ -1421,6 +1501,9 @@ function renderTable() {
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
   }
+  const limit = parseInt($('displayLimit')?.value) || 50;
+  const truncated = !displayAll && sorted.length > limit;
+  const visible = truncated ? sorted.slice(0, limit) : sorted;
   let html = '<table><thead><tr>';
   html += '<th style="width:2rem"><input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"></th>';
   html += '<th style="width:2rem"></th>';
@@ -1432,8 +1515,8 @@ function renderTable() {
     html += '<th data-col="' + c.key + '" onclick="sortBy(\'' + c.key + '\')">' + c.label + '<span class="sort-arrow">' + arrow + '</span></th>';
   }
   html += '</tr></thead><tbody>';
-  for (let i = 0; i < sorted.length; i++) {
-    const inv = sorted[i];
+  for (let i = 0; i < visible.length; i++) {
+    const inv = visible[i];
     const idx = inv._idx;
     const date = inv.issueDate ? inv.issueDate.substring(0,10) : '';
     const chk = selectedInvoices.has(idx) ? ' checked' : '';
@@ -1459,6 +1542,12 @@ function renderTable() {
     html += '</tr>';
   }
   html += '</tbody></table>';
+  if (truncated) {
+    html += '<div style="text-align:center;padding:.6rem 0">'
+          + '<span style="font-size:.8rem;color:#999;margin-right:.8rem">Wyświetlono ' + limit + ' z ' + sorted.length + ' faktur</span>'
+          + '<button class="btn-primary" style="font-size:.8rem;padding:.3rem .8rem" onclick="displayAll=true;renderTable()">Pokaż wszystkie (' + sorted.length + ')</button>'
+          + '</div>';
+  }
   tableWrap.innerHTML = html;
   updateSelectionUI();
 }
@@ -1553,6 +1642,13 @@ function connectSSE() {
         }
         break;
       }
+      case 'background_refresh':
+        // d = { profileName, count, newCount }
+        if (d.newCount > 0) {
+          markProfileBadge(d.profileName, d.newCount);
+          notifyNewInvoices(d.profileName, d.newCount);
+        }
+        break;
     }
   };
 }
@@ -1567,6 +1663,31 @@ function markDone(idx) {
   const pct = dlTotal > 0 ? Math.round((completed / dlTotal) * 100) : 0;
   bar.style.width = pct + '%'; bar.textContent = pct + '%';
   setStatus('Pobieranie... ' + completed + ' / ' + dlTotal, 'info');
+}
+
+function markProfileBadge(name, count) {
+  profileBadges[name] = (profileBadges[name] || 0) + count;
+  updateProfileSelectBadges();
+}
+
+function updateProfileSelectBadges() {
+  const sel = $('profileSelect');
+  if (!sel) return;
+  for (const opt of sel.options) {
+    const badge = profileBadges[opt.value];
+    const base = opt.dataset.base || opt.textContent;
+    opt.dataset.base = base;
+    opt.textContent = badge ? base + ' \uD83D\uDD14' + badge : base;
+  }
+}
+
+// Extensible notification hook — swap for email/Slack in future
+function notifyNewInvoices(profileName, count) {
+  if (Notification.permission === 'granted') {
+    new Notification('KSeF: nowe faktury (' + profileName + ')', {
+      body: count + ' nowych faktur dla profilu ' + profileName
+    });
+  }
 }
 
 async function doAuth() {
@@ -1628,6 +1749,7 @@ async function doSearch() {
     countLabel.textContent = total + ' faktur';
     setStatus('Znaleziono ' + total + ' faktur.', total > 0 ? 'info' : 'idle');
     buildCurrencyFilter();
+    displayAll = false;
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
     searchRunning = false;
@@ -1653,27 +1775,35 @@ function startAutoRefresh(minutes) {
 
 async function silentRefresh() {
   if (!lastSearchParams) return;
-  // Refresh session token if it expires within 1 minute
-  if (tokenExpiry && (tokenExpiry - Date.now()) < 60 * 1000) {
-    console.info('[auto-refresh] Access token expiring in <1 min — refreshing session before search');
-    try {
-      const authRes = await fetch('/auth', { method: 'POST' });
-      if (!authRes.ok) {
-        console.warn('[auto-refresh] Token refresh failed — skipping this cycle');
+  if (refreshRunning) { console.info('[auto-refresh] Skipping — previous cycle still running'); return; }
+  refreshRunning = true;
+  try {
+    // Refresh session token if it expires within 1 minute
+    if (tokenExpiry && (tokenExpiry - Date.now()) < 60 * 1000) {
+      console.info('[auto-refresh] Access token expiring in <1 min — refreshing session before search');
+      try {
+        const authRes = await fetch('/auth', { method: 'POST' });
+        if (!authRes.ok) {
+          console.warn('[auto-refresh] Token refresh failed — skipping this cycle');
+          return;
+        }
+        await fetchTokenStatus();
+        console.info('[auto-refresh] Session refreshed. New expiry:', tokenExpiry?.toLocaleTimeString());
+      } catch(e) {
+        console.warn('[auto-refresh] Token refresh error:', e);
         return;
       }
-      await fetchTokenStatus();
-      console.info('[auto-refresh] Session refreshed. New expiry:', tokenExpiry?.toLocaleTimeString());
-    } catch(e) {
-      console.warn('[auto-refresh] Token refresh error:', e);
-      return;
     }
-  }
-  console.info('[auto-refresh] Cyclic search started at', new Date().toLocaleTimeString());
-  try {
-    const params = Object.assign({}, lastSearchParams, { source: 'auto' });
+    console.info('[auto-refresh] Cyclic search started at', new Date().toLocaleTimeString());
+    const params = {
+      subjectType: lastSearchParams.subjectType,
+      from: monthToFrom(lastSearchParams.fromDate) || 'thismonth',
+      to: monthToTo(lastSearchParams.toDate) || null,
+      dateType: lastSearchParams.dateType,
+      source: 'auto'
+    };
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
-    if (!res.ok) return;
+    if (!res.ok) { await fetchTokenStatus(); return; }
     const fresh = await res.json();
     fresh.forEach((inv, i) => inv._idx = i);
     console.info('[auto-refresh] Cyclic search complete —', fresh.length, 'invoices');
@@ -1684,7 +1814,9 @@ async function silentRefresh() {
     buildCurrencyFilter();
     renderTable();
     checkExisting();
+    await fetchTokenStatus();
   } catch(e) { /* silent — do not disrupt user */ }
+  finally { refreshRunning = false; }
 }
 
 function detectNewInvoices(fresh) {
