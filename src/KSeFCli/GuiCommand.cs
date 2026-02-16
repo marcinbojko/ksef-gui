@@ -815,7 +815,14 @@ public class GuiCommand : IWithConfigCommand
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct).ConfigureAwait(false);
 
-        _invoiceCache.SaveInvoicesOnly(profileKey, invoices);
+        if (prev == null)
+        {
+            _invoiceCache.Save(profileKey, sp, invoices);
+        }
+        else
+        {
+            _invoiceCache.SaveInvoicesOnly(profileKey, invoices);
+        }
 
         int newCount = invoices.Count(i => !prevKeys.Contains(i.KsefNumber));
         Log.LogInformation($"[bg-refresh] Profile '{name}': {invoices.Count} invoices, {newCount} new");

@@ -28,7 +28,11 @@ internal sealed class InvoiceCache
     {
         _dbPath = dbPath ?? DefaultPath;
         bool isNew = !File.Exists(_dbPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(_dbPath)!);
+        string? dir = Path.GetDirectoryName(_dbPath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
         Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
         EnsureSchema();
     }

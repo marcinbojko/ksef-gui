@@ -1683,11 +1683,13 @@ function updateProfileSelectBadges() {
 
 // Extensible notification hook — swap for email/Slack in future
 function notifyNewInvoices(profileName, count) {
-  if (Notification.permission === 'granted') {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission !== 'granted') return;
+  try {
     new Notification('KSeF: nowe faktury (' + profileName + ')', {
       body: count + ' nowych faktur dla profilu ' + profileName
     });
-  }
+  } catch (e) { /* notification not supported in this context */ }
 }
 
 async function doAuth() {

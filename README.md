@@ -194,7 +194,7 @@ Preferencje zapisywane są w: `~/.cache/ksefcli/gui-prefs.json`
 
 Wyniki wyszukiwania są zapisywane lokalnie w bazie SQLite:
 
-```
+```text
 ~/.cache/ksefcli/db/invoice-cache.db
 ```
 
@@ -563,7 +563,7 @@ Preferences stored at: `~/.cache/ksefcli/gui-prefs.json`
 
 Search results are persisted locally in a SQLite database:
 
-```
+```text
 ~/.cache/ksefcli/db/invoice-cache.db
 ```
 
