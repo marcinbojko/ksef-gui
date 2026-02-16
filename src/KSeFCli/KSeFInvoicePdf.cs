@@ -1,5 +1,8 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Schema;
 
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -76,9 +79,29 @@ internal static class KSeFInvoiceParser
 {
     private static readonly XNamespace FallbackNs = "http://crd.gov.pl/wzor/2025/06/25/13775/";
 
+    // 10 MB ceiling — a real KSeF invoice is well under 1 MB
+    private const long MaxXmlBytes = 10 * 1024 * 1024;
+
     public static InvoiceData Parse(string xmlContent)
     {
-        XDocument doc = XDocument.Parse(xmlContent);
+        if (System.Text.Encoding.UTF8.GetByteCount(xmlContent) > MaxXmlBytes)
+        {
+            throw new InvalidOperationException($"XML content exceeds maximum allowed size ({MaxXmlBytes / 1024 / 1024} MB).");
+        }
+
+        XmlReaderSettings readerSettings = new()
+        {
+            DtdProcessing = DtdProcessing.Prohibit,   // block XXE / DTD injection
+            XmlResolver = null,                        // disable external entity resolution
+            MaxCharactersInDocument = MaxXmlBytes,
+        };
+
+        XDocument doc;
+        using (XmlReader reader = XmlReader.Create(new System.IO.StringReader(xmlContent), readerSettings))
+        {
+            doc = XDocument.Load(reader);
+        }
+
         XElement root = doc.Root!;
         XNamespace ns = root.GetDefaultNamespace() == XNamespace.None ? FallbackNs : root.GetDefaultNamespace();
 
@@ -253,6 +276,532 @@ internal static class KSeFInvoiceParser
         null => null,
         _ => code
     };
+}
+
+// ── Sanitizer ────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Two-phase defence before data reaches the PDF renderer:
+/// <list type="number">
+///   <item><description>
+///     <b>Schema validation</b> — validates the raw XML against the official FA(3) XSD
+///     (http://crd.gov.pl/wzor/2025/06/25/13775/).  All violations are logged as warnings
+///     but never block rendering (partial data is better than no PDF).
+///   </description></item>
+///   <item><description>
+///     <b>Field sanitization</b> — every string field extracted by the parser is:
+///     stripped of C0 control characters, truncated to the schema-specified maximum length,
+///     and validated against the schema-derived pattern/enumeration.  Fields that fail are
+///     replaced with <c>null</c> so the renderer never receives structurally invalid text.
+///   </description></item>
+/// </list>
+/// All constants and patterns come directly from FA3.xsd / ElementarneTypy.xsd —
+/// not from guesswork.
+/// </summary>
+internal static class KSeFInvoiceSanitizer
+{
+    // ── Compiled FA(3) schema (loaded once from embedded resources) ──────────
+    private static readonly Lazy<XmlSchemaSet?> _schema = new(LoadSchemaSet);
+
+    // ── Length caps — from FA3.xsd simpleType maxLength values ───────────────
+    // TZnakowy: maxLength 256  (most text fields: Numer, P_1M, Klucz, Wartosc, …)
+    private const int LenZnakowy = 256;
+    // TZnakowy512: maxLength 512 (Nazwa party, P_7 item name, AdresL1/L2)
+    private const int LenZnakowy512 = 512;
+    // TAdresEmail: maxLength 255
+    private const int LenEmail = 255;
+    // TNrRB: maxLength 34 (bank account / IBAN)
+    private const int LenNrRB = 34;
+
+    // ── Whitelists — exact enumeration values from FA3.xsd ───────────────────
+
+    // TRodzajFaktury (7 values)
+    private static readonly HashSet<string> ValidRodzajFaktury = new(StringComparer.Ordinal)
+        { "VAT", "KOR", "ZAL", "ROZ", "UPR", "KOR_ZAL", "KOR_ROZ" };
+
+    // TStawkaPodatku / P_12 (14 values) — exactly as enumerated in FA3.xsd
+    private static readonly HashSet<string> ValidStawkaPodatku = new(StringComparer.Ordinal)
+        { "23", "22", "8", "7", "5", "4", "3", "0 KR", "0 WDT", "0 EX", "zw", "oo", "np I", "np II" };
+
+    // TKodWaluty — all 182 ISO 4217 codes from FA3.xsd
+    private static readonly HashSet<string> ValidKodWaluty = new(StringComparer.Ordinal)
+    {
+        "AED","AFN","ALL","AMD","ANG","AOA","ARS","AUD","AWG","AZN","BAM","BBD","BDT","BGN","BHD",
+        "BIF","BMD","BND","BOB","BOV","BRL","BSD","BTN","BWP","BYN","BZD","CAD","CDF","CHE","CHF",
+        "CHW","CLF","CLP","CNY","COP","COU","CRC","CUC","CUP","CVE","CZK","DJF","DKK","DOP","DZD",
+        "EGP","ERN","ETB","EUR","FJD","FKP","GBP","GEL","GHS","GIP","GMD","GNF","GTQ","GYD","HKD",
+        "HNL","HRK","HTG","HUF","IDR","ILS","INR","IQD","IRR","ISK","JMD","JOD","JPY","KES","KGS",
+        "KHR","KMF","KPW","KRW","KWD","KYD","KZT","LAK","LBP","LKR","LRD","LSL","LYD","MAD","MDL",
+        "MGA","MKD","MMK","MNT","MOP","MRU","MUR","MVR","MWK","MXN","MXV","MYR","MZN","NAD","NGN",
+        "NIO","NOK","NPR","NZD","OMR","PAB","PEN","PGK","PHP","PKR","PLN","PYG","QAR","RON","RSD",
+        "RUB","RWF","SAR","SBD","SCR","SDG","SEK","SGD","SHP","SLE","SLL","SOS","SRD","SSP","STN",
+        "SVC","SYP","SZL","THB","TJS","TMT","TND","TOP","TRY","TTD","TWD","TZS","UAH","UGX","USD",
+        "USN","UYI","UYU","UYW","UZS","VED","VES","VND","VUV","WST","XAF","XAG","XAU","XBA","XBB",
+        "XBC","XBD","XCD","XDR","XOF","XPD","XPF","XPT","XSU","XTS","XUA","XXX","YER","ZAR","ZMW","ZWL",
+    };
+
+    // ── Patterns — from ElementarneTypy.xsd / FA3.xsd ────────────────────────
+
+    // TNrNIP: [1-9]((\d[1-9])|([1-9]\d))\d{7}   (as defined in ElementarneTypy.xsd)
+    private static readonly Regex ReNip = new(
+        @"^[1-9]((\d[1-9])|([1-9]\d))\d{7}$", RegexOptions.Compiled);
+
+    // TNrREGON: \d{9} | \d{14}   (as defined in ElementarneTypy.xsd — union of 9 and 14 digits)
+    private static readonly Regex ReRegon = new(@"^(\d{9}|\d{14})$", RegexOptions.Compiled);
+
+    // TKodKraju: [A-Z]{2}   (2-letter ISO country code)
+    private static readonly Regex ReKodKraju = new(@"^[A-Z]{2}$", RegexOptions.Compiled);
+
+    // TKwotowy: monetary amounts (P_11, P_13, P_14, P_15, VAT row amounts)
+    //   pattern from FA3.xsd: -?([1-9]\d{0,15}|0)(\.\d{1,2})?
+    private static readonly Regex ReKwotowy = new(
+        @"^-?([1-9]\d{0,15}|0)(\.\d{1,2})?$", RegexOptions.Compiled);
+
+    // TKwotowy2: exchange rates (KursWaluty)
+    //   pattern from FA3.xsd: -?([1-9]\d{0,13}|0)(\.\d{1,8})?
+    private static readonly Regex ReKwotowy2 = new(
+        @"^-?([1-9]\d{0,13}|0)(\.\d{1,8})?$", RegexOptions.Compiled);
+
+    // TIlosci: quantities (P_8B)
+    //   pattern from FA3.xsd: -?([1-9]\d{0,15}|0)(\.\d{1,6})?
+    private static readonly Regex ReIlosci = new(
+        @"^-?([1-9]\d{0,15}|0)(\.\d{1,6})?$", RegexOptions.Compiled);
+
+
+    // TData/TDataT/TDataU: date format (YYYY-MM-DD range 2006-01-01 – 2050-01-01)
+    private static readonly DateTime DateMin = new(2006, 1, 1);
+    private static readonly DateTime DateMax = new(2050, 1, 1);
+
+    // TAdresEmail: (.)+@(.)+  min 3 chars  (ElementarneTypy.xsd)
+    private static readonly Regex ReEmail = new(@"^.+@.+$", RegexOptions.Compiled);
+
+    // ── Entry point ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Validates <paramref name="xmlContent"/> against the FA(3) XSD (logging any violations),
+    /// then returns a sanitized copy of <paramref name="data"/>.
+    /// </summary>
+    public static InvoiceData Sanitize(string xmlContent, InvoiceData data)
+    {
+        ValidateSchema(xmlContent);
+        return SanitizeData(data);
+    }
+
+    // ── Phase 1 — XSD schema validation ──────────────────────────────────────
+
+    private static void ValidateSchema(string xmlContent)
+    {
+        XmlSchemaSet? schemas = _schema.Value;
+        if (schemas is null)
+        {
+            return;
+        }
+
+        List<string> issues = new();
+        XmlReaderSettings settings = new()
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            ValidationType = ValidationType.Schema,
+            Schemas = schemas,
+        };
+        settings.ValidationEventHandler += (_, args) =>
+        {
+            string sev = args.Severity == XmlSeverityType.Error ? "ERR" : "WARN";
+            issues.Add($"[{sev}] {args.Message} (line {args.Exception?.LineNumber})");
+        };
+
+        try
+        {
+            using XmlReader reader = XmlReader.Create(new System.IO.StringReader(xmlContent), settings);
+            while (reader.Read()) { }
+        }
+        catch (XmlException ex)
+        {
+            issues.Add($"[FATAL] {ex.Message}");
+        }
+
+        if (issues.Count > 0)
+        {
+            Log.LogWarning($"[fa3-validator] {issues.Count} schema violation(s) in invoice XML:");
+            foreach (string issue in issues)
+            {
+                Log.LogWarning($"  {issue}");
+            }
+        }
+    }
+
+    private static XmlSchemaSet? LoadSchemaSet()
+    {
+        try
+        {
+            System.Reflection.Assembly asm = typeof(KSeFInvoiceSanitizer).Assembly;
+            using System.IO.Stream? fa3Stream = asm.GetManifestResourceStream("ksefcli.Resources.FA3.xsd");
+            if (fa3Stream is null)
+            {
+                Log.LogWarning("[fa3-validator] FA3.xsd not found in resources; schema validation disabled");
+                return null;
+            }
+
+            XmlSchemaSet schemas = new() { XmlResolver = new EmbeddedSchemaResolver(asm) };
+            using XmlReader reader = XmlReader.Create(fa3Stream);
+            schemas.Add(null, reader);
+            schemas.Compile();
+            return schemas;
+        }
+        catch (XmlSchemaException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (XmlException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (System.IO.IOException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            Log.LogWarning($"[fa3-validator] Failed to compile XSD schema: {ex.Message}; validation disabled");
+            return null;
+        }
+    }
+
+    /// <summary>Resolves XSD imports from embedded resources instead of making HTTP requests.</summary>
+    private sealed class EmbeddedSchemaResolver : XmlResolver
+    {
+        private static readonly Dictionary<string, string> UrlToResource = new(StringComparer.Ordinal)
+        {
+            ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/StrukturyDanych_v10-0E.xsd"]
+                = "ksefcli.Resources.StrukturyDanych.xsd",
+            ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/ElementarneTypyDanych_v10-0E.xsd"]
+                = "ksefcli.Resources.ElementarneTypy.xsd",
+            ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/KodyKrajow_v10-0E.xsd"]
+                = "ksefcli.Resources.KodyKrajow.xsd",
+        };
+
+        private readonly System.Reflection.Assembly _asm;
+
+        internal EmbeddedSchemaResolver(System.Reflection.Assembly asm) => _asm = asm;
+
+        public override System.Net.ICredentials? Credentials { set { } }
+
+        public override object? GetEntity(Uri absoluteUri, string? role, Type? ofObjectToReturn)
+        {
+            if (UrlToResource.TryGetValue(absoluteUri.AbsoluteUri, out string? resName))
+            {
+                return _asm.GetManifestResourceStream(resName);
+            }
+
+            return null; // block any unexpected external requests
+        }
+    }
+
+    // ── Phase 2 — field-level sanitization ───────────────────────────────────
+
+    private static InvoiceData SanitizeData(InvoiceData d) => d with
+    {
+        RodzajFaktury = SanitizeRodzaj(d.RodzajFaktury),
+        Numer = Text(d.Numer),
+        DataFaktury = SanitizeDate(d.DataFaktury),
+        MiejsceWystawienia = Text(d.MiejsceWystawienia),
+        DataDostawy = SanitizeDate(d.DataDostawy),
+        Waluta = SanitizeCurrency(d.Waluta),
+        OkresOd = SanitizeDate(d.OkresOd),
+        OkresDo = SanitizeDate(d.OkresDo),
+        Sprzedawca = SanitizeParty(d.Sprzedawca),
+        Nabywca = SanitizeParty(d.Nabywca),
+        Wiersze = d.Wiersze.Select(SanitizeLine).ToList(),
+        VatRows = d.VatRows.Select(SanitizeVatRow).ToList(),
+        RazemBrutto = SanitizeKwotowy(d.RazemBrutto),
+        DodatkowyOpis = d.DodatkowyOpis
+                               .Select(x => (Text(x.Klucz) ?? "", Text(x.Wartosc) ?? ""))
+                               .ToList(),
+        DataZaplaty = SanitizeDate(d.DataZaplaty),
+        TerminyPlatnosci = d.TerminyPlatnosci
+                               .Select(t => SanitizeDate(t) ?? Text(t) ?? "")
+                               .ToList(),
+        RachunekBankowy = d.RachunekBankowy is null ? null : SanitizeBank(d.RachunekBankowy),
+        WZ = Text(d.WZ),
+        NrUmowy = d.NrUmowy.Select(u => Text(u) ?? "").ToList(),
+        NrFaZaliczkowej = Text(d.NrFaZaliczkowej),
+        PelnaNazwa = Name(d.PelnaNazwa),
+        Regon = SanitizeRegon(d.Regon),
+        Bdo = Text(d.Bdo),
+        SystemInfo = Text(d.SystemInfo),
+    };
+
+    private static InvoiceParty SanitizeParty(InvoiceParty p) => p with
+    {
+        Nip = SanitizeNip(p.Nip),
+        Nazwa = Name(p.Nazwa),
+        KodKraju = SanitizeKodKraju(p.KodKraju),
+        AdresL1 = Name(p.AdresL1),
+        AdresL2 = Name(p.AdresL2),
+        Email = SanitizeEmail(p.Email),
+        Telefon = Text(p.Telefon),
+        NrEORI = Text(p.NrEORI),
+        NrKlienta = Text(p.NrKlienta),
+    };
+
+    private static InvoiceLine SanitizeLine(InvoiceLine l) => l with
+    {
+        UuId = Text(l.UuId),
+        Name = Name(l.Name),          // TZnakowy512
+        Indeks = Text(l.Indeks),
+        Gtin = SanitizeGtin(l.Gtin),
+        Unit = Text(l.Unit),
+        Qty = SanitizeIlosci(l.Qty),           // TIlosci
+        UnitNetPrice = SanitizeKwotowy(l.UnitNetPrice),  // TKwotowy
+        UnitGrossPrice = SanitizeKwotowy(l.UnitGrossPrice),
+        NetTotal = SanitizeKwotowy(l.NetTotal),
+        GrossTotal = SanitizeKwotowy(l.GrossTotal),
+        VatRate = SanitizeStawka(l.VatRate),        // TStawkaPodatku
+        ExchangeRate = SanitizeKwotowy2(l.ExchangeRate), // TKwotowy2
+    };
+
+    private static VatRow SanitizeVatRow(VatRow r) => r with
+    {
+        Net = SanitizeKwotowy(r.Net),
+        Vat = SanitizeKwotowy(r.Vat),
+    };
+
+    private static BankAccount SanitizeBank(BankAccount b) => b with
+    {
+        NrRB = SanitizeNrRB(b.NrRB),
+        NazwaBanku = Text(b.NazwaBanku),
+        OpisRachunku = Text(b.OpisRachunku),
+    };
+
+    // ── Strip helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>Removes C0 control chars (except HT/LF/CR) and truncates to <paramref name="max"/>.</summary>
+    private static string? Strip(string? s, int max)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        System.Text.StringBuilder sb = new(s.Length);
+        foreach (char c in s.Where(c => c >= 0x20 || c == '\t' || c == '\n' || c == '\r'))
+        {
+            sb.Append(c);
+        }
+
+        string r = sb.ToString().Trim();
+        return r.Length == 0 ? null : r.Length > max ? r[..max] : r;
+    }
+
+    // TZnakowy (256) — most text fields
+    private static string? Text(string? s) => Strip(s, LenZnakowy);
+    // TZnakowy512 (512) — party names, item names, addresses
+    private static string? Name(string? s) => Strip(s, LenZnakowy512);
+
+    // ── Field rules ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// TData/TDataT: YYYY-MM-DD, calendar date, range 2006-01-01 – 2050-01-01.
+    /// Dates within the period field (OkresOd/Do) use month-only YYYY-MM format — also accepted.
+    /// </summary>
+    private static string? SanitizeDate(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string t = s.Trim();
+
+        if (DateTime.TryParseExact(t, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime d))
+        {
+            return d >= DateMin && d <= DateMax ? t : null;
+        }
+
+        // OkresFa uses YYYY-MM month format — accept as-is if it parses
+        if (DateTime.TryParseExact(t + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dm))
+        {
+            return dm >= DateMin && dm <= DateMax ? t : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>TKodWaluty — must be one of the 182 enumerated codes from FA3.xsd; falls back to PLN.</summary>
+    private static string SanitizeCurrency(string? s)
+    {
+        if (s is null)
+        {
+            return "PLN";
+        }
+
+        string upper = s.Trim().ToUpperInvariant();
+        return ValidKodWaluty.Contains(upper) ? upper : "PLN";
+    }
+
+    /// <summary>TKodKraju — 2 uppercase letters ([A-Z]{2} per ElementarneTypy.xsd).</summary>
+    private static string? SanitizeKodKraju(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string upper = s.Trim().ToUpperInvariant();
+        return ReKodKraju.IsMatch(upper) ? upper : null;
+    }
+
+    /// <summary>
+    /// TNrNIP — pattern [1-9]((\d[1-9])|([1-9]\d))\d{7} as defined in ElementarneTypy.xsd.
+    /// The XSD does not define a checksum; format match is sufficient.
+    /// </summary>
+    private static string? SanitizeNip(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string digits = s.Trim().Replace("-", "").Replace(" ", "");
+        return ReNip.IsMatch(digits) ? digits : null;
+    }
+
+    /// <summary>TNrREGON — 9 or 14 digits (\d{9}|\d{14}) per ElementarneTypy.xsd (union type).</summary>
+    private static string? SanitizeRegon(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string digits = s.Trim().Replace(" ", "");
+        return ReRegon.IsMatch(digits) ? digits : null;
+    }
+
+    /// <summary>TRodzajFaktury — 7 enumerated values from FA3.xsd.</summary>
+    private static string? SanitizeRodzaj(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string t = s.Trim();
+        return ValidRodzajFaktury.Contains(t) ? t : null;
+    }
+
+    /// <summary>TStawkaPodatku (P_12) — 14 enumerated values from FA3.xsd.</summary>
+    private static string? SanitizeStawka(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string t = s.Trim();
+        return ValidStawkaPodatku.Contains(t) ? t : null;
+    }
+
+    /// <summary>TKwotowy — monetary amount, max 2 decimal places (FA3.xsd pattern).</summary>
+    private static string? SanitizeKwotowy(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return null;
+        }
+
+        string norm = s.Trim().Replace(",", ".");
+        return ReKwotowy.IsMatch(norm) ? norm : null;
+    }
+
+    /// <summary>TKwotowy2 — exchange rate, max 8 decimal places (FA3.xsd pattern).</summary>
+    private static string? SanitizeKwotowy2(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return null;
+        }
+
+        string norm = s.Trim().Replace(",", ".");
+        return ReKwotowy2.IsMatch(norm) ? norm : null;
+    }
+
+    /// <summary>TIlosci — quantity, max 6 decimal places (FA3.xsd pattern).</summary>
+    private static string? SanitizeIlosci(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return null;
+        }
+
+        string norm = s.Trim().Replace(",", ".");
+        return ReIlosci.IsMatch(norm) ? norm : null;
+    }
+
+    /// <summary>TAdresEmail — pattern (.)+@(.)+, 3–255 chars (ElementarneTypy.xsd).</summary>
+    private static string? SanitizeEmail(string? s)
+    {
+        string? clean = Strip(s, LenEmail);
+        if (clean is null || clean.Length < 3)
+        {
+            return null;
+        }
+
+        return ReEmail.IsMatch(clean) ? clean : null;
+    }
+
+    /// <summary>GTIN (GS1) — 8, 12, 13 or 14 digits. Not defined in KSeF XSD; standard GS1 rule.</summary>
+    private static string? SanitizeGtin(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string digits = s.Trim().Replace(" ", "");
+        return digits.Length is 8 or 12 or 13 or 14 && digits.All(char.IsAsciiDigit) ? digits : null;
+    }
+
+    /// <summary>TNrRB — 10–34 chars (FA3.xsd). Strips spaces; accepts Polish 26-digit or IBAN format.</summary>
+    private static string? SanitizeNrRB(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        string clean = s.Trim().Replace(" ", "").ToUpperInvariant();
+        if (clean.Length < 10 || clean.Length > LenNrRB)
+        {
+            return null;
+        }
+
+        // Polish account: 26 digits
+        if (clean.Length == 26 && clean.All(char.IsAsciiDigit))
+        {
+            return clean;
+        }
+
+        // IBAN: CC + 2 check digits + alphanumeric
+        if (clean.Length >= 4
+            && char.IsAsciiLetter(clean[0]) && char.IsAsciiLetter(clean[1])
+            && char.IsAsciiDigit(clean[2]) && char.IsAsciiDigit(clean[3])
+            && clean.All(char.IsAsciiLetterOrDigit))
+        {
+            return clean;
+        }
+
+        return null;
+    }
 }
 
 // ── Color scheme ─────────────────────────────────────────────────────────────
@@ -986,17 +1535,17 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static string FormatVatRate(string? rate) => rate switch
+    // Matches purely numeric VAT rate tokens (e.g. "23", "8") — used to decide whether to append "%"
+    private static readonly Regex ReNumericOnly = new(@"^\d+$", RegexOptions.Compiled);
+
+    private static string FormatVatRate(string? rate)
     {
-        "23" => "23%",
-        "8" => "8%",
-        "5" => "5%",
-        "0" => "0%",
-        "zw" => "zw",
-        "np" => "np",
-        null => "—",
-        _ => rate + "%"
-    };
+        if (rate is null) { return "—"; }
+        string t = rate.Trim();
+        // Append % only for purely numeric tokens (e.g. "23", "8", "5", "0");
+        // non-numeric codes ("0 KR", "0 WDT", "zw", "oo", "np I") are returned as-is.
+        return ReNumericOnly.IsMatch(t) ? t + "%" : t;
+    }
 
     private static string FormatIban(string nr)
     {
@@ -1032,7 +1581,7 @@ public static class KSeFInvoicePdf
 {
     public static byte[] FromXml(string xmlContent, string? colorScheme = null)
     {
-        InvoiceData data = KSeFInvoiceParser.Parse(xmlContent);
+        InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
         return KSeFInvoicePdfGenerator.Generate(data, PdfColorScheme.FromName(colorScheme));
     }
 }

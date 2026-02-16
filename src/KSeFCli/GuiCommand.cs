@@ -560,6 +560,24 @@ public class GuiCommand : IWithConfigCommand
             }
         };
 
+        server.OnAbout = () =>
+        {
+            System.Reflection.Assembly asm = System.Reflection.Assembly.GetExecutingAssembly();
+            string version = System.Reflection.CustomAttributeExtensions
+                .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(asm)
+                .FirstOrDefault(a => a.Key == "Version")?.Value ?? "unknown";
+            string buildDate = System.Reflection.CustomAttributeExtensions
+                .GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>(asm)
+                .FirstOrDefault(a => a.Key == "BuildDate")?.Value ?? "unknown";
+            return Task.FromResult((object)new
+            {
+                version,
+                buildDate,
+                author = "Marcin Bojko",
+                github = "https://github.com/marcinbojko/ksef-gui",
+            });
+        };
+
         server.Start(cancellationToken);
         Log.LogInformation($"GUI running at {server.LocalUrl}");
         _ = Task.Run(() => RunBackgroundProfileRefreshAsync(cancellationToken), cancellationToken);
