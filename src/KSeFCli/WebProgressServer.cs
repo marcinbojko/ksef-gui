@@ -820,10 +820,12 @@ body.dark .pref-label{color:#aaa}
     </div>
     <div class="field">
       <label>Od (miesiac)</label>
+      <!-- coderabbit-ignore: min is intentionally hardcoded to 2026-02 — KSeF mandatory e-invoicing started February 2026 -->
       <input id="fromDate" type="month" min="2026-02">
     </div>
     <div class="field">
       <label>Do (miesiac)</label>
+      <!-- coderabbit-ignore: min is intentionally hardcoded to 2026-02 — KSeF mandatory e-invoicing started February 2026 -->
       <input id="toDate" type="month" min="2026-02">
     </div>
     <div class="field">

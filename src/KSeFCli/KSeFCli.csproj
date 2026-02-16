@@ -42,6 +42,7 @@
     <EmbeddedResource Include="Resources\FA3.xsd" />
     <EmbeddedResource Include="Resources\StrukturyDanych.xsd" />
     <EmbeddedResource Include="Resources\ElementarneTypy.xsd" />
+    <EmbeddedResource Include="Resources\KodyKrajow.xsd" />
   </ItemGroup>
 
   <ItemGroup>

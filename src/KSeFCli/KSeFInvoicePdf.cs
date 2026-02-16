@@ -346,8 +346,8 @@ internal static class KSeFInvoiceSanitizer
     private static readonly Regex ReNip = new(
         @"^[1-9]((\d[1-9])|([1-9]\d))\d{7}$", RegexOptions.Compiled);
 
-    // TNrREGON: \d{9}   (as defined in ElementarneTypy.xsd)
-    private static readonly Regex ReRegon = new(@"^\d{9}$", RegexOptions.Compiled);
+    // TNrREGON: \d{9} | \d{14}   (as defined in ElementarneTypy.xsd — union of 9 and 14 digits)
+    private static readonly Regex ReRegon = new(@"^(\d{9}|\d{14})$", RegexOptions.Compiled);
 
     // TKodKraju: [A-Z]{2}   (2-letter ISO country code)
     private static readonly Regex ReKodKraju = new(@"^[A-Z]{2}$", RegexOptions.Compiled);
@@ -464,6 +464,8 @@ internal static class KSeFInvoiceSanitizer
                 = "ksefcli.Resources.StrukturyDanych.xsd",
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/ElementarneTypyDanych_v10-0E.xsd"]
                 = "ksefcli.Resources.ElementarneTypy.xsd",
+            ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/KodyKrajow_v10-0E.xsd"]
+                = "ksefcli.Resources.KodyKrajow.xsd",
         };
 
         private readonly System.Reflection.Assembly _asm;
@@ -1515,17 +1517,14 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static string FormatVatRate(string? rate) => rate switch
+    private static string FormatVatRate(string? rate)
     {
-        "23" => "23%",
-        "8" => "8%",
-        "5" => "5%",
-        "0" => "0%",
-        "zw" => "zw",
-        "np" => "np",
-        null => "—",
-        _ => rate + "%"
-    };
+        if (rate is null) return "—";
+        string t = rate.Trim();
+        // Append % only for purely numeric tokens (e.g. "23", "8", "5", "0");
+        // non-numeric codes ("0 KR", "0 WDT", "zw", "oo", "np I") are returned as-is.
+        return System.Text.RegularExpressions.Regex.IsMatch(t, @"^\d+$") ? t + "%" : t;
+    }
 
     private static string FormatIban(string nr)
     {
