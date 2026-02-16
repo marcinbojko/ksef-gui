@@ -84,7 +84,7 @@ internal static class KSeFInvoiceParser
 
     public static InvoiceData Parse(string xmlContent)
     {
-        if (xmlContent.Length > MaxXmlBytes)
+        if (System.Text.Encoding.UTF8.GetByteCount(xmlContent) > MaxXmlBytes)
         {
             throw new InvalidOperationException($"XML content exceeds maximum allowed size ({MaxXmlBytes / 1024 / 1024} MB).");
         }
@@ -366,6 +366,7 @@ internal static class KSeFInvoiceSanitizer
     //   pattern from FA3.xsd: -?([1-9]\d{0,15}|0)(\.\d{1,6})?
     private static readonly Regex ReIlosci = new(
         @"^-?([1-9]\d{0,15}|0)(\.\d{1,6})?$", RegexOptions.Compiled);
+
 
     // TData/TDataT/TDataU: date format (YYYY-MM-DD range 2006-01-01 – 2050-01-01)
     private static readonly DateTime DateMin = new(2006, 1, 1);
@@ -1517,13 +1518,16 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    // Matches purely numeric VAT rate tokens (e.g. "23", "8") — used to decide whether to append "%"
+    private static readonly Regex ReNumericOnly = new(@"^\d+$", RegexOptions.Compiled);
+
     private static string FormatVatRate(string? rate)
     {
         if (rate is null) { return "—"; }
         string t = rate.Trim();
         // Append % only for purely numeric tokens (e.g. "23", "8", "5", "0");
         // non-numeric codes ("0 KR", "0 WDT", "zw", "oo", "np I") are returned as-is.
-        return System.Text.RegularExpressions.Regex.IsMatch(t, @"^\d+$") ? t + "%" : t;
+        return ReNumericOnly.IsMatch(t) ? t + "%" : t;
     }
 
     private static string FormatIban(string nr)
