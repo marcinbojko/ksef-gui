@@ -657,7 +657,7 @@ internal static class KSeFInvoiceSanitizer
         return ReNip.IsMatch(digits) ? digits : null;
     }
 
-    /// <summary>TNrREGON — exactly 9 digits (\d{9}) per ElementarneTypy.xsd.</summary>
+    /// <summary>TNrREGON — 9 or 14 digits (\d{9}|\d{14}) per ElementarneTypy.xsd (union type).</summary>
     private static string? SanitizeRegon(string? s)
     {
         if (s is null)
