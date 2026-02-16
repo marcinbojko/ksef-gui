@@ -32,9 +32,9 @@
     </ItemGroup>
   </Target>
 
-  <!-- Extract native libs (SkiaSharp/QuestPDF) from single-file bundle at startup.
+  <!-- Extract native libs (SkiaSharp/QuestPDF/SQLite) from single-file bundle at startup.
        Required on Windows; harmless on Linux/macOS. Only active during publish. -->
-  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true' Or '$(SelfContained)' == 'true'">
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
@@ -53,6 +53,9 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.3" />
+    <!-- Explicit native SQLite bundle required for correct self-contained single-file publish -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.11" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client/KSeF.Client.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002;CA1305;CA1852;CA1816;CA1852;CA1305;CS9107;CA1805" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.Core/KSeF.Client.Core.csproj" NoWarn="CA1805" />
     <ProjectReference Include="../../thirdparty/ksef-client-csharp/KSeF.Client.ClientFactory/KSeF.Client.ClientFactory.csproj" NoWarn="CS9107;CA1305;CA1816;CA1852;CS8002;CA1305;CA1852;CA1816;CA1852;CA1305;CS9107;CA1805" />

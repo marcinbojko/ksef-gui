@@ -54,6 +54,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
     private Lazy<KsefCliConfig> _cachedConfig;
     private Lazy<TokenStore> _tokenStore;
 
+    /// <summary>Exposes the current loaded config for subclasses (e.g. to iterate all profiles).</summary>
+    protected internal KsefCliConfig CurrentConfig => _cachedConfig.Value;
+
     public IWithConfigCommand()
     {
         _cachedConfig = new Lazy<KsefCliConfig>(() => ConfigLoader.Load(ConfigFile, ActiveProfile));
@@ -337,18 +340,19 @@ public abstract class IWithConfigCommand : IGlobalCommand
         };
     }
 
-    protected internal IServiceScope GetScope()
+    protected internal IServiceScope GetScope() => GetScope(Config());
+
+    protected internal IServiceScope GetScope(ProfileConfig profile)
     {
-        ProfileConfig config = Config();
         IServiceCollection services = new ServiceCollection();
-        KSeF.Client.ClientFactory.Environment environment = config.Environment.ToUpper() switch
+        KSeF.Client.ClientFactory.Environment environment = profile.Environment.ToUpper() switch
         {
             "PROD" => KSeF.Client.ClientFactory.Environment.Prod,
             "DEMO" => KSeF.Client.ClientFactory.Environment.Demo,
             "TEST" => KSeF.Client.ClientFactory.Environment.Test,
-            _ => throw new Exception($"Invalid environment in profile: {config.Environment}")
+            _ => throw new Exception($"Invalid environment in profile: {profile.Environment}")
         };
-        services.AddSingleton(config);
+        services.AddSingleton(profile);
         services.AddKSeFClient(options =>
         {
             options.BaseUrl = KsefEnvironmentConfig.BaseUrls[environment];
@@ -357,6 +361,34 @@ public abstract class IWithConfigCommand : IGlobalCommand
         ServiceProvider provider = services.BuildServiceProvider();
         IServiceScope scope = provider.CreateScope();
         return scope;
+    }
+
+    /// <summary>
+    /// Gets (or refreshes) the access token for an arbitrary named profile without affecting
+    /// <see cref="ActiveProfile"/>. Throws if no valid refresh token is stored — the user must
+    /// authenticate that profile interactively at least once before background refresh works.
+    /// </summary>
+    public async Task<string> GetAccessTokenForProfile(
+        string profileName, ProfileConfig profile, IServiceScope scope, CancellationToken ct)
+    {
+        TokenStore tokenStore = GetTokenStore();
+        TokenStore.Key key = new TokenStore.Key(profileName, profile);
+        TokenStore.Data? stored = tokenStore.GetToken(key);
+
+        if (stored == null || stored.Response.RefreshToken.ValidUntil < DateTime.UtcNow.AddMinutes(1))
+        {
+            throw new InvalidOperationException(
+                $"No valid refresh token for profile '{profileName}' — user must authenticate via GUI first");
+        }
+
+        if (stored.Response.AccessToken.ValidUntil < DateTime.UtcNow.AddMinutes(10))
+        {
+            AuthenticationOperationStatusResponse refreshed =
+                await TokenRefresh(scope, stored.Response.RefreshToken, ct).ConfigureAwait(false);
+            tokenStore.SetToken(key, new TokenStore.Data(refreshed));
+            return refreshed.AccessToken.Token;
+        }
+        return stored.Response.AccessToken.Token;
     }
 
     public async Task<ICryptographyService> GetCryptographicService(IServiceScope scope, CancellationToken cancellationToken)
