@@ -51,6 +51,9 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called to load the current config file for the editor. Returns ConfigEditorData.</summary>
     public Func<Task<object>>? OnLoadConfig { get; set; }
 
+    /// <summary>Called when user opens the About dialog. Returns version, build date, author, GitHub link.</summary>
+    public Func<Task<object>>? OnAbout { get; set; }
+
     /// <summary>Called to save modified config. Receives JSON string, returns empty string on success or error message.</summary>
     public Func<string, Task<string>>? OnSaveConfig { get; set; }
 
@@ -387,6 +390,16 @@ internal sealed class WebProgressServer : IDisposable
                 return JsonSerializer.Serialize(status);
             }).ConfigureAwait(false);
         }
+        else if (path == "/about" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                object result = OnAbout != null
+                    ? await OnAbout().ConfigureAwait(false)
+                    : new { };
+                return JsonSerializer.Serialize(result);
+            }).ConfigureAwait(false);
+        }
         else if (path == "/config-editor" && method == "GET")
         {
             await HandleAction(ctx, ct, async () =>
@@ -479,7 +492,9 @@ internal sealed class WebProgressServer : IDisposable
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;color:#333;padding:1.5rem;max-width:100%;margin:0 auto}
 h1{font-size:1.3rem;margin-bottom:1rem}
-.search-form{display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-bottom:1rem;padding:1rem;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.search-form{display:flex;flex-direction:column;gap:0;margin-bottom:1rem;padding:.75rem 1rem;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.search-row{display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;width:100%}
+.action-row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;width:100%;padding-top:.5rem;margin-top:.4rem;border-top:1px solid #f0f0f0}
 .field{display:flex;flex-direction:column;gap:.2rem}
 .field label{font-size:.75rem;font-weight:600;color:#555}
 .field select,.field input{padding:.4rem .6rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem}
@@ -503,6 +518,8 @@ button:disabled{opacity:.4;cursor:default}
 .btn-prefs:hover:not(:disabled){background:#37474f}
 .btn-config{background:#4527a0;color:#fff}
 .btn-config:hover:not(:disabled){background:#311b92}
+.btn-about{background:#00695c;color:#fff}
+.btn-about:hover:not(:disabled){background:#004d40}
 .cfg-modal{width:600px;max-height:85vh}
 .cfg-profile-card{border:1px solid #ddd;border-radius:8px;padding:.8rem 1rem;margin-bottom:.8rem;position:relative}
 .cfg-profile-card .cfg-card-title{font-weight:600;font-size:.9rem;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem}
@@ -630,6 +647,7 @@ tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 body.dark{background:#121212;color:#e0e0e0}
 body.dark h1{color:#e0e0e0}
 body.dark .search-form{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+body.dark .action-row{border-top-color:#333}
 body.dark .field label{color:#aaa}
 body.dark .field select,body.dark .field input{background:#2a2a2a;border-color:#444;color:#e0e0e0}
 body.dark .prefs-panel{border-left-color:#78909c}
@@ -786,41 +804,46 @@ body.dark .pref-label{color:#aaa}
 <body>
 <h1>KSeFCli - Faktury</h1>
 <div class="search-form">
-  <div class="field">
-    <label>Profil</label>
-    <select id="profileSelect" onchange="onProfileChange()"></select>
+  <div class="search-row">
+    <div class="field">
+      <label>Profil</label>
+      <select id="profileSelect" onchange="onProfileChange()"></select>
+    </div>
+    <div class="field">
+      <label>Typ podmiotu</label>
+      <select id="subjectType">
+        <option value="Subject1">Sprzedawca (Subject1)</option>
+        <option value="Subject2" selected>Nabywca (Subject2)</option>
+        <option value="Subject3">Subject3</option>
+        <option value="SubjectAuthorized">Upowazniony</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Od (miesiac)</label>
+      <input id="fromDate" type="month" min="2026-02">
+    </div>
+    <div class="field">
+      <label>Do (miesiac)</label>
+      <input id="toDate" type="month" min="2026-02">
+    </div>
+    <div class="field">
+      <label>Typ daty</label>
+      <select id="dateType">
+        <option value="Issue" selected>Data wystawienia</option>
+        <option value="Invoicing">Data przyjecia KSeF</option>
+        <option value="PermanentStorage">Trwaly zapis</option>
+      </select>
+    </div>
+    <button class="btn-primary" id="btnSearch" onclick="doSearch()">Szukaj</button>
   </div>
-  <div class="field">
-    <label>Typ podmiotu</label>
-    <select id="subjectType">
-      <option value="Subject1">Sprzedawca (Subject1)</option>
-      <option value="Subject2" selected>Nabywca (Subject2)</option>
-      <option value="Subject3">Subject3</option>
-      <option value="SubjectAuthorized">Upowazniony</option>
-    </select>
+  <div class="action-row">
+    <button class="btn-auth auth-unknown" id="btnAuth" onclick="doAuth()" title="Odswierz token KSeF">&#128274; Autoryzuj</button>
+    <span class="token-info" id="tokenInfo"></span>
+    <button class="btn-prefs" id="btnPrefs" onclick="togglePrefs()" title="Preferencje">&#9881; Preferencje</button>
+    <button class="btn-config" id="btnConfig" onclick="openConfigEditor()" title="Edytor konfiguracji">&#9998; Konfiguracja</button>
+    <button class="btn-about" onclick="openAbout()" title="O programie">&#9432; O programie</button>
+    <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
   </div>
-  <div class="field">
-    <label>Od (miesiac)</label>
-    <input id="fromDate" type="month" min="2026-02">
-  </div>
-  <div class="field">
-    <label>Do (miesiac)</label>
-    <input id="toDate" type="month" min="2026-02">
-  </div>
-  <div class="field">
-    <label>Typ daty</label>
-    <select id="dateType">
-      <option value="Issue" selected>Data wystawienia</option>
-      <option value="Invoicing">Data przyjecia KSeF</option>
-      <option value="PermanentStorage">Trwaly zapis</option>
-    </select>
-  </div>
-  <button class="btn-primary" id="btnSearch" onclick="doSearch()">Szukaj</button>
-  <button class="btn-auth auth-unknown" id="btnAuth" onclick="doAuth()" title="Odswierz token KSeF">&#128274; Autoryzuj</button>
-  <span class="token-info" id="tokenInfo"></span>
-  <button class="btn-prefs" id="btnPrefs" onclick="togglePrefs()" title="Preferencje">&#9881; Preferencje</button>
-  <button class="btn-config" id="btnConfig" onclick="openConfigEditor()" title="Edytor konfiguracji">&#9998; Konfiguracja</button>
-  <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
 </div>
 <div class="modal-overlay" id="prefsModal" onclick="onPrefsOverlayClick(event)">
   <div class="modal prefs-modal" onclick="event.stopPropagation()">
@@ -869,7 +892,7 @@ body.dark .pref-label{color:#aaa}
               <option value="50" selected>50</option>
               <option value="100">100</option>
             </select>
-            <span style="font-size:.75rem;color:#999">domyślnie 50 — użyj &ldquo;Pokaż wszystkie&rdquo; aby zobaczyć więcej</span>
+            <span style="font-size:.75rem;color:#999">wierszy na stronie</span>
           </div>
         </div>
       </div>
@@ -877,7 +900,7 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Port nasłuchiwania</span>
           <div style="display:flex;align-items:center;gap:.5rem">
-            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:80px" onchange="savePrefs()">
+            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:95px" onchange="savePrefs()">
             <span style="font-size:.75rem;color:#999">wymaga restartu</span>
           </div>
         </div>
@@ -1000,6 +1023,17 @@ body.dark .pref-label{color:#aaa}
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="aboutModal" onclick="this.classList.remove('visible')">
+  <div class="modal" style="width:380px;max-height:70vh" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>&#9432; O programie</h2>
+      <button class="modal-close" onclick="$('aboutModal').classList.remove('visible')">&times;</button>
+    </div>
+    <div style="padding:1.2rem 1.4rem;font-size:.88rem;line-height:1.7">
+      <div id="aboutBody" style="color:#555">Wczytywanie...</div>
+    </div>
+  </div>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
@@ -1013,6 +1047,7 @@ let selectedInvoices = new Set();
 let fileStatus = [];
 let autoRefreshTimer = null;
 let displayAll = false;
+let currentPage = 0;
 let refreshRunning = false; // guard against concurrent silentRefresh() calls
 const profileBadges = {}; // profileName → unread new-invoice count for dropdown badge
 let knownInvoiceKsefNumbers = null; // null = not yet baselined; Set after first search
@@ -1055,6 +1090,7 @@ async function loadCachedInvoices() {
     }
     buildCurrencyFilter();
     displayAll = false;
+    currentPage = 0;
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
     checkExisting();
@@ -1259,6 +1295,31 @@ async function openConfigEditor() {
 
 function closeConfigEditor() {
   $('configModal').classList.remove('visible');
+}
+
+async function openAbout() {
+  $('aboutModal').classList.add('visible');
+  try {
+    const r = await fetch('/about');
+    const d = await r.json();
+    const gh = d.github
+      ? '<a href="' + d.github + '" target="_blank" rel="noopener noreferrer" style="color:#1976d2;word-break:break-all">' + escHtml(d.github) + '</a>'
+      : '—';
+    $('aboutBody').innerHTML =
+      '<table style="border-collapse:collapse;width:100%;table-layout:fixed">' +
+      '<col style="width:7rem"><col>' +
+      '<tr><td style="padding:.25rem .5rem .25rem 0;color:#888;white-space:nowrap">Wersja</td>' +
+        '<td style="padding:.25rem 0;font-family:monospace;word-break:break-all">' + escHtml(d.version || '—') + '</td></tr>' +
+      '<tr><td style="padding:.25rem .5rem .25rem 0;color:#888;white-space:nowrap">Data budowy</td>' +
+        '<td style="padding:.25rem 0;font-family:monospace;word-break:break-all">' + escHtml(d.buildDate || '—') + '</td></tr>' +
+      '<tr><td style="padding:.25rem .5rem .25rem 0;color:#888;white-space:nowrap">Autor</td>' +
+        '<td style="padding:.25rem 0">' + escHtml(d.author || '—') + '</td></tr>' +
+      '<tr><td style="padding:.25rem .5rem .25rem 0;color:#888;white-space:nowrap">GitHub</td>' +
+        '<td style="padding:.25rem 0">' + gh + '</td></tr>' +
+      '</table>';
+  } catch(e) {
+    $('aboutBody').innerHTML = '<span style="color:#c62828">Błąd: ' + escHtml(e.message) + '</span>';
+  }
 }
 
 function onConfigModalOverlayClick(e) {
@@ -1470,6 +1531,7 @@ function toggleCurrency(c) {
   if (activeCurrencies.has(c)) activeCurrencies.delete(c);
   else activeCurrencies.add(c);
   buildCurrencyFilter();
+  currentPage = 0;
   renderTable();
   updateFilteredCount();
 }
@@ -1501,8 +1563,9 @@ function renderTable() {
     });
   }
   const limit = parseInt($('displayLimit')?.value) || 50;
-  const truncated = !displayAll && sorted.length > limit;
-  const visible = truncated ? sorted.slice(0, limit) : sorted;
+  const totalPages = displayAll ? 1 : Math.ceil(sorted.length / limit);
+  if (currentPage >= totalPages) currentPage = Math.max(0, totalPages - 1);
+  const visible = displayAll ? sorted : sorted.slice(currentPage * limit, (currentPage + 1) * limit);
   let html = '<table><thead><tr>';
   html += '<th style="width:2rem"><input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"></th>';
   html += '<th style="width:2rem"></th>';
@@ -1541,11 +1604,34 @@ function renderTable() {
     html += '</tr>';
   }
   html += '</tbody></table>';
-  if (truncated) {
-    html += '<div style="text-align:center;padding:.6rem 0">'
-          + '<span style="font-size:.8rem;color:#999;margin-right:.8rem">Wyświetlono ' + limit + ' z ' + sorted.length + ' faktur</span>'
-          + '<button class="btn-primary" style="font-size:.8rem;padding:.3rem .8rem" onclick="displayAll=true;renderTable()">Pokaż wszystkie (' + sorted.length + ')</button>'
-          + '</div>';
+  if (!displayAll && sorted.length > 0) {
+    const first = currentPage * limit + 1;
+    const last = Math.min((currentPage + 1) * limit, sorted.length);
+    const pageOpts = [5, 10, 50, 100].map(n =>
+      '<option value="' + n + '"' + (n === limit ? ' selected' : '') + '>' + n + '</option>'
+    ).join('');
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem 0;flex-wrap:wrap;font-size:.82rem">';
+    if (totalPages > 1) {
+      html += '<button class="btn-sm btn-outline" onclick="currentPage=0;renderTable()" '
+            +   (currentPage === 0 ? 'disabled' : '') + ' title="Pierwsza strona">&#171;</button>'
+            + '<button class="btn-sm btn-outline" onclick="currentPage--;renderTable()" '
+            +   (currentPage === 0 ? 'disabled' : '') + '>&#8249; Poprzednia</button>'
+            + '<span style="color:#555">Strona ' + (currentPage + 1) + ' z ' + totalPages
+            +   ' <span style="color:#999">(' + first + '–' + last + ' z ' + sorted.length + ')</span></span>'
+            + '<button class="btn-sm btn-outline" onclick="currentPage++;renderTable()" '
+            +   (currentPage >= totalPages - 1 ? 'disabled' : '') + '>Następna &#8250;</button>'
+            + '<button class="btn-sm btn-outline" onclick="currentPage=' + (totalPages - 1) + ';renderTable()" '
+            +   (currentPage >= totalPages - 1 ? 'disabled' : '') + ' title="Ostatnia strona">&#187;</button>'
+            + '<span style="color:#bbb">|</span>';
+    }
+    html += '<label style="display:flex;align-items:center;gap:.3rem;color:#555">Pokaż'
+          + '<select style="font-size:.82rem;padding:.15rem .3rem;border:1px solid #ccc;border-radius:4px" onchange="setDisplayLimit(this.value)">'
+          + pageOpts + '</select>na stronie</label>';
+    if (totalPages > 1) {
+      html += '<button class="btn-primary" style="font-size:.78rem;padding:.3rem .7rem" '
+            +   'onclick="displayAll=true;renderTable()">Pokaż wszystkie (' + sorted.length + ')</button>';
+    }
+    html += '</div>';
   }
   tableWrap.innerHTML = html;
   updateSelectionUI();
@@ -1554,6 +1640,15 @@ function renderTable() {
 function sortBy(col) {
   if (sortCol === col) sortAsc = !sortAsc;
   else { sortCol = col; sortAsc = true; }
+  currentPage = 0;
+  renderTable();
+}
+
+function setDisplayLimit(val) {
+  const sel = $('displayLimit');
+  if (sel) sel.value = val;
+  currentPage = 0;
+  savePrefs();
   renderTable();
 }
 
@@ -1751,6 +1846,7 @@ async function doSearch() {
     setStatus('Znaleziono ' + total + ' faktur.', total > 0 ? 'info' : 'idle');
     buildCurrencyFilter();
     displayAll = false;
+    currentPage = 0;
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
     searchRunning = false;
