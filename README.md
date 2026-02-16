@@ -160,7 +160,7 @@ Zakładka **Ogólne**:
 - Wybór aktywnego profilu (zapamiętywany między sesjami; zmiana profilu działa natychmiast bez restartu, lista faktur ładowana z pamięci podręcznej)
 - **Auto-odświeżanie** — cykliczne wyszukiwanie co N minut (0 = wyłączone):
   - Aktywny profil: automatyczne odświeżanie w tle obsługiwane przez przeglądarkę
-  - Pozostałe profile oznaczone jako *Uwzględnij w auto-odświeżaniu* (patrz edytor konfiguracji): przeszukiwane w tle przez serwer C#, wyniki zapisywane do bazy danych; powiadomienie (systemowe lub badge🔔 w liście profili) gdy pojawią się nowe faktury
+  - Pozostałe profile oznaczone jako *Uwzględnij w auto-odświeżaniu* (patrz edytor konfiguracji): przeszukiwane w tle przez serwer C#, wyniki zapisywane do bazy danych; powiadomienie (systemowe lub badge🔔 w liście profili), gdy pojawią się nowe faktury
 
 Zakładka **Eksport**:
 - Szczegółowe opcje eksportu plików

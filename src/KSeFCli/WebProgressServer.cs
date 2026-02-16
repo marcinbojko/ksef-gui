@@ -1328,7 +1328,7 @@ function renderProfileCard(p, i) {
     '<div class="cfg-field"><label>Haslo z pliku (opcjonalnie)</label>' +
     '<input type="text" id="cfgCertPassFile' + i + '" value="' + esc(p.certPasswordFile||'') + '" placeholder="~/password.txt"></div>' +
     '</div>' +
-    '<div class="cfg-field" style="padding-top:.4rem;border-top:1px solid var(--border)">' +
+    '<div class="cfg-field" style="padding-top:.4rem;border-top:1px solid var(--border,#ccc)">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
     ' Uwzględnij w auto-odświeżaniu (tło)</label></div>' +
