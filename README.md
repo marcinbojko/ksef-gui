@@ -4,7 +4,7 @@
 
 # ksefcli
 
-**Klient KSeF z wbudowanym interfejsem przeglądarkowym**<br/>
+**Klient KSeF ze wbudowanym interfejsem przeglądarkowym**<br/>
 **KSeF client with a built-in browser GUI**
 
 [![Release](https://img.shields.io/github/v/release/marcinbojko/ksef-gui?include_prereleases&label=release&color=4f8ef7)](https://github.com/marcinbojko/ksef-gui/releases)
@@ -435,6 +435,6 @@ PDFs are rendered by a **native built-in engine** using [QuestPDF](https://www.q
 
 <div align="center">
 
-_Full CLI reference: [README.ksefcli.md](README.ksefcli.md) · License: [GPLv3](LICENSE.md)_
+_Full CLI reference: [README.ksefcli.md](ksefcli/README.ksefcli.md) · License: [GPLv3](LICENSE.md)_
 
 </div>

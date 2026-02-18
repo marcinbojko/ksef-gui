@@ -171,7 +171,7 @@ ksefcli <polecenie> [opcje]
 - `PrzeslijFaktury`: Wysyła faktury do KSeF.
 - `LinkDoFaktury`: Generuje link weryfikacyjny dla faktury.
 - `QRDoFaktury`: Generuje kod QR dla linku weryfikacyjnego faktury.
-- `PrintConfig`: Prints the active configuration in YAML or JSON format.
+- `PrintConfig`: Wypisuje aktywną konfigurację w formacie YAML lub JSON.
 - `SelfUpdate`: Aktualizuje narzędzie ksefcli do najnowszej wersji.
 - `XML2PDF`: Konwertuje fakturę KSeF w formacie XML na format PDF.
 
