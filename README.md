@@ -11,7 +11,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/marcinbojko/ksef-gui/ci.yml?branch=main&label=CI)](https://github.com/marcinbojko/ksef-gui/actions/workflows/ci.yml)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/marcinbojko/ksef-gui/codeql.yml?branch=main&label=CodeQL)](https://github.com/marcinbojko/ksef-gui/actions/workflows/codeql.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.md)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#instalacja--installation)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#-instalacja)
 
 <br/>
 
@@ -161,7 +161,7 @@ docker compose up -d
 
 **Architektura stosu:**
 
-```
+```text
 Sieć lokalna (LAN)  :80 / :443
         │
    ┌────▼────┐   back   ┌──────────┐
@@ -367,7 +367,7 @@ docker compose up -d
 
 **Stack architecture:**
 
-```
+```text
 Local network (LAN)  :80 / :443
         │
    ┌────▼────┐   back   ┌──────────┐

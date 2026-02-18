@@ -58,13 +58,13 @@ $ ksefcli SzukajFaktur -q -c ksefcli.yaml --from "-1week" --to "now" --invoiceNu
 Przesyłanie faktury z użyciem konkretnego profilu:
 
 ```bash
-$ ksefcli PrzeslijFaktury -c ksefcli.yaml -f d03900-001.xml  -a firma2
+ksefcli PrzeslijFaktury -c ksefcli.yaml -f d03900-001.xml  -a firma2
 ```
 
 Wyszukiwanie faktur wystawionych w ostatnim tygodniu i zapisanie wyników do pliku:
 
 ```bash
-$ ksefcli SzukajFaktur -c ksefcli.yaml --from "-1week" --to "now" > /tmp/1.json
+ksefcli SzukajFaktur -c ksefcli.yaml --from "-1week" --to "now" > /tmp/1.json
 ```
 
 ## Konfiguracja
@@ -397,7 +397,7 @@ ksefcli SelfUpdate [--url <adres-url-binarki>]
 
 | Opcja                 | Opis                                                                                    | Domyślnie                                      |
 | --------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `-d`, `--destination` | Zapisuje nową wersję do określonej ścieżki zamiast zastępować bieżący plik wykonywalny. | Bieżący plik wykonywalny                       |
+| `-d`, `--destination` | Zapisuje nową wersję do określonej ścieżki, zamiast zastępować bieżący plik wykonywalny. | Bieżący plik wykonywalny                       |
 | `--url`               | Określa niestandardowy adres URL do pobrania binarnego pliku aktualizacji.              | Automatycznie wykrywany na podstawie platformy |
 
 ---
