@@ -7,7 +7,6 @@
 #   docker compose up -d
 
 services:
-
   # ── Traefik — reverse proxy ───────────────────────────────────────────────
   traefik:
     image: traefik:${TRAEFIK_TAG:-v3.6.7}
@@ -28,7 +27,7 @@ services:
       - traefik-acme:/etc/traefik/acme
     env_file:
       - path: ./traefik/dns-provider.env
-        required: false           # stack still starts without DNS credentials
+        required: false # stack still starts without DNS credentials
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -67,7 +66,11 @@ services:
       - /data
       - --pdf
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:${KSEFCLI_PORT:-18150}/ || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fs http://localhost:${KSEFCLI_PORT:-18150}/ || exit 1",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -117,8 +120,8 @@ services:
 # ── Networks ─────────────────────────────────────────────────────────────────
 networks:
   front:
-    name: front             # explicit name — no project prefix, matches traefik.yml network: front
-    driver: bridge          # Traefik public-facing ingress
+    name: front # explicit name — no project prefix, matches traefik.yml network: front
+    driver: bridge # Traefik public-facing ingress
   back:
     name: back
     driver: bridge

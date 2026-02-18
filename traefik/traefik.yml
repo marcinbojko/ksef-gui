@@ -58,10 +58,10 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: changeme@example.com   # ← replace with your e-mail
+      email: changeme@example.com # ← replace with your e-mail
       storage: /etc/traefik/acme/acme.json
       dnsChallenge:
-        provider: cloudflare        # ← change to your DNS provider if needed
+        provider: cloudflare # ← change to your DNS provider if needed
         delayBeforeCheck: 60
         resolvers:
           - "1.1.1.1:53"
