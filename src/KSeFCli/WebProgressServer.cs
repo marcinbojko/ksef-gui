@@ -526,8 +526,6 @@ button:disabled{opacity:.4;cursor:default}
 .cfg-field{display:flex;flex-direction:column;margin-bottom:.5rem}
 .cfg-field label{font-size:.75rem;color:#666;margin-bottom:.2rem}
 .cfg-field input,.cfg-field select{padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem}
-.cfg-del{position:absolute;top:.5rem;right:.6rem;background:none;border:none;color:#c62828;cursor:pointer;font-size:1rem;line-height:1}
-.cfg-del:hover{color:#b71c1c}
 .cfg-pw-wrap{display:flex;gap:.3rem}
 .cfg-pw-wrap input{flex:1}
 .cfg-pw-wrap button{padding:.3rem .5rem;font-size:.8rem}
@@ -1352,7 +1350,6 @@ function renderProfileCard(p, i) {
   const tokenVal = p.token || '';
   const isActive = p.name === cfgData.activeProfile;
   return '<div class="cfg-profile-card" id="cfgCard' + i + '">' +
-    '<button class="cfg-del" onclick="deleteProfile(' + i + ')" title="Usun profil">&times;</button>' +
     '<div class="cfg-card-title">Profil #' + (i+1) +
     '<label style="font-weight:normal;font-size:.82rem;cursor:pointer;display:flex;align-items:center;gap:.3rem;margin-left:auto">' +
     '<input type="radio" name="activeProfileRadio" id="cfgActiveRadio' + i + '" value="' + esc(p.name) + '"' + (isActive ? ' checked' : '') + ' onchange="onActiveRadioChange(' + i + ')"> Domyślny</label>' +
@@ -1390,10 +1387,12 @@ function renderProfileCard(p, i) {
     '<div class="cfg-field"><label>Haslo z pliku (opcjonalnie)</label>' +
     '<input type="text" id="cfgCertPassFile' + i + '" value="' + esc(p.certPasswordFile||'') + '" placeholder="~/password.txt"></div>' +
     '</div>' +
-    '<div class="cfg-field" style="padding-top:.4rem;border-top:1px solid var(--border,#ccc)">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:.4rem;border-top:1px solid var(--border,#ccc)">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
-    ' Uwzględnij w auto-odświeżaniu (tło)</label></div>' +
+    ' Uwzględnij w auto-odświeżaniu (tło)</label>' +
+    '<button onclick="deleteProfile(' + i + ')" style="background:#c62828;color:#fff;border:none;border-radius:4px;padding:.25rem .75rem;cursor:pointer;font-size:.8rem">Usuń profil</button>' +
+    '</div>' +
     '</div>';
 }
 
@@ -1444,8 +1443,30 @@ function addProfile() {
 
 function deleteProfile(i) {
   if (!cfgData) return;
-  if (cfgData.profiles.length <= 1) { alert('Musi pozostac co najmniej jeden profil.'); return; }
-  if (!confirm('Usunac profil "' + cfgData.profiles[i].name + '"?')) return;
+  if (cfgData.profiles.length <= 1) { alert('Musi pozostać co najmniej jeden profil.'); return; }
+  if (!confirm('Usunąć profil "' + cfgData.profiles[i].name + '"?')) return;
+  // Sync current form values into cfgData before splicing so other profiles' edits are preserved
+  for (let j = 0; j < cfgData.profiles.length; j++) {
+    const am = document.getElementById('cfgAuth' + j)?.value || 'token';
+    cfgData.profiles[j] = {
+      ...cfgData.profiles[j],
+      name: document.getElementById('cfgName' + j)?.value ?? cfgData.profiles[j].name,
+      nip: document.getElementById('cfgNip' + j)?.value ?? cfgData.profiles[j].nip,
+      environment: document.getElementById('cfgEnv' + j)?.value ?? cfgData.profiles[j].environment,
+      authMethod: am,
+      token: am === 'token' ? (document.getElementById('cfgToken' + j)?.value || '') : null,
+      certPrivateKeyFile: am === 'certificate' ? (document.getElementById('cfgCertKey' + j)?.value || null) : null,
+      certCertificateFile: am === 'certificate' ? (document.getElementById('cfgCertFile' + j)?.value || null) : null,
+      certPassword: am === 'certificate' ? (document.getElementById('cfgCertPass' + j)?.value || null) : null,
+      certPasswordEnv: am === 'certificate' ? (document.getElementById('cfgCertPassEnv' + j)?.value || null) : null,
+      certPasswordFile: am === 'certificate' ? (document.getElementById('cfgCertPassFile' + j)?.value || null) : null,
+    };
+  }
+  // If deleting the active profile, reassign to the nearest remaining one
+  if (cfgData.profiles[i].name === cfgData.activeProfile) {
+    const next = cfgData.profiles.find((_, idx) => idx !== i);
+    cfgData.activeProfile = next?.name || '';
+  }
   cfgData.profiles.splice(i, 1);
   renderConfigEditor();
 }
