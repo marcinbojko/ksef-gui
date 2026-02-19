@@ -271,11 +271,13 @@ internal sealed class WebProgressServer : IDisposable
             await HandleAction(ctx, ct, () =>
             {
                 string rawPath = ctx.Request.QueryString["path"] ?? DefaultBrowseDir;
-                string fsRoot = Path.GetPathRoot(Path.GetFullPath(rawPath)) ?? "/";
+                // Derive the allowed filesystem root from a server-side value, not from the user-provided path,
+                // so the boundary cannot be manipulated by the caller.
+                string fsRoot = Path.GetPathRoot(Path.GetFullPath(DefaultBrowseDir)) ?? "/";
                 string dirPath = Path.GetFullPath(rawPath);
                 if (!dirPath.StartsWith(fsRoot, StringComparison.Ordinal))
                 {
-                    throw new UnauthorizedAccessException("Path is outside the filesystem root.");
+                    throw new UnauthorizedAccessException("Path is outside the allowed filesystem.");
                 }
                 if (!Directory.Exists(dirPath))
                 {
