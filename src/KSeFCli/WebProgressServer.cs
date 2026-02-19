@@ -523,6 +523,7 @@ button:disabled{opacity:.4;cursor:default}
 .cfg-modal{width:600px;max-height:85vh}
 .cfg-profile-card{border:1px solid #ddd;border-radius:8px;padding:.8rem 1rem;margin-bottom:.8rem;position:relative}
 .cfg-profile-card .cfg-card-title{font-weight:600;font-size:.9rem;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem}
+.cfg-card-footer{display:flex;justify-content:space-between;align-items:center;padding-top:.4rem;border-top:1px solid #ddd}
 .cfg-field{display:flex;flex-direction:column;margin-bottom:.5rem}
 .cfg-field label{font-size:.75rem;color:#666;margin-bottom:.2rem}
 .cfg-field input,.cfg-field select{padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem}
@@ -762,6 +763,7 @@ body.dark .dir-item.parent{color:#64b5f6}
 body.dark .modal-footer{background:#252525;border-top-color:#444}
 body.dark .modal-footer .new-dir input{background:#2a2a2a;border-color:#444;color:#e0e0e0}
 body.dark .cfg-profile-card{border-color:#444}
+body.dark .cfg-card-footer{border-top-color:#444}
 body.dark .cfg-field label{color:#aaa}
 body.dark .cfg-field input,body.dark .cfg-field select{background:#2a2a2a;border-color:#444;color:#e0e0e0}
 body.dark .token-info{color:#888}
@@ -1387,11 +1389,11 @@ function renderProfileCard(p, i) {
     '<div class="cfg-field"><label>Haslo z pliku (opcjonalnie)</label>' +
     '<input type="text" id="cfgCertPassFile' + i + '" value="' + esc(p.certPasswordFile||'') + '" placeholder="~/password.txt"></div>' +
     '</div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:.4rem;border-top:1px solid var(--border,#ccc)">' +
+    '<div class="cfg-card-footer">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
     ' Uwzględnij w auto-odświeżaniu (tło)</label>' +
-    '<button onclick="deleteProfile(' + i + ')" style="background:#c62828;color:#fff;border:none;border-radius:4px;padding:.25rem .75rem;cursor:pointer;font-size:.8rem">Usuń profil</button>' +
+    '<button type="button" onclick="deleteProfile(' + i + ')" style="background:#c62828;color:#fff;border:none;border-radius:4px;padding:.25rem .75rem;cursor:pointer;font-size:.8rem">Usuń profil</button>' +
     '</div>' +
     '</div>';
 }
@@ -1444,7 +1446,8 @@ function addProfile() {
 function deleteProfile(i) {
   if (!cfgData) return;
   if (cfgData.profiles.length <= 1) { alert('Musi pozostać co najmniej jeden profil.'); return; }
-  if (!confirm('Usunąć profil "' + cfgData.profiles[i].name + '"?')) return;
+  const displayName = document.getElementById('cfgName' + i)?.value || cfgData.profiles[i].name;
+  if (!confirm('Usunąć profil "' + displayName + '"?')) return;
   // Sync current form values into cfgData before splicing so other profiles' edits are preserved
   for (let j = 0; j < cfgData.profiles.length; j++) {
     const am = document.getElementById('cfgAuth' + j)?.value || 'token';
@@ -1460,6 +1463,7 @@ function deleteProfile(i) {
       certPassword: am === 'certificate' ? (document.getElementById('cfgCertPass' + j)?.value || null) : null,
       certPasswordEnv: am === 'certificate' ? (document.getElementById('cfgCertPassEnv' + j)?.value || null) : null,
       certPasswordFile: am === 'certificate' ? (document.getElementById('cfgCertPassFile' + j)?.value || null) : null,
+      includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + j)?.checked ?? cfgData.profiles[j].includeInAutoRefresh,
     };
   }
   // If deleting the active profile, reassign to the nearest remaining one
