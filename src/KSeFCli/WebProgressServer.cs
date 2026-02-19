@@ -1393,7 +1393,7 @@ function renderProfileCard(p, i) {
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
     ' Uwzględnij w auto-odświeżaniu (tło)</label>' +
-    '<button type="button" onclick="deleteProfile(' + i + ')" style="background:#c62828;color:#fff;border:none;border-radius:4px;padding:.25rem .75rem;cursor:pointer;font-size:.8rem">Usuń profil</button>' +
+    '<button type="button" class="btn-sm btn-danger" onclick="deleteProfile(' + i + ')">Usuń profil</button>' +
     '</div>' +
     '</div>';
 }
@@ -1448,6 +1448,8 @@ function deleteProfile(i) {
   if (cfgData.profiles.length <= 1) { alert('Musi pozostać co najmniej jeden profil.'); return; }
   const displayName = document.getElementById('cfgName' + i)?.value || cfgData.profiles[i].name;
   if (!confirm('Usunąć profil "' + displayName + '"?')) return;
+  // Capture active profile index before sync so a renamed-but-unsaved active profile is still found
+  const activeIdx = cfgData.profiles.findIndex(p => p.name === cfgData.activeProfile);
   // Sync current form values into cfgData before splicing so other profiles' edits are preserved
   for (let j = 0; j < cfgData.profiles.length; j++) {
     const am = document.getElementById('cfgAuth' + j)?.value || 'token';
@@ -1467,7 +1469,7 @@ function deleteProfile(i) {
     };
   }
   // If deleting the active profile, reassign to the nearest remaining one
-  if (cfgData.profiles[i].name === cfgData.activeProfile) {
+  if (activeIdx === i) {
     const next = cfgData.profiles.find((_, idx) => idx !== i);
     cfgData.activeProfile = next?.name || '';
   }
