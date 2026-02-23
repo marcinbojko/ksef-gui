@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -44,11 +45,15 @@ public class GuiCommand : IWithConfigCommand
     private bool _setupRequired = false;
 
     private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
+    private static readonly HttpClient _httpClient = new();
 
     private const int DefaultLanPort = 18150;
 
     /// <summary>Persistent GUI-only preferences per profile name (not stored in YAML).</summary>
-    private record ProfilePrefs(bool? IncludeInAutoRefresh = null);
+    private record ProfilePrefs(
+        bool? IncludeInAutoRefresh = null,
+        string? SlackWebhookUrl = null,
+        string? TeamsWebhookUrl = null);
 
     private record GuiPrefs(
         string? OutputDir = null,
@@ -80,7 +85,9 @@ public class GuiCommand : IWithConfigCommand
         string? CertPassword,
         string? CertPasswordEnv,
         string? CertPasswordFile,
-        bool IncludeInAutoRefresh = true);
+        bool IncludeInAutoRefresh = true,
+        string? SlackWebhookUrl = null,
+        string? TeamsWebhookUrl = null);
 
     private record ConfigEditorData(
         string ActiveProfile,
@@ -458,7 +465,9 @@ public class GuiCommand : IWithConfigCommand
                     CertPassword: kvp.Value.Certificate?.Password,
                     CertPasswordEnv: kvp.Value.Certificate?.Password_Env,
                     CertPasswordFile: kvp.Value.Certificate?.Password_File,
-                    IncludeInAutoRefresh: !ppMap.TryGetValue(kvp.Key, out ProfilePrefs? pp) || pp.IncludeInAutoRefresh != false))
+                    IncludeInAutoRefresh: !ppMap.TryGetValue(kvp.Key, out ProfilePrefs? pp) || pp.IncludeInAutoRefresh != false,
+                    SlackWebhookUrl: pp?.SlackWebhookUrl,
+                    TeamsWebhookUrl: pp?.TeamsWebhookUrl))
                 .ToArray();
             return Task.FromResult<object>(new ConfigEditorData(
                 ActiveProfile: rawConfig.ActiveProfile,
@@ -540,7 +549,10 @@ public class GuiCommand : IWithConfigCommand
                     ?? new Dictionary<string, ProfilePrefs>();
                 foreach (ProfileEditorData p in data.Profiles)
                 {
-                    updatedPpMap[p.Name] = new ProfilePrefs(IncludeInAutoRefresh: p.IncludeInAutoRefresh);
+                    updatedPpMap[p.Name] = new ProfilePrefs(
+                        IncludeInAutoRefresh: p.IncludeInAutoRefresh,
+                        SlackWebhookUrl: string.IsNullOrWhiteSpace(p.SlackWebhookUrl) ? null : p.SlackWebhookUrl,
+                        TeamsWebhookUrl: string.IsNullOrWhiteSpace(p.TeamsWebhookUrl) ? null : p.TeamsWebhookUrl);
                 }
                 // Remove entries for profiles that no longer exist
                 foreach (string stale in updatedPpMap.Keys.Except(data.Profiles.Select(p => p.Name)).ToList())
@@ -576,6 +588,39 @@ public class GuiCommand : IWithConfigCommand
                 author = "Marcin Bojko",
                 github = "https://github.com/marcinbojko/ksef-gui",
             });
+        };
+
+        server.OnTestNotification = async (body) =>
+        {
+            string profileName;
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(body);
+                profileName = doc.RootElement.TryGetProperty("profileName", out JsonElement pn) ? pn.GetString() ?? ActiveProfile : ActiveProfile;
+            }
+            catch { profileName = ActiveProfile; }
+
+            GuiPrefs prefs = LoadPrefs();
+            ProfilePrefs? pp = prefs.ProfilePrefs?.GetValueOrDefault(profileName);
+            string? slackUrl = pp?.SlackWebhookUrl;
+            string? teamsUrl = pp?.TeamsWebhookUrl;
+            int sent = 0;
+            List<Task> tasks = [];
+            if (!string.IsNullOrEmpty(slackUrl))
+            {
+                tasks.Add(SendSlackNotificationAsync(slackUrl, profileName, 3, CancellationToken.None));
+                sent++;
+            }
+            if (!string.IsNullOrEmpty(teamsUrl))
+            {
+                tasks.Add(SendTeamsNotificationAsync(teamsUrl, profileName, 3, CancellationToken.None));
+                sent++;
+            }
+            if (tasks.Count > 0)
+            {
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            return sent == 0 ? "Brak skonfigurowanych webhooków dla tego profilu." : $"Wysłano test do {sent} kanał(ów).";
         };
 
         server.Start(cancellationToken);
@@ -799,14 +844,15 @@ public class GuiCommand : IWithConfigCommand
                     continue; // JS silentRefresh handles the active profile
                 }
 
-                if (ppMap.TryGetValue(name, out ProfilePrefs? pp) && pp.IncludeInAutoRefresh == false)
+                ProfilePrefs? profilePrefs = ppMap.TryGetValue(name, out ProfilePrefs? pp) ? pp : null;
+                if (profilePrefs?.IncludeInAutoRefresh == false)
                 {
                     continue;
                 }
 
                 try
                 {
-                    await RefreshProfileInBackgroundAsync(name, profile, ct).ConfigureAwait(false);
+                    await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -816,7 +862,7 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, CancellationToken ct)
+    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, ProfilePrefs? profilePrefs, CancellationToken ct)
     {
         Log.LogInformation($"[bg-refresh] Profile '{name}' (NIP {profile.Nip}, env {profile.Environment}) starting");
         using IServiceScope scope = GetScope(profile);
@@ -836,6 +882,9 @@ public class GuiCommand : IWithConfigCommand
         if (prev == null)
         {
             _invoiceCache.Save(profileKey, sp, invoices);
+            // First ever run for this profile: seed the notification baseline so we don't
+            // blast the user with the entire invoice history on the first refresh cycle.
+            _invoiceCache.MarkAsNotified(profileKey, invoices.Select(i => i.KsefNumber));
         }
         else
         {
@@ -853,6 +902,79 @@ public class GuiCommand : IWithConfigCommand
                 count = invoices.Count,
                 newCount,
             }).ConfigureAwait(false);
+        }
+
+        // Webhooks fire only for invoices that are both new (not in prev cache) and not yet
+        // notified (not in notification_sent table). This prevents duplicate webhook calls
+        // across refresh cycles and across app restarts.
+        if (newCount > 0 && prev != null)
+        {
+            HashSet<string> alreadyNotified = _invoiceCache.LoadNotifiedKsefNumbers(profileKey);
+            List<string> toNotify = invoices
+                .Where(i => !prevKeys.Contains(i.KsefNumber) && !alreadyNotified.Contains(i.KsefNumber))
+                .Select(i => i.KsefNumber)
+                .ToList();
+
+            if (toNotify.Count > 0)
+            {
+                _invoiceCache.MarkAsNotified(profileKey, toNotify);
+                string? slackUrl = profilePrefs?.SlackWebhookUrl;
+                string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
+                if (!string.IsNullOrEmpty(slackUrl))
+                {
+                    await SendSlackNotificationAsync(slackUrl, name, toNotify.Count, ct).ConfigureAwait(false);
+                }
+                if (!string.IsNullOrEmpty(teamsUrl))
+                {
+                    await SendTeamsNotificationAsync(teamsUrl, name, toNotify.Count, ct).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    private static async Task SendSlackNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct)
+    {
+        string text = $"KSeF: {newCount} nowych faktur dla profilu {profileName}";
+        string json = JsonSerializer.Serialize(new { text });
+        using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+        try
+        {
+            using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
+        }
+    }
+
+    private static async Task SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct)
+    {
+        var payload = new
+        {
+            type = "MessageCard",
+            context = "http://schema.org/extensions",
+            summary = $"KSeF: {newCount} nowych faktur",
+            themeColor = "0078D4",
+            title = "KSeF: Nowe faktury",
+            text = $"Profil **{profileName}**: {newCount} nowych faktur",
+        };
+        string json = JsonSerializer.Serialize(payload);
+        using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+        try
+        {
+            using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");
         }
     }
 

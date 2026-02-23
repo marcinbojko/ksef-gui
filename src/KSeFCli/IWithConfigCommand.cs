@@ -161,22 +161,22 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     public abstract Task<int> ExecuteInScopeAsync(IServiceScope scope, CancellationToken cancellationToken);
 
-    public async Task<AuthenticationOperationStatusResponse> Auth(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<AuthenticationOperationStatusResponse> Auth(IServiceScope scope, CancellationToken cancellationToken, ProfileConfig? profileOverride = null)
     {
-        ProfileConfig config = Config();
+        ProfileConfig config = profileOverride ?? Config();
         AuthenticationOperationStatusResponse response = config.AuthMethod switch
         {
-            AuthMethod.KsefToken => await TokenAuth(scope, cancellationToken).ConfigureAwait(false),
-            AuthMethod.Xades => await CertAuth(scope, cancellationToken).ConfigureAwait(false),
+            AuthMethod.KsefToken => await TokenAuth(scope, cancellationToken, profileOverride).ConfigureAwait(false),
+            AuthMethod.Xades => await CertAuth(scope, cancellationToken, profileOverride).ConfigureAwait(false),
             _ => throw new Exception($"Invalid authmethod in profile: {config.Environment}")
         };
         Log.LogInformation($"Access token valid until: {response.AccessToken.ValidUntil} . Refresh token valid until: {response.RefreshToken.ValidUntil}");
         return response;
     }
 
-    public async Task<AuthenticationOperationStatusResponse> TokenAuth(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<AuthenticationOperationStatusResponse> TokenAuth(IServiceScope scope, CancellationToken cancellationToken, ProfileConfig? profileOverride = null)
     {
-        ProfileConfig config = Config();
+        ProfileConfig config = profileOverride ?? Config();
         if (config.AuthMethod != AuthMethod.KsefToken)
         {
             throw new InvalidOperationException("This command requires token authentication.");
@@ -233,9 +233,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return tokenResponse;
     }
 
-    public async Task<AuthenticationOperationStatusResponse> CertAuth(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<AuthenticationOperationStatusResponse> CertAuth(IServiceScope scope, CancellationToken cancellationToken, ProfileConfig? profileOverride = null)
     {
-        ProfileConfig config = Config();
+        ProfileConfig config = profileOverride ?? Config();
         if (config.AuthMethod != AuthMethod.Xades)
         {
             throw new InvalidOperationException("This command requires certificate authentication.");
@@ -377,8 +377,10 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
         if (stored == null || stored.Response.RefreshToken.ValidUntil < DateTime.UtcNow.AddMinutes(1))
         {
-            throw new InvalidOperationException(
-                $"No valid refresh token for profile '{profileName}' — user must authenticate via GUI first");
+            Log.LogInformation($"[bg-refresh] No stored token for '{profileName}', performing initial authentication...");
+            AuthenticationOperationStatusResponse authResponse = await Auth(scope, ct, profile).ConfigureAwait(false);
+            tokenStore.SetToken(key, new TokenStore.Data(authResponse));
+            return authResponse.AccessToken.Token;
         }
 
         if (stored.Response.AccessToken.ValidUntil < DateTime.UtcNow.AddMinutes(10))
