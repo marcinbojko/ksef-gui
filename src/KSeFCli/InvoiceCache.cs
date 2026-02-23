@@ -215,20 +215,22 @@ internal sealed class InvoiceCache
             INSERT OR IGNORE INTO notification_sent (profile_key, ksef_number, sent_at)
             VALUES (@key, @ksef, @at)
             """;
-        int count = 0;
+        SqliteParameter pKey = cmd.Parameters.Add("@key", SqliteType.Text);
+        SqliteParameter pKsef = cmd.Parameters.Add("@ksef", SqliteType.Text);
+        SqliteParameter pAt = cmd.Parameters.Add("@at", SqliteType.Text);
+        pKey.Value = profileKey;
+        pAt.Value = sentAt;
+        cmd.Prepare();
+        int inserted = 0;
         foreach (string ksefNumber in ksefNumbers)
         {
-            cmd.Parameters.Clear();
-            cmd.Parameters.AddWithValue("@key", profileKey);
-            cmd.Parameters.AddWithValue("@ksef", ksefNumber);
-            cmd.Parameters.AddWithValue("@at", sentAt);
-            cmd.ExecuteNonQuery();
-            count++;
+            pKsef.Value = ksefNumber;
+            inserted += cmd.ExecuteNonQuery();
         }
         tx.Commit();
-        if (count > 0)
+        if (inserted > 0)
         {
-            Log.LogDebug($"[notif-sent] Marked {count} invoice(s) as notified for profile key {profileKey[..Math.Min(24, profileKey.Length)]}…");
+            Log.LogDebug($"[notif-sent] Marked {inserted} invoice(s) as notified for profile key {profileKey[..Math.Min(24, profileKey.Length)]}…");
         }
     }
 

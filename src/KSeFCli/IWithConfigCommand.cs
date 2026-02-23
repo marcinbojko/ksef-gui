@@ -365,8 +365,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     /// <summary>
     /// Gets (or refreshes) the access token for an arbitrary named profile without affecting
-    /// <see cref="ActiveProfile"/>. Throws if no valid refresh token is stored — the user must
-    /// authenticate that profile interactively at least once before background refresh works.
+    /// <see cref="ActiveProfile"/>. If no valid token is stored, performs initial authentication
+    /// via <see cref="Auth"/> using the supplied profile config, stores the result, and returns
+    /// the obtained access token. If a token is present but near expiry, refreshes it instead.
     /// </summary>
     public async Task<string> GetAccessTokenForProfile(
         string profileName, ProfileConfig profile, IServiceScope scope, CancellationToken ct)

@@ -59,7 +59,7 @@ internal sealed class WebProgressServer : IDisposable
 
     /// <summary>Called when user triggers "test notification". Receives profile name, fires webhook(s) if configured.
     /// Returns empty string on success or a description of what was sent.</summary>
-    public Func<string, Task<string>>? OnTestNotification { get; set; }
+    public Func<string, CancellationToken, Task<string>>? OnTestNotification { get; set; }
 
     public bool Lan { get; }
 
@@ -423,7 +423,8 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader reader1 = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await reader1.ReadToEndAsync(ct).ConfigureAwait(false);
                 string error = OnSaveConfig != null
                     ? await OnSaveConfig(body).ConfigureAwait(false)
                     : "";
@@ -436,9 +437,10 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader reader2 = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await reader2.ReadToEndAsync(ct).ConfigureAwait(false);
                 string result = OnTestNotification != null
-                    ? await OnTestNotification(body).ConfigureAwait(false)
+                    ? await OnTestNotification(body, ct).ConfigureAwait(false)
                     : "";
                 return JsonSerializer.Serialize(new { ok = true, message = result });
             }).ConfigureAwait(false);

@@ -590,7 +590,7 @@ public class GuiCommand : IWithConfigCommand
             });
         };
 
-        server.OnTestNotification = async (body) =>
+        server.OnTestNotification = async (body, ct) =>
         {
             string profileName;
             try
@@ -598,7 +598,8 @@ public class GuiCommand : IWithConfigCommand
                 using JsonDocument doc = JsonDocument.Parse(body);
                 profileName = doc.RootElement.TryGetProperty("profileName", out JsonElement pn) ? pn.GetString() ?? ActiveProfile : ActiveProfile;
             }
-            catch { profileName = ActiveProfile; }
+            catch (JsonException) { profileName = ActiveProfile; }
+            catch (ArgumentException) { profileName = ActiveProfile; }
 
             GuiPrefs prefs = LoadPrefs();
             ProfilePrefs? pp = prefs.ProfilePrefs?.GetValueOrDefault(profileName);
@@ -608,12 +609,12 @@ public class GuiCommand : IWithConfigCommand
             List<Task> tasks = [];
             if (!string.IsNullOrEmpty(slackUrl))
             {
-                tasks.Add(SendSlackNotificationAsync(slackUrl, profileName, 3, CancellationToken.None));
+                tasks.Add(SendSlackNotificationAsync(slackUrl, profileName, 3, ct));
                 sent++;
             }
             if (!string.IsNullOrEmpty(teamsUrl))
             {
-                tasks.Add(SendTeamsNotificationAsync(teamsUrl, profileName, 3, CancellationToken.None));
+                tasks.Add(SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct));
                 sent++;
             }
             if (tasks.Count > 0)
@@ -945,7 +946,8 @@ public class GuiCommand : IWithConfigCommand
                 Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (HttpRequestException ex)
         {
             Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
         }
@@ -953,14 +955,14 @@ public class GuiCommand : IWithConfigCommand
 
     private static async Task SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct)
     {
-        var payload = new
+        Dictionary<string, object> payload = new()
         {
-            type = "MessageCard",
-            context = "http://schema.org/extensions",
-            summary = $"KSeF: {newCount} nowych faktur",
-            themeColor = "0078D4",
-            title = "KSeF: Nowe faktury",
-            text = $"Profil **{profileName}**: {newCount} nowych faktur",
+            ["@type"] = "MessageCard",
+            ["@context"] = "https://schema.org/extensions",
+            ["summary"] = $"KSeF: {newCount} nowych faktur",
+            ["themeColor"] = "0078D4",
+            ["title"] = "KSeF: Nowe faktury",
+            ["text"] = $"Profil **{profileName}**: {newCount} nowych faktur",
         };
         string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -972,7 +974,8 @@ public class GuiCommand : IWithConfigCommand
                 Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (HttpRequestException ex)
         {
             Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");
         }
