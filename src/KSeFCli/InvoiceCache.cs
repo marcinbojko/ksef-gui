@@ -52,6 +52,17 @@ internal sealed class InvoiceCache
             """;
         createCmd.ExecuteNonQuery();
 
+        using SqliteCommand notifCmd = conn.CreateCommand();
+        notifCmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS notification_sent (
+                profile_key TEXT NOT NULL,
+                ksef_number TEXT NOT NULL,
+                sent_at     TEXT NOT NULL,
+                PRIMARY KEY (profile_key, ksef_number)
+            )
+            """;
+        notifCmd.ExecuteNonQuery();
+
         // Log per-profile row summary for diagnostics
         using SqliteCommand statsCmd = conn.CreateCommand();
         statsCmd.CommandText = "SELECT profile_key, fetched_at, length(invoices_json) FROM invoice_cache ORDER BY fetched_at DESC";
@@ -167,6 +178,80 @@ internal sealed class InvoiceCache
         {
             Log.LogInformation($"[cache] WRITE (invoices only) — {invoices.Count} invoices updated in DB ({invoicesJson.Length / 1024.0:F1} KB, profile key {profileKey[..Math.Min(24, profileKey.Length)]}…)");
         }
+    }
+
+    /// <summary>
+    /// Returns the set of KSeF invoice numbers for which a webhook notification has already been sent
+    /// for this profile. Used to avoid duplicate notifications across refresh cycles.
+    /// </summary>
+    public HashSet<string> LoadNotifiedKsefNumbers(string profileKey)
+    {
+        PruneNotificationSent();
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT ksef_number FROM notification_sent WHERE profile_key = @key";
+        cmd.Parameters.AddWithValue("@key", profileKey);
+        using SqliteDataReader reader = cmd.ExecuteReader();
+        HashSet<string> result = [];
+        while (reader.Read())
+        {
+            result.Add(reader.GetString(0));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Marks the given KSeF invoice numbers as notified for this profile so they are not
+    /// re-notified in future refresh cycles. Also used to seed the baseline on first run
+    /// (without sending any notification) to avoid blasting the full invoice history.
+    /// </summary>
+    public void MarkAsNotified(string profileKey, IEnumerable<string> ksefNumbers)
+    {
+        string sentAt = DateTime.UtcNow.ToString("o");
+        using SqliteConnection conn = Open();
+        using SqliteTransaction tx = conn.BeginTransaction();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT OR IGNORE INTO notification_sent (profile_key, ksef_number, sent_at)
+            VALUES (@key, @ksef, @at)
+            """;
+        SqliteParameter pKey = cmd.Parameters.Add("@key", SqliteType.Text);
+        SqliteParameter pKsef = cmd.Parameters.Add("@ksef", SqliteType.Text);
+        SqliteParameter pAt = cmd.Parameters.Add("@at", SqliteType.Text);
+        pKey.Value = profileKey;
+        pAt.Value = sentAt;
+        cmd.Prepare();
+        int inserted = 0;
+        foreach (string ksefNumber in ksefNumbers)
+        {
+            pKsef.Value = ksefNumber;
+            inserted += cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+        if (inserted > 0)
+        {
+            Log.LogDebug($"[notif-sent] Marked {inserted} invoice(s) as notified for profile key {profileKey[..Math.Min(24, profileKey.Length)]}…");
+        }
+    }
+
+    /// <summary>
+    /// Deletes notification_sent rows older than <paramref name="retentionDays"/> days.
+    /// Call periodically (e.g. at startup or each refresh cycle) to keep the table bounded.
+    /// </summary>
+    public int PruneNotificationSent(int retentionDays = 90)
+    {
+        string cutoff = DateTime.UtcNow.AddDays(-retentionDays).ToString("o");
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM notification_sent WHERE sent_at < @cutoff";
+        cmd.Parameters.AddWithValue("@cutoff", cutoff);
+        int deleted = cmd.ExecuteNonQuery();
+        if (deleted > 0)
+        {
+            Log.LogInformation($"[notif-sent] Pruned {deleted} row(s) older than {retentionDays} days.");
+        }
+        return deleted;
     }
 
     private SqliteConnection Open()

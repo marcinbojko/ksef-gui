@@ -57,6 +57,10 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called to save modified config. Receives JSON string, returns empty string on success or error message.</summary>
     public Func<string, Task<string>>? OnSaveConfig { get; set; }
 
+    /// <summary>Called when user triggers "test notification". Receives profile name, fires webhook(s) if configured.
+    /// Returns empty string on success or a description of what was sent.</summary>
+    public Func<string, CancellationToken, Task<string>>? OnTestNotification { get; set; }
+
     public bool Lan { get; }
 
     /// <summary>
@@ -419,13 +423,26 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader reader1 = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await reader1.ReadToEndAsync(ct).ConfigureAwait(false);
                 string error = OnSaveConfig != null
                     ? await OnSaveConfig(body).ConfigureAwait(false)
                     : "";
                 return string.IsNullOrEmpty(error)
                     ? JsonSerializer.Serialize(new { ok = true })
                     : JsonSerializer.Serialize(new { ok = false, error });
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/test-notification" && method == "POST")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                using StreamReader reader2 = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await reader2.ReadToEndAsync(ct).ConfigureAwait(false);
+                string result = OnTestNotification != null
+                    ? await OnTestNotification(body, ct).ConfigureAwait(false)
+                    : "";
+                return JsonSerializer.Serialize(new { ok = true, message = result });
             }).ConfigureAwait(false);
         }
         else if (path == "/quit" && method == "POST")
@@ -500,7 +517,7 @@ h1{font-size:1.3rem;margin-bottom:1rem}
 .field{display:flex;flex-direction:column;gap:.2rem}
 .field label{font-size:.75rem;font-weight:600;color:#555}
 .field select,.field input{padding:.4rem .6rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem}
-.field input{width:140px}
+.field input{width:140px}.field input[type=month]{width:160px}
 button{padding:.5rem 1.2rem;border:none;border-radius:6px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s,opacity .15s}
 button:disabled{opacity:.4;cursor:default}
 .btn-primary{background:#1976d2;color:#fff}
@@ -1391,6 +1408,14 @@ function renderProfileCard(p, i) {
     '<div class="cfg-field"><label>Haslo z pliku (opcjonalnie)</label>' +
     '<input type="text" id="cfgCertPassFile' + i + '" value="' + esc(p.certPasswordFile||'') + '" placeholder="~/password.txt"></div>' +
     '</div>' +
+    '<div class="cfg-field">' +
+    '<label>Slack Webhook URL (opcjonalnie)</label>' +
+    '<input type="url" id="cfgSlackWebhook' + i + '" value="' + esc(p.slackWebhookUrl||'') + '" placeholder="https://hooks.slack.com/services/...">' +
+    '</div>' +
+    '<div class="cfg-field">' +
+    '<label>Teams Webhook URL (opcjonalnie)</label>' +
+    '<input type="url" id="cfgTeamsWebhook' + i + '" value="' + esc(p.teamsWebhookUrl||'') + '" placeholder="https://...webhook.office.com/...">' +
+    '</div>' +
     '<div class="cfg-card-footer">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
@@ -1468,6 +1493,8 @@ function deleteProfile(i) {
       certPasswordEnv: am === 'certificate' ? (document.getElementById('cfgCertPassEnv' + j)?.value || null) : null,
       certPasswordFile: am === 'certificate' ? (document.getElementById('cfgCertPassFile' + j)?.value || null) : null,
       includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + j)?.checked ?? cfgData.profiles[j].includeInAutoRefresh,
+      slackWebhookUrl: document.getElementById('cfgSlackWebhook' + j)?.value || null,
+      teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + j)?.value || null,
     };
   }
   // If deleting the active profile, reassign to the nearest remaining one
@@ -1500,6 +1527,8 @@ async function saveConfigEditor() {
       certPasswordEnv: authMethod === 'certificate' ? (document.getElementById('cfgCertPassEnv' + i)?.value || null) : null,
       certPasswordFile: authMethod === 'certificate' ? (document.getElementById('cfgCertPassFile' + i)?.value || null) : null,
       includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + i)?.checked || false,
+      slackWebhookUrl: document.getElementById('cfgSlackWebhook' + i)?.value || null,
+      teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + i)?.value || null,
     });
   }
   const payload = { activeProfile, configFilePath: cfgData.configFilePath, profiles };
@@ -1508,13 +1537,11 @@ async function saveConfigEditor() {
     const data = await res.json();
     if (data.ok) {
       cfgData = payload;
-      $('cfgSaveMsg').textContent = 'Zapisano!';
-      $('cfgSaveMsg').style.display = '';
-      setTimeout(() => { $('cfgSaveMsg').style.display = 'none'; }, 3000);
       // Refresh profile dropdown and token status (new/edited profile = new token state)
       await loadPrefs();
       applySetupMode(false);
       await fetchTokenStatus();
+      closeConfigEditor();
     } else {
       $('cfgErrMsg').textContent = data.error || 'Nieznany blad';
       $('cfgErrMsg').style.display = '';
@@ -1989,7 +2016,7 @@ function requestNotificationPermission() {
   }
 }
 
-function sendSampleNotification() {
+async function sendSampleNotification() {
   requestNotificationPermission();
   const msg = 'Znaleziono 3 nowe faktury!';
   // 1. Page title badge
@@ -2001,6 +2028,19 @@ function sendSampleNotification() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     new Notification('KSeFCli', { body: msg });
   }
+  // 4. Webhook channels (Slack / Teams) configured for the current profile
+  try {
+    const profileName = (typeof currentSessionProfile !== 'undefined' ? currentSessionProfile : '') || '';
+    const res = await fetch('/test-notification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileName }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.message) showNewInvoiceToast('Webhook: ' + data.message);
+    }
+  } catch (e) { /* ignore webhook test errors */ }
 }
 
 async function doDownload(selOnly) {
