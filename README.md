@@ -34,6 +34,7 @@
 | 🌐 **GUI w przeglądarce** | Interfejs lokalny dostępny bez instalacji                                                 |
 | 📄 **Eksport PDF**        | Natywny renderer (QuestPDF) — bez Node.js, git ani zewnętrznych narzędzi                  |
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
+| 🔔 **Powiadomienia**      | Powiadomienia OS i webhooki Slack / Teams per profil                                      |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
 | 🌙 **Tryb ciemny**        | Trzy niezależne tryby: GUI, podgląd faktury, szczegóły                                    |
 | 🐳 **Docker**             | Gotowy `docker-compose` z Traefik i Ofelia                                                |
@@ -149,6 +150,44 @@ Token długoterminowy: portal KSeF → _Integracja → Tokeny_.
 | `--useInvoiceNumber` | Nazwa pliku wg numeru faktury        | wyłączone |
 | `--lan`              | Nasłuchuj na wszystkich interfejsach | wyłączone |
 
+### 🔔 Powiadomienia
+
+Aplikacja obsługuje dwa kanały powiadomień o nowych fakturach, konfigurowane **per profil** w edytorze konfiguracji (przycisk ✎ Konfiguracja):
+
+#### Powiadomienia systemowe (OS)
+
+Przeglądarka wysyła natywne powiadomienie pulpitu przy każdym nowym zestawie faktur wykrytym w tle. Wymagana zgoda przeglądarki — przy pierwszym uruchomieniu zostaniesz o nią zapytany.
+
+#### Slack
+
+Wklej adres Incoming Webhook Slacka w polu **Slack Webhook URL** dla danego profilu.
+
+```
+https://hooks.slack.com/services/T.../B.../...
+```
+
+Każde wykrycie nowych faktur wysyła wiadomość na skonfigurowany kanał:
+
+```
+KSeF: 3 nowych faktur dla profilu firma1
+```
+
+#### Microsoft Teams
+
+Wklej adres Incoming Webhook Teams w polu **Teams Webhook URL** dla danego profilu.
+
+```
+https://xxx.webhook.office.com/webhookb2/...
+```
+
+Wiadomość wysyłana jest jako **MessageCard** z tytułem i liczbą nowych faktur.
+
+#### Weryfikacja konfiguracji
+
+W edytorze konfiguracji widoczny jest przycisk **🔔 Testuj** dla każdego profilu — wysyła próbną wiadomość do skonfigurowanych kanałów i zwraca wynik (sukces lub błąd z kodem HTTP i treścią odpowiedzi).
+
+> Powiadomienia wysyłane są wyłącznie dla profili z włączonym **auto-odświeżaniem** (checkbox _Uwzględnij w auto-odświeżaniu_). Każda faktura jest notyfikowana tylko raz (zapisana w bazie SQLite), więc restart aplikacji nie powoduje powtórnych powiadomień.
+
 ### 🐳 Docker / serwer domowy
 
 > ⚠️ Aplikacja **nie jest przeznaczona do wystawienia w internecie** — tylko sieć lokalna lub VPN.
@@ -239,11 +278,12 @@ PDF generowany **natywnie** przez [QuestPDF](https://www.questpdf.com/) — czys
 | ------------------- | -------------------------------------------------------------------- |
 | 🌐 **Browser GUI**  | Local interface, no installation needed                              |
 | 📄 **PDF export**   | Native renderer (QuestPDF) — no Node.js, git, or external tools      |
-| 🔄 **Auto-refresh** | Background search every N minutes; OS notifications for new invoices |
-| 💾 **SQLite cache** | Search results stored locally; profile switching without re-fetching |
-| 🌙 **Dark mode**    | Three independent modes: GUI, invoice preview, details panel         |
-| 🐳 **Docker**       | Ready-to-use `docker-compose` with Traefik and Ofelia                |
-| 🔒 **Offline**      | XSD validation and PDF generation work fully offline                 |
+| 🔄 **Auto-refresh**    | Background search every N minutes; OS notifications for new invoices    |
+| 🔔 **Notifications**   | OS desktop notifications and Slack / Teams webhooks per profile         |
+| 💾 **SQLite cache**    | Search results stored locally; profile switching without re-fetching    |
+| 🌙 **Dark mode**       | Three independent modes: GUI, invoice preview, details panel            |
+| 🐳 **Docker**          | Ready-to-use `docker-compose` with Traefik and Ofelia                   |
+| 🔒 **Offline**         | XSD validation and PDF generation work fully offline                    |
 
 ### 📸 Screenshots
 
@@ -354,6 +394,44 @@ Obtain a long-term token from the KSeF portal: _Integracja → Tokeny_.
 | `--pdf`              | Generate PDF when downloading    |   off   |
 | `--useInvoiceNumber` | Use invoice number for filenames |   off   |
 | `--lan`              | Listen on all network interfaces |   off   |
+
+### 🔔 Notifications
+
+The app supports two notification channels for new invoices, configured **per profile** in the configuration editor (✎ Configuration button):
+
+#### OS (desktop) notifications
+
+The browser sends a native desktop notification whenever new invoices are detected in the background. Browser permission is required — you will be prompted on first use.
+
+#### Slack
+
+Paste an Incoming Webhook URL into the **Slack Webhook URL** field for the profile.
+
+```
+https://hooks.slack.com/services/T.../B.../...
+```
+
+Each new-invoice detection posts a message to the configured channel:
+
+```
+KSeF: 3 nowych faktur dla profilu company1
+```
+
+#### Microsoft Teams
+
+Paste an Incoming Webhook URL into the **Teams Webhook URL** field for the profile.
+
+```
+https://xxx.webhook.office.com/webhookb2/...
+```
+
+The message is sent as a **MessageCard** with a title and invoice count.
+
+#### Testing the configuration
+
+The configuration editor shows a **🔔 Test** button for each profile — it sends a sample notification to all configured channels and returns the result (success or an HTTP error code with response body).
+
+> Notifications are sent only for profiles with **auto-refresh enabled** (the _Include in auto-refresh_ checkbox). Each invoice is notified exactly once (tracked in the local SQLite database), so restarting the app does not trigger duplicate notifications.
 
 ### 🐳 Docker / home server
 
