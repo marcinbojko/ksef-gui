@@ -870,7 +870,7 @@ body.dark .pref-label{color:#aaa}
   <div class="modal prefs-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9881; Preferencje</h2>
-      <button class="modal-close" onclick="cancelPrefs()" title="Anuluj">&times;</button>
+      <button class="modal-close" id="btnClosePrefs" onclick="cancelPrefs()" title="Anuluj">&times;</button>
     </div>
     <div class="prefs-tabs">
       <button class="prefs-tab active" id="ptab-general" onclick="switchPrefsTab('general',this)">Ogólne</button>
@@ -1261,10 +1261,13 @@ async function savePrefs() {
     displayLimit: parseInt($('displayLimit').value) || 50
   };
   const mins = prefs.autoRefreshMinutes;
-  startAutoRefresh(mins);
-  if (mins > 0) requestNotificationPermission();
   const resp = await fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) });
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data?.error) throw new Error(data.error);
+  // Only mutate runtime state after the save is confirmed on disk
+  startAutoRefresh(mins);
+  if (mins > 0) requestNotificationPermission();
 }
 
 async function onProfileChange() {
@@ -1299,18 +1302,19 @@ function closePrefs() { $('prefsModal').classList.remove('visible'); }
 async function cancelPrefs() { await loadPrefs(); closePrefs(); }
 async function saveAndClosePrefs() {
   const btn = $('btnSavePrefs'), errEl = $('prefsSaveErr');
+  const cancelBtns = [$('btnCancelPrefs'), $('btnClosePrefs')];
   errEl.style.display = 'none';
   btn.disabled = true;
-  $('btnCancelPrefs').disabled = true;
+  cancelBtns.forEach(b => { if (b) b.disabled = true; });
   try {
     await savePrefs();
     closePrefs();
-  } catch {
-    errEl.textContent = 'Błąd zapisu — sprawdź połączenie z serwerem.';
+  } catch (err) {
+    errEl.textContent = 'Błąd zapisu — ' + (err?.message || 'sprawdź połączenie z serwerem.');
     errEl.style.display = '';
   } finally {
     btn.disabled = false;
-    $('btnCancelPrefs').disabled = false;
+    cancelBtns.forEach(b => { if (b) b.disabled = false; });
   }
 }
 function switchPrefsTab(name, btn) {
@@ -2145,7 +2149,8 @@ async function browseTo(path) {
 function selectCurrentDir() {
   $('outputDir').value = browseCurrent;
   closeBrowser();
-  savePrefs().catch(() => {});
+  // No savePrefs() here — the folder browser is used from within the prefs modal,
+  // so persistence is left to the explicit "Zapisz preferencje" button.
 }
 
 async function createDir() {
@@ -2173,7 +2178,14 @@ function closeDetails() {
   if (detailOverlay) { detailOverlay.remove(); detailOverlay = null; }
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDetails(); $('aboutModal').classList.remove('visible'); } });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeDetails();
+    $('aboutModal').classList.remove('visible');
+    if ($('prefsModal').classList.contains('visible')) cancelPrefs();
+    if ($('configModal').classList.contains('visible')) closeConfigEditor();
+  }
+});
 
 async function showDetails(idx, event) {
   closeDetails();
