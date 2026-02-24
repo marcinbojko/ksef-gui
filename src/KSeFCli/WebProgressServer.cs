@@ -1276,8 +1276,15 @@ async function onProfileChange() {
     delete profileBadges[chosen];
     updateProfileSelectBadges();
   }
-  profileSwitchGen++; // invalidate any in-flight /search or /cached-invoices results from the old profile
-  await savePrefs().catch(() => {}); // must await so server completes the profile switch before we fetch the new cache
+  try {
+    await savePrefs(); // commits the new active profile to the server; must succeed before any UI change
+  } catch (err) {
+    $('profileSelect').value = currentSessionProfile; // revert dropdown to last known-good profile
+    setStatus('Błąd zmiany profilu: ' + err.message, 'error');
+    return; // abort — server still has the old profile; do not clear UI or load wrong cache
+  }
+  profileSwitchGen++; // server confirmed switch; invalidate in-flight results from the old profile
+  currentSessionProfile = chosen; // keep in sync with what server confirmed
   // Clear all results and token status immediately on profile switch
   tableWrap.innerHTML = '';
   invoices = []; total = 0; completed = 0; sortCol = null;
