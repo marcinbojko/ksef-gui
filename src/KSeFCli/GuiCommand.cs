@@ -45,7 +45,7 @@ public class GuiCommand : IWithConfigCommand
     private bool _setupRequired = false;
 
     private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
-    private static readonly HttpClient _httpClient = new();
+    private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     private const int DefaultLanPort = 18150;
 
@@ -623,6 +623,10 @@ public class GuiCommand : IWithConfigCommand
                 await Task.WhenAll(tasks.Select(t => t.Task)).ConfigureAwait(false);
                 return $"Wysłano test do {tasks.Count} kanał(ów).";
             }
+            catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 List<string> failed = tasks.Where(t => t.Task.IsFaulted || t.Task.IsCanceled).Select(t => t.Name).ToList();
@@ -935,13 +939,18 @@ public class GuiCommand : IWithConfigCommand
                 _invoiceCache.MarkAsNotified(profileKey, toNotify);
                 string? slackUrl = profilePrefs?.SlackWebhookUrl;
                 string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
+                List<Task> webhookTasks = [];
                 if (!string.IsNullOrEmpty(slackUrl))
                 {
-                    await SendSlackNotificationAsync(slackUrl, name, toNotify.Count, ct).ConfigureAwait(false);
+                    webhookTasks.Add(SendSlackNotificationAsync(slackUrl, name, toNotify.Count, ct));
                 }
                 if (!string.IsNullOrEmpty(teamsUrl))
                 {
-                    await SendTeamsNotificationAsync(teamsUrl, name, toNotify.Count, ct).ConfigureAwait(false);
+                    webhookTasks.Add(SendTeamsNotificationAsync(teamsUrl, name, toNotify.Count, ct));
+                }
+                if (webhookTasks.Count > 0)
+                {
+                    await Task.WhenAll(webhookTasks).ConfigureAwait(false);
                 }
             }
         }
