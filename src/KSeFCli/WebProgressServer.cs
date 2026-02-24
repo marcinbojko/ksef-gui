@@ -866,11 +866,11 @@ body.dark .pref-label{color:#aaa}
     <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
   </div>
 </div>
-<div class="modal-overlay" id="prefsModal" onclick="onPrefsOverlayClick(event)">
+<div class="modal-overlay" id="prefsModal">
   <div class="modal prefs-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9881; Preferencje</h2>
-      <button class="modal-close" onclick="closePrefs()">&times;</button>
+      <button class="modal-close" onclick="cancelPrefs()" title="Anuluj">&times;</button>
     </div>
     <div class="prefs-tabs">
       <button class="prefs-tab active" id="ptab-general" onclick="switchPrefsTab('general',this)">Ogólne</button>
@@ -883,23 +883,23 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Katalog wyjściowy</span>
           <div style="display:flex;gap:.3rem">
-            <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:220px" onchange="savePrefs()">
+            <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:220px">
             <button class="btn-primary" type="button" onclick="openBrowser()" style="padding:.4rem .6rem;font-size:.8rem" title="Wybierz folder">&#128193;</button>
           </div>
         </div>
         <div class="pref-row">
           <span class="pref-label">Separuj po NIP</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="separateByNip" onchange="savePrefs()"> <span id="profileNameLabel"></span></label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="separateByNip"> <span id="profileNameLabel"></span></label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Nazwy plików</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="customFilenames" onchange="savePrefs()"> data-sprzedawca-waluta-ksef</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="customFilenames"> data-sprzedawca-waluta-ksef</label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Auto-odświeżanie (min)</span>
           <div style="display:flex;align-items:center;gap:.5rem">
             <input id="autoRefreshMinutes" type="number" value="0" min="0" max="1440" step="1"
-                   style="width:5rem" onchange="savePrefs()"
+                   style="width:5rem"
                    title="0 = wyłączone, 1–1440 minut">
             <span style="font-size:.75rem;color:#999">0 = wyłączone</span>
           </div>
@@ -907,7 +907,7 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Wiersze na ekranie</span>
           <div style="display:flex;align-items:center;gap:.5rem">
-            <select id="displayLimit" onchange="savePrefs();renderTable()">
+            <select id="displayLimit" onchange="renderTable()">
               <option value="5">5</option>
               <option value="10">10</option>
               <option value="50" selected>50</option>
@@ -921,7 +921,7 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Port nasłuchiwania</span>
           <div style="display:flex;align-items:center;gap:.5rem">
-            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:95px" onchange="savePrefs()">
+            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:95px">
             <span style="font-size:.75rem;color:#999">wymaga restartu</span>
           </div>
         </div>
@@ -929,10 +929,10 @@ body.dark .pref-label{color:#aaa}
           <span class="pref-label">Tryb nasłuchiwania</span>
           <div style="display:flex;flex-direction:column;gap:.4rem;font-size:.85rem">
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input type="radio" name="listenMode" id="listenLocal" value="local" onchange="savePrefs()"> Tylko localhost (127.0.0.1)
+              <input type="radio" name="listenMode" id="listenLocal" value="local"> Tylko localhost (127.0.0.1)
             </label>
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input type="radio" name="listenMode" id="listenAll" value="all" onchange="savePrefs()"> Sieć lokalna (0.0.0.0) — wymaga restartu
+              <input type="radio" name="listenMode" id="listenAll" value="all"> Sieć lokalna (0.0.0.0) — wymaga restartu
             </label>
           </div>
         </div>
@@ -945,14 +945,14 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Formaty eksportu</span>
           <div style="display:flex;gap:.9rem;align-items:center;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expXml" checked onchange="savePrefs()"> XML</label>
-            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expPdf" checked onchange="savePrefs()"> PDF</label>
-            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expJson" onchange="savePrefs()"> JSON</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expXml" checked> XML</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expPdf" checked> PDF</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expJson"> JSON</label>
           </div>
         </div>
         <div class="pref-row">
           <span class="pref-label">Schemat kolorów PDF</span>
-          <select id="pdfColorScheme" onchange="savePrefs()">
+          <select id="pdfColorScheme">
             <option value="navy">Granatowy</option>
             <option value="forest">Zielony</option>
             <option value="slate">Szary</option>
@@ -966,11 +966,11 @@ body.dark .pref-label{color:#aaa}
         </div>
         <div class="pref-row">
           <span class="pref-label">Podgląd faktury ciemny</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode" onchange="savePrefs()"> Włącz</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode"> Włącz</label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Szczegóły faktury ciemne</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="detailsDarkMode" onchange="savePrefs()"> Włącz</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="detailsDarkMode"> Włącz</label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Testuj powiadomienia</span>
@@ -978,11 +978,12 @@ body.dark .pref-label{color:#aaa}
         </div>
         <div class="pref-row">
           <span class="pref-label">Format logów konsoli</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog" onchange="savePrefs()"> JSON</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog"> JSON</label>
         </div>
       </div>
     </div>
-    <div class="modal-footer" style="justify-content:flex-end">
+    <div class="modal-footer" style="justify-content:flex-end;gap:.5rem">
+      <button class="btn-sm btn-outline" onclick="cancelPrefs()" style="padding:.4rem 1rem">Anuluj</button>
       <button class="btn-prefs" onclick="savePrefs();closePrefs()" style="padding:.4rem 1.2rem">Zapisz preferencje</button>
     </div>
   </div>
@@ -1026,7 +1027,7 @@ body.dark .pref-label{color:#aaa}
     </div>
   </div>
 </div>
-<div class="modal-overlay" id="configModal" onclick="onConfigModalOverlayClick(event)">
+<div class="modal-overlay" id="configModal">
   <div class="modal cfg-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9998; Konfiguracja</h2>
@@ -1040,6 +1041,7 @@ body.dark .pref-label{color:#aaa}
       <span id="cfgSaveMsg" style="font-size:.8rem;color:#2e7d32;display:none"></span>
       <span id="cfgErrMsg" style="font-size:.8rem;color:#c62828;display:none"></span>
       <button class="btn-sm btn-outline" onclick="addProfile()">+ Dodaj profil</button>
+      <button class="btn-sm btn-outline" onclick="closeConfigEditor()" style="padding:.4rem 1rem">Anuluj</button>
       <button class="btn-success" onclick="saveConfigEditor()" style="padding:.4rem 1.2rem">Zapisz</button>
     </div>
   </div>
@@ -1136,9 +1138,9 @@ async function loadPrefs() {
       $('listenLocal').checked = !p.listenOnAll;
       $('listenAll').checked = !!p.listenOnAll;
       if (p.serverUrl) $('serverUrl').textContent = p.serverUrl;
-      if (p.darkMode) { $('darkMode').checked = true; document.body.classList.add('dark'); }
-      if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
-      if (p.detailsDarkMode) { $('detailsDarkMode').checked = true; }
+      $('darkMode').checked = !!p.darkMode; document.body.classList.toggle('dark', !!p.darkMode);
+      $('previewDarkMode').checked = !!p.previewDarkMode;
+      $('detailsDarkMode').checked = !!p.detailsDarkMode;
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
@@ -1288,7 +1290,7 @@ async function onProfileChange() {
 function togglePrefs() { openPrefs(); }
 function openPrefs() { $('prefsModal').classList.add('visible'); }
 function closePrefs() { $('prefsModal').classList.remove('visible'); }
-function onPrefsOverlayClick(e) { if (e.target === $('prefsModal')) closePrefs(); }
+async function cancelPrefs() { await loadPrefs(); closePrefs(); }
 function switchPrefsTab(name, btn) {
   document.querySelectorAll('.prefs-pane').forEach(p => p.style.display = 'none');
   document.querySelectorAll('.prefs-tab').forEach(t => t.classList.remove('active'));
@@ -1341,10 +1343,6 @@ async function openAbout() {
   } catch(e) {
     $('aboutBody').innerHTML = '<span style="color:#c62828">Błąd: ' + escHtml(e.message) + '</span>';
   }
-}
-
-function onConfigModalOverlayClick(e) {
-  if (e.target === $('configModal')) closeConfigEditor();
 }
 
 function renderConfigEditor() {
@@ -1558,7 +1556,6 @@ function esc(s) {
 
 function toggleDarkMode() {
   document.body.classList.toggle('dark', $('darkMode').checked);
-  savePrefs();
 }
 
 function setStatus(text, cls) { status.textContent = text; status.className = 'status ' + cls; }
@@ -2150,7 +2147,7 @@ function closeDetails() {
   if (detailOverlay) { detailOverlay.remove(); detailOverlay = null; }
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDetails(); closeConfigEditor(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDetails(); $('aboutModal').classList.remove('visible'); } });
 
 async function showDetails(idx, event) {
   closeDetails();

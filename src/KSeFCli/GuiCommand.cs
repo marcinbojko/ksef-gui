@@ -282,6 +282,8 @@ public class GuiCommand : IWithConfigCommand
             string? newProfile = root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null;
             bool jsonConsoleLog = root.TryGetProperty("jsonConsoleLog", out JsonElement jcl) && jcl.GetBoolean();
             Log.LogDebug($"SavePrefs: selectedProfile={newProfile ?? "(null)"}, activeProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
+            // Load existing prefs first so we can preserve fields not sent by JS (e.g. ProfilePrefs with webhook URLs).
+            GuiPrefs existingPrefs = LoadPrefs();
             SavePrefs(new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
                 ExportXml: root.TryGetProperty("exportXml", out JsonElement ex) ? ex.GetBoolean() : null,
@@ -299,11 +301,9 @@ public class GuiCommand : IWithConfigCommand
                 AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
                 JsonConsoleLog: jsonConsoleLog,
                 DisplayLimit: root.TryGetProperty("displayLimit", out JsonElement dl) ? dl.GetInt32() : null,
-                ProfilePrefs: root.TryGetProperty("profilePrefs", out JsonElement pp)
-                    ? JsonSerializer.Deserialize<Dictionary<string, ProfilePrefs>>(
-                        pp.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    : null
+                // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
+                // so this prevents webhook URLs from being wiped on every prefs save.
+                ProfilePrefs: existingPrefs.ProfilePrefs
             ));
             Log.ConfigureLogging(Verbose, Quiet, jsonConsoleLog);
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
