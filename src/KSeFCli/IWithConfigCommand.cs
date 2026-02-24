@@ -398,7 +398,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
                 tokenStore.SetToken(key, new TokenStore.Data(refreshed));
                 return refreshed.AccessToken.Token;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Log.LogWarning($"[bg-refresh] '{profileName}': token refresh failed ({ex.Message}) — falling back to full re-authentication");
                 // Fall through to full re-auth below.
