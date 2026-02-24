@@ -282,6 +282,8 @@ public class GuiCommand : IWithConfigCommand
             string? newProfile = root.TryGetProperty("selectedProfile", out JsonElement sp) ? sp.GetString() : null;
             bool jsonConsoleLog = root.TryGetProperty("jsonConsoleLog", out JsonElement jcl) && jcl.GetBoolean();
             Log.LogDebug($"SavePrefs: selectedProfile={newProfile ?? "(null)"}, activeProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
+            // Load existing prefs first so we can preserve fields not sent by JS (e.g. ProfilePrefs with webhook URLs).
+            GuiPrefs existingPrefs = LoadPrefs();
             SavePrefs(new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
                 ExportXml: root.TryGetProperty("exportXml", out JsonElement ex) ? ex.GetBoolean() : null,
@@ -299,11 +301,9 @@ public class GuiCommand : IWithConfigCommand
                 AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
                 JsonConsoleLog: jsonConsoleLog,
                 DisplayLimit: root.TryGetProperty("displayLimit", out JsonElement dl) ? dl.GetInt32() : null,
-                ProfilePrefs: root.TryGetProperty("profilePrefs", out JsonElement pp)
-                    ? JsonSerializer.Deserialize<Dictionary<string, ProfilePrefs>>(
-                        pp.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    : null
+                // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
+                // so this prevents webhook URLs from being wiped on every prefs save.
+                ProfilePrefs: existingPrefs.ProfilePrefs
             ));
             Log.ConfigureLogging(Verbose, Quiet, jsonConsoleLog);
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
@@ -716,7 +716,8 @@ public class GuiCommand : IWithConfigCommand
         IKSeFClient client,
         InvoiceQueryFilters filters,
         string accessToken,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool abortOn429 = false)
     {
         List<InvoiceSummary> all = new();
         PagedInvoiceResponse pagedResponse;
@@ -740,7 +741,7 @@ public class GuiCommand : IWithConfigCommand
                         cancellationToken: ct).ConfigureAwait(false);
                     break;
                 }
-                catch (KsefRateLimitException ex) when (attempt < maxRetries)
+                catch (KsefRateLimitException ex) when (attempt < maxRetries && !abortOn429)
                 {
                     TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
                     Log.LogWarning($"Rate limited (HTTP 429). Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{maxRetries})");
@@ -852,22 +853,30 @@ public class GuiCommand : IWithConfigCommand
             catch { continue; }
 
             Dictionary<string, ProfilePrefs> ppMap = prefs.ProfilePrefs ?? [];
+            string snapshotActive = ActiveProfile; // snapshot to catch mid-loop changes
+            Log.LogDebug($"[bg-refresh] Cycle start — activeProfile='{snapshotActive}', profiles=[{string.Join(", ", config.Profiles.Keys)}]");
             foreach ((string name, ProfileConfig profile) in config.Profiles)
             {
-                if (name == ActiveProfile)
+                if (name == snapshotActive)
                 {
+                    Log.LogDebug($"[bg-refresh] Skipping '{name}' (active profile, handled by JS)");
                     continue; // JS silentRefresh handles the active profile
                 }
 
                 ProfilePrefs? profilePrefs = ppMap.TryGetValue(name, out ProfilePrefs? pp) ? pp : null;
                 if (profilePrefs?.IncludeInAutoRefresh == false)
                 {
+                    Log.LogDebug($"[bg-refresh] Skipping '{name}' (includeInAutoRefresh=false)");
                     continue;
                 }
 
                 try
                 {
                     await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, ct).ConfigureAwait(false);
+                }
+                catch (KsefRateLimitException ex)
+                {
+                    Log.LogWarning($"[bg-refresh] Profile '{name}': rate-limited (retry-after {ex.RecommendedDelay.TotalSeconds:F0}s) — skipping this cycle");
                 }
                 catch (Exception ex)
                 {
@@ -892,7 +901,7 @@ public class GuiCommand : IWithConfigCommand
         InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
 
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct).ConfigureAwait(false);
+        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
 
         if (prev == null)
         {

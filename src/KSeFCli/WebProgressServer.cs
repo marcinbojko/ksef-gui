@@ -866,11 +866,11 @@ body.dark .pref-label{color:#aaa}
     <button class="btn-danger" onclick="doQuit()" title="Zamknij serwer GUI" style="margin-left:auto">&#9746; Zakoncz</button>
   </div>
 </div>
-<div class="modal-overlay" id="prefsModal" onclick="onPrefsOverlayClick(event)">
+<div class="modal-overlay" id="prefsModal">
   <div class="modal prefs-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9881; Preferencje</h2>
-      <button class="modal-close" onclick="closePrefs()">&times;</button>
+      <button class="modal-close" id="btnClosePrefs" onclick="cancelPrefs()" title="Anuluj">&times;</button>
     </div>
     <div class="prefs-tabs">
       <button class="prefs-tab active" id="ptab-general" onclick="switchPrefsTab('general',this)">Ogólne</button>
@@ -883,23 +883,23 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Katalog wyjściowy</span>
           <div style="display:flex;gap:.3rem">
-            <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:220px" onchange="savePrefs()">
+            <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:220px">
             <button class="btn-primary" type="button" onclick="openBrowser()" style="padding:.4rem .6rem;font-size:.8rem" title="Wybierz folder">&#128193;</button>
           </div>
         </div>
         <div class="pref-row">
           <span class="pref-label">Separuj po NIP</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="separateByNip" onchange="savePrefs()"> <span id="profileNameLabel"></span></label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="separateByNip"> <span id="profileNameLabel"></span></label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Nazwy plików</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="customFilenames" onchange="savePrefs()"> data-sprzedawca-waluta-ksef</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="customFilenames"> data-sprzedawca-waluta-ksef</label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Auto-odświeżanie (min)</span>
           <div style="display:flex;align-items:center;gap:.5rem">
             <input id="autoRefreshMinutes" type="number" value="0" min="0" max="1440" step="1"
-                   style="width:5rem" onchange="savePrefs()"
+                   style="width:5rem"
                    title="0 = wyłączone, 1–1440 minut">
             <span style="font-size:.75rem;color:#999">0 = wyłączone</span>
           </div>
@@ -907,7 +907,7 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Wiersze na ekranie</span>
           <div style="display:flex;align-items:center;gap:.5rem">
-            <select id="displayLimit" onchange="savePrefs();renderTable()">
+            <select id="displayLimit" onchange="renderTable()">
               <option value="5">5</option>
               <option value="10">10</option>
               <option value="50" selected>50</option>
@@ -921,7 +921,7 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Port nasłuchiwania</span>
           <div style="display:flex;align-items:center;gap:.5rem">
-            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:95px" onchange="savePrefs()">
+            <input id="lanPort" type="number" value="18150" min="1024" max="65535" style="width:95px">
             <span style="font-size:.75rem;color:#999">wymaga restartu</span>
           </div>
         </div>
@@ -929,10 +929,10 @@ body.dark .pref-label{color:#aaa}
           <span class="pref-label">Tryb nasłuchiwania</span>
           <div style="display:flex;flex-direction:column;gap:.4rem;font-size:.85rem">
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input type="radio" name="listenMode" id="listenLocal" value="local" onchange="savePrefs()"> Tylko localhost (127.0.0.1)
+              <input type="radio" name="listenMode" id="listenLocal" value="local"> Tylko localhost (127.0.0.1)
             </label>
             <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input type="radio" name="listenMode" id="listenAll" value="all" onchange="savePrefs()"> Sieć lokalna (0.0.0.0) — wymaga restartu
+              <input type="radio" name="listenMode" id="listenAll" value="all"> Sieć lokalna (0.0.0.0) — wymaga restartu
             </label>
           </div>
         </div>
@@ -945,14 +945,14 @@ body.dark .pref-label{color:#aaa}
         <div class="pref-row">
           <span class="pref-label">Formaty eksportu</span>
           <div style="display:flex;gap:.9rem;align-items:center;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expXml" checked onchange="savePrefs()"> XML</label>
-            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expPdf" checked onchange="savePrefs()"> PDF</label>
-            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expJson" onchange="savePrefs()"> JSON</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expXml" checked> XML</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expPdf" checked> PDF</label>
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="expJson"> JSON</label>
           </div>
         </div>
         <div class="pref-row">
           <span class="pref-label">Schemat kolorów PDF</span>
-          <select id="pdfColorScheme" onchange="savePrefs()">
+          <select id="pdfColorScheme">
             <option value="navy">Granatowy</option>
             <option value="forest">Zielony</option>
             <option value="slate">Szary</option>
@@ -966,11 +966,11 @@ body.dark .pref-label{color:#aaa}
         </div>
         <div class="pref-row">
           <span class="pref-label">Podgląd faktury ciemny</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode" onchange="savePrefs()"> Włącz</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode"> Włącz</label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Szczegóły faktury ciemne</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="detailsDarkMode" onchange="savePrefs()"> Włącz</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="detailsDarkMode"> Włącz</label>
         </div>
         <div class="pref-row">
           <span class="pref-label">Testuj powiadomienia</span>
@@ -978,12 +978,14 @@ body.dark .pref-label{color:#aaa}
         </div>
         <div class="pref-row">
           <span class="pref-label">Format logów konsoli</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog" onchange="savePrefs()"> JSON</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog"> JSON</label>
         </div>
       </div>
     </div>
-    <div class="modal-footer" style="justify-content:flex-end">
-      <button class="btn-prefs" onclick="savePrefs();closePrefs()" style="padding:.4rem 1.2rem">Zapisz preferencje</button>
+    <div class="modal-footer" style="justify-content:flex-end;gap:.5rem">
+      <span id="prefsSaveErr" style="display:none;font-size:.8rem;color:#c62828"></span>
+      <button class="btn-sm btn-outline" id="btnCancelPrefs" onclick="cancelPrefs()" style="padding:.4rem 1rem">Anuluj</button>
+      <button class="btn-prefs" id="btnSavePrefs" onclick="saveAndClosePrefs()" style="padding:.4rem 1.2rem">Zapisz preferencje</button>
     </div>
   </div>
 </div>
@@ -1026,7 +1028,7 @@ body.dark .pref-label{color:#aaa}
     </div>
   </div>
 </div>
-<div class="modal-overlay" id="configModal" onclick="onConfigModalOverlayClick(event)">
+<div class="modal-overlay" id="configModal">
   <div class="modal cfg-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9998; Konfiguracja</h2>
@@ -1040,6 +1042,7 @@ body.dark .pref-label{color:#aaa}
       <span id="cfgSaveMsg" style="font-size:.8rem;color:#2e7d32;display:none"></span>
       <span id="cfgErrMsg" style="font-size:.8rem;color:#c62828;display:none"></span>
       <button class="btn-sm btn-outline" onclick="addProfile()">+ Dodaj profil</button>
+      <button class="btn-sm btn-outline" onclick="closeConfigEditor()" style="padding:.4rem 1rem">Anuluj</button>
       <button class="btn-success" onclick="saveConfigEditor()" style="padding:.4rem 1.2rem">Zapisz</button>
     </div>
   </div>
@@ -1063,6 +1066,7 @@ const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
       btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'),
       countLabel = $('countLabel');
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
+let profileSwitchGen = 0; // incremented on every profile switch; stale async results discard themselves
 let activeCurrencies = new Set();
 let selectedInvoices = new Set();
 let fileStatus = [];
@@ -1086,10 +1090,12 @@ let lastSearchParams = null;        // params of last successful search; null = 
 })();
 
 async function loadCachedInvoices() {
+  const myGen = profileSwitchGen;
   try {
     const res = await fetch('/cached-invoices');
     if (!res.ok) return;
     const data = await res.json();
+    if (profileSwitchGen !== myGen) return; // profile switched while fetching — discard stale result
     if (!data.invoices || data.invoices.length === 0) return;
     invoices = data.invoices;
     for (let i = 0; i < invoices.length; i++) invoices[i]._idx = i;
@@ -1136,9 +1142,9 @@ async function loadPrefs() {
       $('listenLocal').checked = !p.listenOnAll;
       $('listenAll').checked = !!p.listenOnAll;
       if (p.serverUrl) $('serverUrl').textContent = p.serverUrl;
-      if (p.darkMode) { $('darkMode').checked = true; document.body.classList.add('dark'); }
-      if (p.previewDarkMode) { $('previewDarkMode').checked = true; }
-      if (p.detailsDarkMode) { $('detailsDarkMode').checked = true; }
+      $('darkMode').checked = !!p.darkMode; document.body.classList.toggle('dark', !!p.darkMode);
+      $('previewDarkMode').checked = !!p.previewDarkMode;
+      $('detailsDarkMode').checked = !!p.detailsDarkMode;
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
@@ -1235,7 +1241,7 @@ fetchTokenStatus();
 setInterval(() => { updateAuthButton(); }, 15000);
 setInterval(() => { fetchTokenStatus(); }, 60000);
 
-function savePrefs() {
+async function savePrefs() {
   const prefs = {
     outputDir: $('outputDir').value || '.',
     exportXml: $('expXml').checked,
@@ -1255,9 +1261,13 @@ function savePrefs() {
     displayLimit: parseInt($('displayLimit').value) || 50
   };
   const mins = prefs.autoRefreshMinutes;
+  const resp = await fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data?.error) throw new Error(data.error);
+  // Only mutate runtime state after the save is confirmed on disk
   startAutoRefresh(mins);
   if (mins > 0) requestNotificationPermission();
-  return fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) }).catch(() => {});
 }
 
 async function onProfileChange() {
@@ -1266,7 +1276,15 @@ async function onProfileChange() {
     delete profileBadges[chosen];
     updateProfileSelectBadges();
   }
-  await savePrefs();
+  try {
+    await savePrefs(); // commits the new active profile to the server; must succeed before any UI change
+  } catch (err) {
+    $('profileSelect').value = currentSessionProfile; // revert dropdown to last known-good profile
+    setStatus('Błąd zmiany profilu: ' + err.message, 'error');
+    return; // abort — server still has the old profile; do not clear UI or load wrong cache
+  }
+  profileSwitchGen++; // server confirmed switch; invalidate in-flight results from the old profile
+  currentSessionProfile = chosen; // keep in sync with what server confirmed
   // Clear all results and token status immediately on profile switch
   tableWrap.innerHTML = '';
   invoices = []; total = 0; completed = 0; sortCol = null;
@@ -1288,7 +1306,24 @@ async function onProfileChange() {
 function togglePrefs() { openPrefs(); }
 function openPrefs() { $('prefsModal').classList.add('visible'); }
 function closePrefs() { $('prefsModal').classList.remove('visible'); }
-function onPrefsOverlayClick(e) { if (e.target === $('prefsModal')) closePrefs(); }
+async function cancelPrefs() { await loadPrefs(); closePrefs(); }
+async function saveAndClosePrefs() {
+  const btn = $('btnSavePrefs'), errEl = $('prefsSaveErr');
+  const cancelBtns = [$('btnCancelPrefs'), $('btnClosePrefs')];
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  cancelBtns.forEach(b => { if (b) b.disabled = true; });
+  try {
+    await savePrefs();
+    closePrefs();
+  } catch (err) {
+    errEl.textContent = 'Błąd zapisu — ' + (err?.message || 'sprawdź połączenie z serwerem.');
+    errEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    cancelBtns.forEach(b => { if (b) b.disabled = false; });
+  }
+}
 function switchPrefsTab(name, btn) {
   document.querySelectorAll('.prefs-pane').forEach(p => p.style.display = 'none');
   document.querySelectorAll('.prefs-tab').forEach(t => t.classList.remove('active'));
@@ -1341,10 +1376,6 @@ async function openAbout() {
   } catch(e) {
     $('aboutBody').innerHTML = '<span style="color:#c62828">Błąd: ' + escHtml(e.message) + '</span>';
   }
-}
-
-function onConfigModalOverlayClick(e) {
-  if (e.target === $('configModal')) closeConfigEditor();
 }
 
 function renderConfigEditor() {
@@ -1558,7 +1589,6 @@ function esc(s) {
 
 function toggleDarkMode() {
   document.body.classList.toggle('dark', $('darkMode').checked);
-  savePrefs();
 }
 
 function setStatus(text, cls) { status.textContent = text; status.className = 'status ' + cls; }
@@ -1706,7 +1736,7 @@ function setDisplayLimit(val) {
   const sel = $('displayLimit');
   if (sel) sel.value = val;
   currentPage = 0;
-  savePrefs();
+  savePrefs().catch(() => {});
   renderTable();
 }
 
@@ -1885,6 +1915,7 @@ async function doSearch() {
   selectedInvoices = new Set();
   fileStatus = [];
   filterBar.classList.remove('visible');
+  const myGen = profileSwitchGen;
 
   try {
     const fromVal = $('fromDate').value;
@@ -1897,6 +1928,7 @@ async function doSearch() {
     };
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Search failed'); }
+    if (profileSwitchGen !== myGen) { searchRunning = false; return; } // profile switched — discard
     invoices = await res.json();
     for (let i = 0; i < invoices.length; i++) invoices[i]._idx = i;
     total = invoices.length;
@@ -1932,6 +1964,7 @@ async function silentRefresh() {
   if (!lastSearchParams) return;
   if (refreshRunning) { console.info('[auto-refresh] Skipping — previous cycle still running'); return; }
   refreshRunning = true;
+  const myGen = profileSwitchGen;
   try {
     // Refresh session token if it expires within 1 minute
     if (tokenExpiry && (tokenExpiry - Date.now()) < 60 * 1000) {
@@ -1960,6 +1993,7 @@ async function silentRefresh() {
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
     if (!res.ok) { await fetchTokenStatus(); return; }
     const fresh = await res.json();
+    if (profileSwitchGen !== myGen) return; // profile switched while request was in-flight — discard
     fresh.forEach((inv, i) => inv._idx = i);
     console.info('[auto-refresh] Cyclic search complete —', fresh.length, 'invoices');
     detectNewInvoices(fresh);
@@ -2122,7 +2156,8 @@ async function browseTo(path) {
 function selectCurrentDir() {
   $('outputDir').value = browseCurrent;
   closeBrowser();
-  savePrefs();
+  // No savePrefs() here — the folder browser is used from within the prefs modal,
+  // so persistence is left to the explicit "Zapisz preferencje" button.
 }
 
 async function createDir() {
@@ -2150,7 +2185,14 @@ function closeDetails() {
   if (detailOverlay) { detailOverlay.remove(); detailOverlay = null; }
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDetails(); closeConfigEditor(); } });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeDetails();
+    $('aboutModal').classList.remove('visible');
+    if ($('prefsModal').classList.contains('visible')) cancelPrefs();
+    if ($('configModal').classList.contains('visible')) closeConfigEditor();
+  }
+});
 
 async function showDetails(idx, event) {
   closeDetails();
