@@ -1066,6 +1066,7 @@ const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
       btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'),
       countLabel = $('countLabel');
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
+let profileSwitchGen = 0; // incremented on every profile switch; stale async results discard themselves
 let activeCurrencies = new Set();
 let selectedInvoices = new Set();
 let fileStatus = [];
@@ -1089,10 +1090,12 @@ let lastSearchParams = null;        // params of last successful search; null = 
 })();
 
 async function loadCachedInvoices() {
+  const myGen = profileSwitchGen;
   try {
     const res = await fetch('/cached-invoices');
     if (!res.ok) return;
     const data = await res.json();
+    if (profileSwitchGen !== myGen) return; // profile switched while fetching — discard stale result
     if (!data.invoices || data.invoices.length === 0) return;
     invoices = data.invoices;
     for (let i = 0; i < invoices.length; i++) invoices[i]._idx = i;
@@ -1270,7 +1273,8 @@ async function onProfileChange() {
     delete profileBadges[chosen];
     updateProfileSelectBadges();
   }
-  savePrefs().catch(() => {});
+  profileSwitchGen++; // invalidate any in-flight /search or /cached-invoices results from the old profile
+  await savePrefs().catch(() => {}); // must await so server completes the profile switch before we fetch the new cache
   // Clear all results and token status immediately on profile switch
   tableWrap.innerHTML = '';
   invoices = []; total = 0; completed = 0; sortCol = null;
@@ -1900,6 +1904,7 @@ async function doSearch() {
   selectedInvoices = new Set();
   fileStatus = [];
   filterBar.classList.remove('visible');
+  const myGen = profileSwitchGen;
 
   try {
     const fromVal = $('fromDate').value;
@@ -1912,6 +1917,7 @@ async function doSearch() {
     };
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Search failed'); }
+    if (profileSwitchGen !== myGen) { searchRunning = false; return; } // profile switched — discard
     invoices = await res.json();
     for (let i = 0; i < invoices.length; i++) invoices[i]._idx = i;
     total = invoices.length;
@@ -1947,6 +1953,7 @@ async function silentRefresh() {
   if (!lastSearchParams) return;
   if (refreshRunning) { console.info('[auto-refresh] Skipping — previous cycle still running'); return; }
   refreshRunning = true;
+  const myGen = profileSwitchGen;
   try {
     // Refresh session token if it expires within 1 minute
     if (tokenExpiry && (tokenExpiry - Date.now()) < 60 * 1000) {
@@ -1975,6 +1982,7 @@ async function silentRefresh() {
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
     if (!res.ok) { await fetchTokenStatus(); return; }
     const fresh = await res.json();
+    if (profileSwitchGen !== myGen) return; // profile switched while request was in-flight — discard
     fresh.forEach((inv, i) => inv._idx = i);
     console.info('[auto-refresh] Cyclic search complete —', fresh.length, 'invoices');
     detectNewInvoices(fresh);

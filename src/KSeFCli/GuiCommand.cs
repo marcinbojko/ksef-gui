@@ -716,7 +716,8 @@ public class GuiCommand : IWithConfigCommand
         IKSeFClient client,
         InvoiceQueryFilters filters,
         string accessToken,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool abortOn429 = false)
     {
         List<InvoiceSummary> all = new();
         PagedInvoiceResponse pagedResponse;
@@ -740,7 +741,7 @@ public class GuiCommand : IWithConfigCommand
                         cancellationToken: ct).ConfigureAwait(false);
                     break;
                 }
-                catch (KsefRateLimitException ex) when (attempt < maxRetries)
+                catch (KsefRateLimitException ex) when (attempt < maxRetries && !abortOn429)
                 {
                     TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
                     Log.LogWarning($"Rate limited (HTTP 429). Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{maxRetries})");
@@ -852,22 +853,30 @@ public class GuiCommand : IWithConfigCommand
             catch { continue; }
 
             Dictionary<string, ProfilePrefs> ppMap = prefs.ProfilePrefs ?? [];
+            string snapshotActive = ActiveProfile; // snapshot to catch mid-loop changes
+            Log.LogDebug($"[bg-refresh] Cycle start — activeProfile='{snapshotActive}', profiles=[{string.Join(", ", config.Profiles.Keys)}]");
             foreach ((string name, ProfileConfig profile) in config.Profiles)
             {
-                if (name == ActiveProfile)
+                if (name == snapshotActive)
                 {
+                    Log.LogDebug($"[bg-refresh] Skipping '{name}' (active profile, handled by JS)");
                     continue; // JS silentRefresh handles the active profile
                 }
 
                 ProfilePrefs? profilePrefs = ppMap.TryGetValue(name, out ProfilePrefs? pp) ? pp : null;
                 if (profilePrefs?.IncludeInAutoRefresh == false)
                 {
+                    Log.LogDebug($"[bg-refresh] Skipping '{name}' (includeInAutoRefresh=false)");
                     continue;
                 }
 
                 try
                 {
                     await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, ct).ConfigureAwait(false);
+                }
+                catch (KsefRateLimitException ex)
+                {
+                    Log.LogWarning($"[bg-refresh] Profile '{name}': rate-limited (retry-after {ex.RecommendedDelay.TotalSeconds:F0}s) — skipping this cycle");
                 }
                 catch (Exception ex)
                 {
@@ -892,7 +901,7 @@ public class GuiCommand : IWithConfigCommand
         InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
 
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct).ConfigureAwait(false);
+        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
 
         if (prev == null)
         {
