@@ -983,8 +983,9 @@ body.dark .pref-label{color:#aaa}
       </div>
     </div>
     <div class="modal-footer" style="justify-content:flex-end;gap:.5rem">
-      <button class="btn-sm btn-outline" onclick="cancelPrefs()" style="padding:.4rem 1rem">Anuluj</button>
-      <button class="btn-prefs" onclick="savePrefs();closePrefs()" style="padding:.4rem 1.2rem">Zapisz preferencje</button>
+      <span id="prefsSaveErr" style="display:none;font-size:.8rem;color:#c62828"></span>
+      <button class="btn-sm btn-outline" id="btnCancelPrefs" onclick="cancelPrefs()" style="padding:.4rem 1rem">Anuluj</button>
+      <button class="btn-prefs" id="btnSavePrefs" onclick="saveAndClosePrefs()" style="padding:.4rem 1.2rem">Zapisz preferencje</button>
     </div>
   </div>
 </div>
@@ -1237,7 +1238,7 @@ fetchTokenStatus();
 setInterval(() => { updateAuthButton(); }, 15000);
 setInterval(() => { fetchTokenStatus(); }, 60000);
 
-function savePrefs() {
+async function savePrefs() {
   const prefs = {
     outputDir: $('outputDir').value || '.',
     exportXml: $('expXml').checked,
@@ -1259,7 +1260,8 @@ function savePrefs() {
   const mins = prefs.autoRefreshMinutes;
   startAutoRefresh(mins);
   if (mins > 0) requestNotificationPermission();
-  return fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) }).catch(() => {});
+  const resp = await fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
 }
 
 async function onProfileChange() {
@@ -1268,7 +1270,7 @@ async function onProfileChange() {
     delete profileBadges[chosen];
     updateProfileSelectBadges();
   }
-  await savePrefs();
+  savePrefs().catch(() => {});
   // Clear all results and token status immediately on profile switch
   tableWrap.innerHTML = '';
   invoices = []; total = 0; completed = 0; sortCol = null;
@@ -1291,6 +1293,22 @@ function togglePrefs() { openPrefs(); }
 function openPrefs() { $('prefsModal').classList.add('visible'); }
 function closePrefs() { $('prefsModal').classList.remove('visible'); }
 async function cancelPrefs() { await loadPrefs(); closePrefs(); }
+async function saveAndClosePrefs() {
+  const btn = $('btnSavePrefs'), errEl = $('prefsSaveErr');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  $('btnCancelPrefs').disabled = true;
+  try {
+    await savePrefs();
+    closePrefs();
+  } catch {
+    errEl.textContent = 'Błąd zapisu — sprawdź połączenie z serwerem.';
+    errEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    $('btnCancelPrefs').disabled = false;
+  }
+}
 function switchPrefsTab(name, btn) {
   document.querySelectorAll('.prefs-pane').forEach(p => p.style.display = 'none');
   document.querySelectorAll('.prefs-tab').forEach(t => t.classList.remove('active'));
@@ -1703,7 +1721,7 @@ function setDisplayLimit(val) {
   const sel = $('displayLimit');
   if (sel) sel.value = val;
   currentPage = 0;
-  savePrefs();
+  savePrefs().catch(() => {});
   renderTable();
 }
 
@@ -2119,7 +2137,7 @@ async function browseTo(path) {
 function selectCurrentDir() {
   $('outputDir').value = browseCurrent;
   closeBrowser();
-  savePrefs();
+  savePrefs().catch(() => {});
 }
 
 async function createDir() {
