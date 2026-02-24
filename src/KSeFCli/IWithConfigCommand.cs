@@ -382,9 +382,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
         if (stored != null && stored.Response.RefreshToken.ValidUntil >= DateTime.UtcNow.AddMinutes(1))
         {
-            if (stored.Response.AccessToken.ValidUntil > DateTime.UtcNow)
+            if (stored.Response.AccessToken.ValidUntil >= DateTime.UtcNow.AddMinutes(10))
             {
-                // Access token still valid — use it without any network call.
+                // Access token still valid with sufficient margin — use it without any network call.
                 Log.LogDebug($"[bg-refresh] '{profileName}': using stored access token (expires {stored.Response.AccessToken.ValidUntil:u})");
                 return stored.Response.AccessToken.Token;
             }
