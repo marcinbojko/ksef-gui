@@ -365,9 +365,13 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     /// <summary>
     /// Gets (or refreshes) the access token for an arbitrary named profile without affecting
-    /// <see cref="ActiveProfile"/>. If no valid token is stored, performs initial authentication
-    /// via <see cref="Auth"/> using the supplied profile config, stores the result, and returns
-    /// the obtained access token. If a token is present but near expiry, refreshes it instead.
+    /// <see cref="ActiveProfile"/>. Decision tree:
+    /// <list type="bullet">
+    ///   <item>No stored token or refresh token expired → full <see cref="Auth"/>.</item>
+    ///   <item>Access token still valid → return it directly (no network call).</item>
+    ///   <item>Access token expired, refresh token valid → <see cref="TokenRefresh"/>;
+    ///         falls back to full <see cref="Auth"/> if refresh fails.</item>
+    /// </list>
     /// </summary>
     public async Task<string> GetAccessTokenForProfile(
         string profileName, ProfileConfig profile, IServiceScope scope, CancellationToken ct)
@@ -376,22 +380,42 @@ public abstract class IWithConfigCommand : IGlobalCommand
         TokenStore.Key key = new TokenStore.Key(profileName, profile);
         TokenStore.Data? stored = tokenStore.GetToken(key);
 
-        if (stored == null || stored.Response.RefreshToken.ValidUntil < DateTime.UtcNow.AddMinutes(1))
+        if (stored != null && stored.Response.RefreshToken.ValidUntil >= DateTime.UtcNow.AddMinutes(1))
         {
-            Log.LogInformation($"[bg-refresh] No stored token for '{profileName}', performing initial authentication...");
-            AuthenticationOperationStatusResponse authResponse = await Auth(scope, ct, profile).ConfigureAwait(false);
-            tokenStore.SetToken(key, new TokenStore.Data(authResponse));
-            return authResponse.AccessToken.Token;
+            if (stored.Response.AccessToken.ValidUntil > DateTime.UtcNow)
+            {
+                // Access token still valid — use it without any network call.
+                Log.LogDebug($"[bg-refresh] '{profileName}': using stored access token (expires {stored.Response.AccessToken.ValidUntil:u})");
+                return stored.Response.AccessToken.Token;
+            }
+
+            // Access token is expired — attempt a token refresh.
+            Log.LogInformation($"[bg-refresh] '{profileName}': access token expired ({stored.Response.AccessToken.ValidUntil:u}), refreshing...");
+            try
+            {
+                AuthenticationOperationStatusResponse refreshed =
+                    await TokenRefresh(scope, stored.Response.RefreshToken, ct).ConfigureAwait(false);
+                tokenStore.SetToken(key, new TokenStore.Data(refreshed));
+                return refreshed.AccessToken.Token;
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"[bg-refresh] '{profileName}': token refresh failed ({ex.Message}) — falling back to full re-authentication");
+                // Fall through to full re-auth below.
+            }
+        }
+        else
+        {
+            string reason = stored == null
+                ? "no stored token"
+                : $"refresh token expired ({stored.Response.RefreshToken.ValidUntil:u})";
+            Log.LogInformation($"[bg-refresh] '{profileName}': {reason} — performing full re-authentication");
         }
 
-        if (stored.Response.AccessToken.ValidUntil < DateTime.UtcNow.AddMinutes(10))
-        {
-            AuthenticationOperationStatusResponse refreshed =
-                await TokenRefresh(scope, stored.Response.RefreshToken, ct).ConfigureAwait(false);
-            tokenStore.SetToken(key, new TokenStore.Data(refreshed));
-            return refreshed.AccessToken.Token;
-        }
-        return stored.Response.AccessToken.Token;
+        // Full re-authentication: initial auth, expired refresh token, or failed token refresh.
+        AuthenticationOperationStatusResponse authResponse = await Auth(scope, ct, profile).ConfigureAwait(false);
+        tokenStore.SetToken(key, new TokenStore.Data(authResponse));
+        return authResponse.AccessToken.Token;
     }
 
     public async Task<ICryptographyService> GetCryptographicService(IServiceScope scope, CancellationToken cancellationToken)
