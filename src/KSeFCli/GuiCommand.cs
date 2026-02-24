@@ -608,11 +608,11 @@ public class GuiCommand : IWithConfigCommand
             List<(string Name, Task Task)> tasks = [];
             if (!string.IsNullOrEmpty(slackUrl))
             {
-                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct)));
+                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct, throwOnHttpError: true)));
             }
             if (!string.IsNullOrEmpty(teamsUrl))
             {
-                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct)));
+                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct, throwOnHttpError: true)));
             }
             if (tasks.Count == 0)
             {
@@ -947,7 +947,7 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private static async Task SendSlackNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct)
+    private static async Task SendSlackNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
     {
         string text = $"KSeF: {newCount} nowych faktur dla profilu {profileName}";
         string json = JsonSerializer.Serialize(new { text });
@@ -957,17 +957,25 @@ public class GuiCommand : IWithConfigCommand
             using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
+                if (throwOnHttpError)
+                {
+                    string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    throw new HttpRequestException(
+                        $"HTTP {(int)resp.StatusCode}: {body.Trim()}",
+                        null,
+                        resp.StatusCode);
+                }
                 Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException ex) when (!throwOnHttpError)
         {
             Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
         }
     }
 
-    private static async Task SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct)
+    private static async Task SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
     {
         Dictionary<string, object> payload = new()
         {
@@ -985,11 +993,19 @@ public class GuiCommand : IWithConfigCommand
             using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
+                if (throwOnHttpError)
+                {
+                    string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    throw new HttpRequestException(
+                        $"HTTP {(int)resp.StatusCode}: {body.Trim()}",
+                        null,
+                        resp.StatusCode);
+                }
                 Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException ex) when (!throwOnHttpError)
         {
             Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");
         }
