@@ -1410,11 +1410,11 @@ function renderProfileCard(p, i) {
     '</div>' +
     '<div class="cfg-field">' +
     '<label>Slack Webhook URL (opcjonalnie)</label>' +
-    '<input type="text" id="cfgSlackWebhook' + i + '" value="' + esc(p.slackWebhookUrl||'') + '" placeholder="https://hooks.slack.com/services/...">' +
+    '<input type="url" id="cfgSlackWebhook' + i + '" value="' + esc(p.slackWebhookUrl||'') + '" placeholder="https://hooks.slack.com/services/...">' +
     '</div>' +
     '<div class="cfg-field">' +
     '<label>Teams Webhook URL (opcjonalnie)</label>' +
-    '<input type="text" id="cfgTeamsWebhook' + i + '" value="' + esc(p.teamsWebhookUrl||'') + '" placeholder="https://...webhook.office.com/...">' +
+    '<input type="url" id="cfgTeamsWebhook' + i + '" value="' + esc(p.teamsWebhookUrl||'') + '" placeholder="https://...webhook.office.com/...">' +
     '</div>' +
     '<div class="cfg-card-footer">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +

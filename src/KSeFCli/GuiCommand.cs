@@ -605,23 +605,33 @@ public class GuiCommand : IWithConfigCommand
             ProfilePrefs? pp = prefs.ProfilePrefs?.GetValueOrDefault(profileName);
             string? slackUrl = pp?.SlackWebhookUrl;
             string? teamsUrl = pp?.TeamsWebhookUrl;
-            int sent = 0;
-            List<Task> tasks = [];
+            List<(string Name, Task Task)> tasks = [];
             if (!string.IsNullOrEmpty(slackUrl))
             {
-                tasks.Add(SendSlackNotificationAsync(slackUrl, profileName, 3, ct));
-                sent++;
+                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct)));
             }
             if (!string.IsNullOrEmpty(teamsUrl))
             {
-                tasks.Add(SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct));
-                sent++;
+                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct)));
             }
-            if (tasks.Count > 0)
+            if (tasks.Count == 0)
             {
-                await Task.WhenAll(tasks).ConfigureAwait(false);
+                return "Brak skonfigurowanych webhooków dla tego profilu.";
             }
-            return sent == 0 ? "Brak skonfigurowanych webhooków dla tego profilu." : $"Wysłano test do {sent} kanał(ów).";
+            try
+            {
+                await Task.WhenAll(tasks.Select(t => t.Task)).ConfigureAwait(false);
+                return $"Wysłano test do {tasks.Count} kanał(ów).";
+            }
+            catch
+            {
+                List<string> failed = tasks.Where(t => t.Task.IsFaulted || t.Task.IsCanceled).Select(t => t.Name).ToList();
+                int ok = tasks.Count - failed.Count;
+                string failMsg = string.Join(", ", failed);
+                return ok > 0
+                    ? $"Wysłano do {ok} kanał(ów), błąd w: {failMsg}."
+                    : $"Błąd wysyłki do: {failMsg}.";
+            }
         };
 
         server.Start(cancellationToken);
@@ -918,6 +928,10 @@ public class GuiCommand : IWithConfigCommand
 
             if (toNotify.Count > 0)
             {
+                // Deliberate at-most-once ordering: mark as notified BEFORE sending webhooks.
+                // If a webhook call fails, the invoice is still marked and will not be retried.
+                // This avoids duplicate notifications on transient errors at the cost of
+                // potentially missing one delivery. Change order here if at-least-once is preferred.
                 _invoiceCache.MarkAsNotified(profileKey, toNotify);
                 string? slackUrl = profilePrefs?.SlackWebhookUrl;
                 string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
@@ -946,7 +960,7 @@ public class GuiCommand : IWithConfigCommand
                 Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (HttpRequestException ex)
         {
             Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
@@ -974,7 +988,7 @@ public class GuiCommand : IWithConfigCommand
                 Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (HttpRequestException ex)
         {
             Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");

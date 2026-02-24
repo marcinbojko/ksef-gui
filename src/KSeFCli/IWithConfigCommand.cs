@@ -208,7 +208,7 @@ public abstract class IWithConfigCommand : IGlobalCommand
             EncryptedToken = encryptedTokenB64,
             AuthorizationPolicy = null
         };
-        SignatureResponse signature = await ksefClient.SubmitKsefTokenAuthRequestAsync(request, new CancellationToken()).ConfigureAwait(false);
+        SignatureResponse signature = await ksefClient.SubmitKsefTokenAuthRequestAsync(request, cancellationToken).ConfigureAwait(false);
         Log.LogInformation("4. Checking authentication status");
         DateTime startTime = DateTime.UtcNow;
         TimeSpan timeout = TimeSpan.FromMinutes(2);

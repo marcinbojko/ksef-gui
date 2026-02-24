@@ -186,6 +186,7 @@ internal sealed class InvoiceCache
     /// </summary>
     public HashSet<string> LoadNotifiedKsefNumbers(string profileKey)
     {
+        PruneNotificationSent();
         using SqliteConnection conn = Open();
         using SqliteCommand cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT ksef_number FROM notification_sent WHERE profile_key = @key";
@@ -232,6 +233,25 @@ internal sealed class InvoiceCache
         {
             Log.LogDebug($"[notif-sent] Marked {inserted} invoice(s) as notified for profile key {profileKey[..Math.Min(24, profileKey.Length)]}…");
         }
+    }
+
+    /// <summary>
+    /// Deletes notification_sent rows older than <paramref name="retentionDays"/> days.
+    /// Call periodically (e.g. at startup or each refresh cycle) to keep the table bounded.
+    /// </summary>
+    public int PruneNotificationSent(int retentionDays = 90)
+    {
+        string cutoff = DateTime.UtcNow.AddDays(-retentionDays).ToString("o");
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM notification_sent WHERE sent_at < @cutoff";
+        cmd.Parameters.AddWithValue("@cutoff", cutoff);
+        int deleted = cmd.ExecuteNonQuery();
+        if (deleted > 0)
+        {
+            Log.LogInformation($"[notif-sent] Pruned {deleted} row(s) older than {retentionDays} days.");
+        }
+        return deleted;
     }
 
     private SqliteConnection Open()
