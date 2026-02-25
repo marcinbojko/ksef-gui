@@ -287,7 +287,7 @@ public class GuiCommand : IWithConfigCommand
                 smtpPort = prefs.SmtpPort,
                 smtpSecurity = prefs.SmtpSecurity,
                 smtpUser = prefs.SmtpUser,
-                smtpPassword = prefs.SmtpPassword,
+                hasSmtpPassword = !string.IsNullOrEmpty(prefs.SmtpPassword),
                 smtpFrom = prefs.SmtpFrom,
                 setupRequired = _setupRequired,
             });
@@ -659,7 +659,7 @@ public class GuiCommand : IWithConfigCommand
                 await Task.WhenAll(tasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { throw; }
-            catch { /* individual task faults examined below */ }
+            catch (AggregateException) { /* individual task faults examined below */ }
             List<string> okChannels = tasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
             List<string> failedChannels = tasks.Where(t => t.Task.IsFaulted || (t.Task.IsCompletedSuccessfully && !t.Task.Result)).Select(t => t.Name).ToList();
             if (failedChannels.Count == 0)
@@ -694,7 +694,7 @@ public class GuiCommand : IWithConfigCommand
                 return "Brak skonfigurowanego serwera SMTP. Zapisz ustawienia i spróbuj ponownie.";
             }
 
-            Log.LogInformation($"[test-email] Sending test to '{toEmail}' via {prefs.SmtpHost}:{prefs.SmtpPort ?? 587} ({prefs.SmtpSecurity ?? "StartTls"})...");
+            Log.LogInformation($"[test-email] Sending test to '{MaskEmail(toEmail)}' via {prefs.SmtpHost}:{prefs.SmtpPort ?? 587} ({prefs.SmtpSecurity ?? "StartTls"})...");
             await SendEmailNotificationAsync(toEmail, "test", 1, prefs, ct, throwOnError: true).ConfigureAwait(false);
             return $"Testowy e-mail wysłany do: {toEmail}";
         };
@@ -1055,6 +1055,11 @@ public class GuiCommand : IWithConfigCommand
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException ex) when (!throwOnHttpError)
+        {
+            Log.LogWarning($"[slack-notify] Timeout for profile '{profileName}': {ex.Message}");
+            return false;
+        }
         catch (HttpRequestException ex) when (!throwOnHttpError)
         {
             Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
@@ -1091,11 +1096,28 @@ public class GuiCommand : IWithConfigCommand
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException ex) when (!throwOnHttpError)
+        {
+            Log.LogWarning($"[teams-notify] Timeout for profile '{profileName}': {ex.Message}");
+            return false;
+        }
         catch (HttpRequestException ex) when (!throwOnHttpError)
         {
             Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>Masks the local part of an e-mail address for safe logging (e.g. "j***e@example.com").</summary>
+    private static string MaskEmail(string email)
+    {
+        int at = email.IndexOf('@');
+        if (at <= 0) return "***";
+        string local = email[..at];
+        string domain = email[at..];
+        return local.Length <= 2
+            ? new string('*', local.Length) + domain
+            : local[0] + new string('*', local.Length - 2) + local[^1] + domain;
     }
 
     private async Task<bool> SendEmailNotificationAsync(
@@ -1172,7 +1194,7 @@ public class GuiCommand : IWithConfigCommand
             string body = $"Znaleziono {newCount} nowych faktur dla profilu \"{profileName}\".";
             using MailMessage msg = new MailMessage(from, toEmail, subject, body);
             await smtp.SendMailAsync(msg, deadline).ConfigureAwait(false);
-            Log.LogInformation($"[email-notify] Sent to '{toEmail}' for profile '{profileName}': {newCount} invoice(s)");
+            Log.LogInformation($"[email-notify] Sent to '{MaskEmail(toEmail)}' for profile '{profileName}': {newCount} invoice(s)");
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

@@ -986,7 +986,6 @@ body.dark .pref-label{color:#aaa}
           <span class="pref-label">Protokół</span>
           <select id="smtpSecurity" onchange="onSmtpSecurityChange()" style="flex:1">
             <option value="StartTls">STARTTLS (port 587)</option>
-            <option value="Ssl">SSL/TLS (port 465)</option>
             <option value="None">Brak szyfrowania (port 25)</option>
           </select>
         </div>
@@ -1212,7 +1211,8 @@ async function loadPrefs() {
       $('smtpPort').value = p.smtpPort || 587;
       $('smtpSecurity').value = p.smtpSecurity || 'StartTls';
       $('smtpUser').value = p.smtpUser || '';
-      $('smtpPassword').value = p.smtpPassword || '';
+      $('smtpPassword').value = '';
+      $('smtpPassword').placeholder = p.hasSmtpPassword ? '(hasło jest ustawione)' : '';
       $('smtpFrom').value = p.smtpFrom || '';
       startAutoRefresh(parseInt($('autoRefreshMinutes').value) || 0);
       if (p.profileName) $('profileNameLabel').textContent = '(' + p.profileName + ')';
@@ -1402,7 +1402,7 @@ function switchPrefsTab(name, btn) {
   btn.classList.add('active');
 }
 
-const smtpDefaultPorts = { StartTls: 587, Ssl: 465, None: 25 };
+const smtpDefaultPorts = { StartTls: 587, None: 25 };
 function onSmtpSecurityChange() {
   const sel = $('smtpSecurity');
   const portEl = $('smtpPort');

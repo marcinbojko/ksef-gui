@@ -66,15 +66,20 @@ internal sealed class InvoiceCache
         notifCmd.ExecuteNonQuery();
 
         // Schema migration: add channel columns to pre-existing databases.
+        // Pre-check via PRAGMA so we only run ALTER when the column is truly absent,
+        // avoiding a broad catch that would hide real DB errors (locking, corruption, etc.).
         foreach (string col in new[] { "channels_ok", "channels_failed" })
         {
-            try
+            using SqliteCommand pragmaCmd = conn.CreateCommand();
+            pragmaCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('notification_sent') WHERE name = @col";
+            pragmaCmd.Parameters.AddWithValue("@col", col);
+            long exists = (long)(pragmaCmd.ExecuteScalar() ?? 0L);
+            if (exists == 0)
             {
                 using SqliteCommand alter = conn.CreateCommand();
                 alter.CommandText = $"ALTER TABLE notification_sent ADD COLUMN {col} TEXT";
                 alter.ExecuteNonQuery();
             }
-            catch (SqliteException) { /* column already exists — safe to ignore */ }
         }
 
         // Log per-profile row summary for diagnostics
