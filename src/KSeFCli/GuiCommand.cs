@@ -1112,7 +1112,7 @@ public class GuiCommand : IWithConfigCommand
     private static string MaskEmail(string email)
     {
         int at = email.IndexOf('@');
-        if (at <= 0) return "***";
+        if (at <= 0) { return "***"; }
         string local = email[..at];
         string domain = email[at..];
         return local.Length <= 2
