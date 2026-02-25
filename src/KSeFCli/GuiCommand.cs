@@ -640,15 +640,15 @@ public class GuiCommand : IWithConfigCommand
             List<(string Name, Task<bool> Task)> tasks = [];
             if (!string.IsNullOrEmpty(slackUrl))
             {
-                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct, throwOnHttpError: true)));
+                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct, throwOnHttpError: false)));
             }
             if (!string.IsNullOrEmpty(teamsUrl))
             {
-                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct, throwOnHttpError: true)));
+                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct, throwOnHttpError: false)));
             }
             if (!string.IsNullOrEmpty(emailTo))
             {
-                tasks.Add(("Email", SendEmailNotificationAsync(emailTo, profileName, 3, prefs, ct, throwOnError: true)));
+                tasks.Add(("Email", SendEmailNotificationAsync(emailTo, profileName, 3, prefs, ct, throwOnError: false)));
             }
             if (tasks.Count == 0)
             {
