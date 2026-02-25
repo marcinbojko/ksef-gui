@@ -61,6 +61,11 @@ internal sealed class WebProgressServer : IDisposable
     /// Returns empty string on success or a description of what was sent.</summary>
     public Func<string, CancellationToken, Task<string>>? OnTestNotification { get; set; }
 
+    /// <summary>Called when user triggers a test email from the Email preferences tab.
+    /// Receives the recipient address, sends a test message using saved SMTP settings.
+    /// Returns a result message string.</summary>
+    public Func<string, CancellationToken, Task<string>>? OnTestEmail { get; set; }
+
     public bool Lan { get; }
 
     /// <summary>
@@ -442,6 +447,18 @@ internal sealed class WebProgressServer : IDisposable
                 string result = OnTestNotification != null
                     ? await OnTestNotification(body, ct).ConfigureAwait(false)
                     : "";
+                return JsonSerializer.Serialize(new { ok = true, message = result });
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/test-email" && method == "POST")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                using StreamReader reader2 = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await reader2.ReadToEndAsync(ct).ConfigureAwait(false);
+                string result = OnTestEmail != null
+                    ? await OnTestEmail(body, ct).ConfigureAwait(false)
+                    : "Brak obsługi testu e-mail.";
                 return JsonSerializer.Serialize(new { ok = true, message = result });
             }).ConfigureAwait(false);
         }
@@ -876,6 +893,7 @@ body.dark .pref-label{color:#aaa}
       <button class="prefs-tab active" id="ptab-general" onclick="switchPrefsTab('general',this)">Ogólne</button>
       <button class="prefs-tab" id="ptab-export" onclick="switchPrefsTab('export',this)">Eksport</button>
       <button class="prefs-tab" id="ptab-network" onclick="switchPrefsTab('network',this)">Sieć</button>
+      <button class="prefs-tab" id="ptab-email" onclick="switchPrefsTab('email',this)">Email</button>
       <button class="prefs-tab" id="ptab-appearance" onclick="switchPrefsTab('appearance',this)">Wygląd</button>
     </div>
     <div style="overflow-y:auto;flex:1;padding:.6rem 1rem">
@@ -957,6 +975,46 @@ body.dark .pref-label{color:#aaa}
             <option value="forest">Zielony</option>
             <option value="slate">Szary</option>
           </select>
+        </div>
+      </div>
+      <div class="prefs-pane" id="pane-email" style="display:none">
+        <div class="pref-row">
+          <span class="pref-label">Serwer SMTP</span>
+          <input type="text" id="smtpHost" placeholder="smtp.gmail.com" style="flex:1">
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Protokół</span>
+          <select id="smtpSecurity" onchange="onSmtpSecurityChange()" style="flex:1">
+            <option value="StartTls">STARTTLS (port 587)</option>
+            <option value="None">Brak szyfrowania (port 25)</option>
+          </select>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Port</span>
+          <input type="number" id="smtpPort" placeholder="587" min="1" max="65535" style="width:6rem">
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Użytkownik</span>
+          <input type="text" id="smtpUser" placeholder="user@example.com" autocomplete="off" style="flex:1">
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Hasło</span>
+          <input type="password" id="smtpPassword" autocomplete="new-password" style="flex:1">
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Nadawca (From)</span>
+          <input type="text" id="smtpFrom" placeholder="KSeFCli &lt;noreply@example.com&gt;" style="flex:1">
+        </div>
+        <div class="pref-row" style="border-top:2px solid #e0e0e0;margin-top:.5rem;padding-top:.75rem">
+          <span class="pref-label">Testuj wysyłkę</span>
+          <div style="display:flex;gap:.5rem;flex:1;align-items:center">
+            <input type="email" id="smtpTestTo" placeholder="odbiorca@example.com" style="flex:1">
+            <button class="btn-sm btn-prefs" id="btnTestEmail" onclick="sendTestEmail()">&#9993; Wyślij test</button>
+          </div>
+        </div>
+        <div id="smtpTestResult" style="display:none;font-size:.8rem;padding:.3rem 0 0 0"></div>
+        <div class="prefs-panel" style="margin-top:.5rem;font-size:.8rem;color:#666">
+          Adres e-mail odbiorcy dla powiadomień konfiguruje się w <strong>Konfiguracja → karta profilu</strong>.
         </div>
       </div>
       <div class="prefs-pane" id="pane-appearance" style="display:none">
@@ -1149,6 +1207,13 @@ async function loadPrefs() {
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
       if (p.displayLimit) $('displayLimit').value = p.displayLimit;
+      $('smtpHost').value = p.smtpHost || '';
+      $('smtpPort').value = p.smtpPort || 587;
+      $('smtpSecurity').value = p.smtpSecurity || 'StartTls';
+      $('smtpUser').value = p.smtpUser || '';
+      $('smtpPassword').value = '';
+      $('smtpPassword').placeholder = p.hasSmtpPassword ? '(hasło jest ustawione)' : '';
+      $('smtpFrom').value = p.smtpFrom || '';
       startAutoRefresh(parseInt($('autoRefreshMinutes').value) || 0);
       if (p.profileName) $('profileNameLabel').textContent = '(' + p.profileName + ')';
       // Populate profile dropdown
@@ -1258,7 +1323,13 @@ async function savePrefs() {
     listenOnAll: $('listenAll').checked,
     autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0,
     jsonConsoleLog: $('jsonConsoleLog').checked,
-    displayLimit: parseInt($('displayLimit').value) || 50
+    displayLimit: parseInt($('displayLimit').value) || 50,
+    smtpHost: $('smtpHost').value || null,
+    smtpPort: parseInt($('smtpPort').value) || null,
+    smtpSecurity: $('smtpSecurity').value || 'StartTls',
+    smtpUser: $('smtpUser').value || null,
+    smtpPassword: $('smtpPassword').value || null,
+    smtpFrom: $('smtpFrom').value || null
   };
   const mins = prefs.autoRefreshMinutes;
   const resp = await fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) });
@@ -1329,6 +1400,14 @@ function switchPrefsTab(name, btn) {
   document.querySelectorAll('.prefs-tab').forEach(t => t.classList.remove('active'));
   $('pane-' + name).style.display = 'block';
   btn.classList.add('active');
+}
+
+const smtpDefaultPorts = { StartTls: 587, None: 25 };
+function onSmtpSecurityChange() {
+  const sel = $('smtpSecurity');
+  const portEl = $('smtpPort');
+  if (!sel || !portEl) return;
+  portEl.value = smtpDefaultPorts[sel.value] ?? 587;
 }
 
 // ---- Config editor ----
@@ -1447,6 +1526,10 @@ function renderProfileCard(p, i) {
     '<label>Teams Webhook URL (opcjonalnie)</label>' +
     '<input type="url" id="cfgTeamsWebhook' + i + '" value="' + esc(p.teamsWebhookUrl||'') + '" placeholder="https://...webhook.office.com/...">' +
     '</div>' +
+    '<div class="cfg-field">' +
+    '<label>E-mail powiadomień (opcjonalnie)</label>' +
+    '<input type="email" id="cfgNotifEmail' + i + '" value="' + esc(p.notificationEmail||'') + '" placeholder="odbiorca@example.com">' +
+    '</div>' +
     '<div class="cfg-card-footer">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
@@ -1526,6 +1609,7 @@ function deleteProfile(i) {
       includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + j)?.checked ?? cfgData.profiles[j].includeInAutoRefresh,
       slackWebhookUrl: document.getElementById('cfgSlackWebhook' + j)?.value || null,
       teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + j)?.value || null,
+      notificationEmail: document.getElementById('cfgNotifEmail' + j)?.value || null,
     };
   }
   // If deleting the active profile, reassign to the nearest remaining one
@@ -1560,6 +1644,7 @@ async function saveConfigEditor() {
       includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + i)?.checked || false,
       slackWebhookUrl: document.getElementById('cfgSlackWebhook' + i)?.value || null,
       teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + i)?.value || null,
+      notificationEmail: document.getElementById('cfgNotifEmail' + i)?.value || null,
     });
   }
   const payload = { activeProfile, configFilePath: cfgData.configFilePath, profiles };
@@ -2075,6 +2160,34 @@ async function sendSampleNotification() {
       if (data.message) showNewInvoiceToast('Webhook: ' + data.message);
     }
   } catch (e) { /* ignore webhook test errors */ }
+}
+
+async function sendTestEmail() {
+  const toEmail = $('smtpTestTo')?.value?.trim();
+  const resultEl = $('smtpTestResult');
+  const btn = $('btnTestEmail');
+  if (!toEmail) {
+    if (resultEl) { resultEl.textContent = 'Wpisz adres e-mail odbiorcy.'; resultEl.style.color = '#c62828'; resultEl.style.display = ''; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (resultEl) { resultEl.textContent = 'Wysyłanie...'; resultEl.style.color = '#666'; resultEl.style.display = ''; }
+  try {
+    // Save SMTP settings first so the server uses the current form values
+    await savePrefs();
+    const res = await fetch('/test-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toEmail }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (resultEl) { resultEl.textContent = data.message || 'Wysłano.'; resultEl.style.color = '#2e7d32'; resultEl.style.display = ''; }
+  } catch (err) {
+    if (resultEl) { resultEl.textContent = 'Błąd: ' + (err?.message || 'nieznany błąd'); resultEl.style.color = '#c62828'; resultEl.style.display = ''; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function doDownload(selOnly) {
