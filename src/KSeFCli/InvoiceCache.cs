@@ -55,13 +55,27 @@ internal sealed class InvoiceCache
         using SqliteCommand notifCmd = conn.CreateCommand();
         notifCmd.CommandText = """
             CREATE TABLE IF NOT EXISTS notification_sent (
-                profile_key TEXT NOT NULL,
-                ksef_number TEXT NOT NULL,
-                sent_at     TEXT NOT NULL,
+                profile_key    TEXT NOT NULL,
+                ksef_number    TEXT NOT NULL,
+                sent_at        TEXT NOT NULL,
+                channels_ok    TEXT,
+                channels_failed TEXT,
                 PRIMARY KEY (profile_key, ksef_number)
             )
             """;
         notifCmd.ExecuteNonQuery();
+
+        // Schema migration: add channel columns to pre-existing databases.
+        foreach (string col in new[] { "channels_ok", "channels_failed" })
+        {
+            try
+            {
+                using SqliteCommand alter = conn.CreateCommand();
+                alter.CommandText = $"ALTER TABLE notification_sent ADD COLUMN {col} TEXT";
+                alter.ExecuteNonQuery();
+            }
+            catch (SqliteException) { /* column already exists — safe to ignore */ }
+        }
 
         // Log per-profile row summary for diagnostics
         using SqliteCommand statsCmd = conn.CreateCommand();
@@ -233,6 +247,44 @@ internal sealed class InvoiceCache
         {
             Log.LogDebug($"[notif-sent] Marked {inserted} invoice(s) as notified for profile key {profileKey[..Math.Min(24, profileKey.Length)]}…");
         }
+    }
+
+    /// <summary>
+    /// Updates the channel delivery outcome columns on already-inserted notification_sent rows.
+    /// Call this after firing notification channels to record which succeeded and which failed.
+    /// Rows that don't exist yet (e.g. baseline seeding) are silently skipped.
+    /// </summary>
+    public void UpdateNotifiedChannels(string profileKey, IEnumerable<string> ksefNumbers,
+        IReadOnlyList<string> channelsOk, IReadOnlyList<string> channelsFailed)
+    {
+        string? ok = channelsOk.Count > 0 ? string.Join(",", channelsOk) : null;
+        string? failed = channelsFailed.Count > 0 ? string.Join(",", channelsFailed) : null;
+        using SqliteConnection conn = Open();
+        using SqliteTransaction tx = conn.BeginTransaction();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            UPDATE notification_sent
+            SET channels_ok = @ok, channels_failed = @failed
+            WHERE profile_key = @key AND ksef_number = @ksef
+            """;
+        SqliteParameter pKey = cmd.Parameters.Add("@key", SqliteType.Text);
+        SqliteParameter pKsef = cmd.Parameters.Add("@ksef", SqliteType.Text);
+        SqliteParameter pOk = cmd.Parameters.Add("@ok", SqliteType.Text);
+        SqliteParameter pFailed = cmd.Parameters.Add("@failed", SqliteType.Text);
+        pKey.Value = profileKey;
+        pOk.Value = ok is not null ? (object)ok : DBNull.Value;
+        pFailed.Value = failed is not null ? (object)failed : DBNull.Value;
+        cmd.Prepare();
+        foreach (string ksefNumber in ksefNumbers)
+        {
+            pKsef.Value = ksefNumber;
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+        string summary = ok is not null ? $"ok=[{ok}]" : "ok=[]";
+        if (failed is not null) { summary += $" failed=[{failed}]"; }
+        Log.LogInformation($"[notif-sent] Channel outcomes recorded for profile key {profileKey[..Math.Min(24, profileKey.Length)]}… — {summary}");
     }
 
     /// <summary>

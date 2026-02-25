@@ -1,4 +1,7 @@
 using System.ComponentModel;
+using System.Net;
+using System.Net.Mail;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -53,7 +56,8 @@ public class GuiCommand : IWithConfigCommand
     private record ProfilePrefs(
         bool? IncludeInAutoRefresh = null,
         string? SlackWebhookUrl = null,
-        string? TeamsWebhookUrl = null);
+        string? TeamsWebhookUrl = null,
+        string? NotificationEmail = null);
 
     private record GuiPrefs(
         string? OutputDir = null,
@@ -72,6 +76,12 @@ public class GuiCommand : IWithConfigCommand
         int? AutoRefreshMinutes = null,
         bool? JsonConsoleLog = null,
         int? DisplayLimit = null,
+        string? SmtpHost = null,
+        int? SmtpPort = null,
+        string? SmtpSecurity = null,
+        string? SmtpUser = null,
+        string? SmtpPassword = null,
+        string? SmtpFrom = null,
         Dictionary<string, ProfilePrefs>? ProfilePrefs = null);
 
     private record ProfileEditorData(
@@ -87,7 +97,8 @@ public class GuiCommand : IWithConfigCommand
         string? CertPasswordFile,
         bool IncludeInAutoRefresh = true,
         string? SlackWebhookUrl = null,
-        string? TeamsWebhookUrl = null);
+        string? TeamsWebhookUrl = null,
+        string? NotificationEmail = null);
 
     private record ConfigEditorData(
         string ActiveProfile,
@@ -272,6 +283,12 @@ public class GuiCommand : IWithConfigCommand
                 jsonConsoleLog = prefs.JsonConsoleLog ?? false,
                 displayLimit = prefs.DisplayLimit ?? 50,
                 profilePrefs = prefs.ProfilePrefs ?? new Dictionary<string, ProfilePrefs>(),
+                smtpHost = prefs.SmtpHost,
+                smtpPort = prefs.SmtpPort,
+                smtpSecurity = prefs.SmtpSecurity,
+                smtpUser = prefs.SmtpUser,
+                smtpPassword = prefs.SmtpPassword,
+                smtpFrom = prefs.SmtpFrom,
                 setupRequired = _setupRequired,
             });
         };
@@ -284,7 +301,7 @@ public class GuiCommand : IWithConfigCommand
             Log.LogDebug($"SavePrefs: selectedProfile={newProfile ?? "(null)"}, activeProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
             // Load existing prefs first so we can preserve fields not sent by JS (e.g. ProfilePrefs with webhook URLs).
             GuiPrefs existingPrefs = LoadPrefs();
-            SavePrefs(new GuiPrefs(
+            GuiPrefs newPrefs = new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
                 ExportXml: root.TryGetProperty("exportXml", out JsonElement ex) ? ex.GetBoolean() : null,
                 ExportJson: root.TryGetProperty("exportJson", out JsonElement ej) ? ej.GetBoolean() : null,
@@ -301,10 +318,22 @@ public class GuiCommand : IWithConfigCommand
                 AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
                 JsonConsoleLog: jsonConsoleLog,
                 DisplayLimit: root.TryGetProperty("displayLimit", out JsonElement dl) ? dl.GetInt32() : null,
+                SmtpHost: root.TryGetProperty("smtpHost", out JsonElement smh) ? smh.GetString() : null,
+                SmtpPort: root.TryGetProperty("smtpPort", out JsonElement smpo) && smpo.TryGetInt32(out int smpoVal) ? smpoVal : (int?)null,
+                SmtpSecurity: root.TryGetProperty("smtpSecurity", out JsonElement smse) ? smse.GetString() : null,
+                SmtpUser: root.TryGetProperty("smtpUser", out JsonElement smui) ? smui.GetString() : null,
+                // Preserve existing password if JS sends null/empty (password field may be blank when re-opening prefs).
+                SmtpPassword: root.TryGetProperty("smtpPassword", out JsonElement smpw)
+                    && smpw.ValueKind != JsonValueKind.Null
+                    && !string.IsNullOrEmpty(smpw.GetString())
+                    ? smpw.GetString()
+                    : existingPrefs.SmtpPassword,
+                SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr) ? smfr.GetString() : null,
                 // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
                 // so this prevents webhook URLs from being wiped on every prefs save.
-                ProfilePrefs: existingPrefs.ProfilePrefs
-            ));
+                ProfilePrefs: existingPrefs.ProfilePrefs);
+            SavePrefs(newPrefs);
+            Log.LogInformation($"[prefs] Saved — autoRefresh={newPrefs.AutoRefreshMinutes ?? 0}min, darkMode={newPrefs.DarkMode ?? false}, smtpHost={newPrefs.SmtpHost ?? "(none)"}");
             Log.ConfigureLogging(Verbose, Quiet, jsonConsoleLog);
             if (!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile)
             {
@@ -467,7 +496,8 @@ public class GuiCommand : IWithConfigCommand
                     CertPasswordFile: kvp.Value.Certificate?.Password_File,
                     IncludeInAutoRefresh: !ppMap.TryGetValue(kvp.Key, out ProfilePrefs? pp) || pp.IncludeInAutoRefresh != false,
                     SlackWebhookUrl: pp?.SlackWebhookUrl,
-                    TeamsWebhookUrl: pp?.TeamsWebhookUrl))
+                    TeamsWebhookUrl: pp?.TeamsWebhookUrl,
+                    NotificationEmail: pp?.NotificationEmail))
                 .ToArray();
             return Task.FromResult<object>(new ConfigEditorData(
                 ActiveProfile: rawConfig.ActiveProfile,
@@ -552,7 +582,8 @@ public class GuiCommand : IWithConfigCommand
                     updatedPpMap[p.Name] = new ProfilePrefs(
                         IncludeInAutoRefresh: p.IncludeInAutoRefresh,
                         SlackWebhookUrl: string.IsNullOrWhiteSpace(p.SlackWebhookUrl) ? null : p.SlackWebhookUrl,
-                        TeamsWebhookUrl: string.IsNullOrWhiteSpace(p.TeamsWebhookUrl) ? null : p.TeamsWebhookUrl);
+                        TeamsWebhookUrl: string.IsNullOrWhiteSpace(p.TeamsWebhookUrl) ? null : p.TeamsWebhookUrl,
+                        NotificationEmail: string.IsNullOrWhiteSpace(p.NotificationEmail) ? null : p.NotificationEmail);
                 }
                 // Remove entries for profiles that no longer exist
                 foreach (string stale in updatedPpMap.Keys.Except(data.Profiles.Select(p => p.Name)).ToList())
@@ -605,7 +636,8 @@ public class GuiCommand : IWithConfigCommand
             ProfilePrefs? pp = prefs.ProfilePrefs?.GetValueOrDefault(profileName);
             string? slackUrl = pp?.SlackWebhookUrl;
             string? teamsUrl = pp?.TeamsWebhookUrl;
-            List<(string Name, Task Task)> tasks = [];
+            string? emailTo = pp?.NotificationEmail;
+            List<(string Name, Task<bool> Task)> tasks = [];
             if (!string.IsNullOrEmpty(slackUrl))
             {
                 tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct, throwOnHttpError: true)));
@@ -614,28 +646,57 @@ public class GuiCommand : IWithConfigCommand
             {
                 tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct, throwOnHttpError: true)));
             }
+            if (!string.IsNullOrEmpty(emailTo))
+            {
+                tasks.Add(("Email", SendEmailNotificationAsync(emailTo, profileName, 3, prefs, ct, throwOnError: true)));
+            }
             if (tasks.Count == 0)
             {
-                return "Brak skonfigurowanych webhooków dla tego profilu.";
+                return "Brak skonfigurowanych kanałów powiadomień dla tego profilu.";
             }
             try
             {
-                await Task.WhenAll(tasks.Select(t => t.Task)).ConfigureAwait(false);
-                return $"Wysłano test do {tasks.Count} kanał(ów).";
+                await Task.WhenAll(tasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
+            catch (OperationCanceledException) { throw; }
+            catch { /* individual task faults examined below */ }
+            List<string> okChannels = tasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
+            List<string> failedChannels = tasks.Where(t => t.Task.IsFaulted || (t.Task.IsCompletedSuccessfully && !t.Task.Result)).Select(t => t.Name).ToList();
+            if (failedChannels.Count == 0)
             {
-                throw;
+                return $"Wysłano test do {okChannels.Count} kanał(ów): {string.Join(", ", okChannels)}.";
             }
-            catch
+            if (okChannels.Count > 0)
             {
-                List<string> failed = tasks.Where(t => t.Task.IsFaulted || t.Task.IsCanceled).Select(t => t.Name).ToList();
-                int ok = tasks.Count - failed.Count;
-                string failMsg = string.Join(", ", failed);
-                return ok > 0
-                    ? $"Wysłano do {ok} kanał(ów), błąd w: {failMsg}."
-                    : $"Błąd wysyłki do: {failMsg}.";
+                return $"Wysłano do: {string.Join(", ", okChannels)}. Błąd w: {string.Join(", ", failedChannels)}.";
             }
+            return $"Błąd wysyłki do: {string.Join(", ", failedChannels)}.";
+        };
+
+        server.OnTestEmail = async (body, ct) =>
+        {
+            string toEmail;
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(body);
+                toEmail = doc.RootElement.TryGetProperty("toEmail", out JsonElement te) ? te.GetString() ?? "" : "";
+            }
+            catch (JsonException) { toEmail = ""; }
+
+            if (string.IsNullOrWhiteSpace(toEmail))
+            {
+                return "Podaj adres e-mail odbiorcy.";
+            }
+
+            GuiPrefs prefs = LoadPrefs();
+            if (string.IsNullOrWhiteSpace(prefs.SmtpHost))
+            {
+                return "Brak skonfigurowanego serwera SMTP. Zapisz ustawienia i spróbuj ponownie.";
+            }
+
+            Log.LogInformation($"[test-email] Sending test to '{toEmail}' via {prefs.SmtpHost}:{prefs.SmtpPort ?? 587} ({prefs.SmtpSecurity ?? "StartTls"})...");
+            await SendEmailNotificationAsync(toEmail, "test", 1, prefs, ct, throwOnError: true).ConfigureAwait(false);
+            return $"Testowy e-mail wysłany do: {toEmail}";
         };
 
         server.Start(cancellationToken);
@@ -872,7 +933,7 @@ public class GuiCommand : IWithConfigCommand
 
                 try
                 {
-                    await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, ct).ConfigureAwait(false);
+                    await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, prefs, ct).ConfigureAwait(false);
                 }
                 catch (KsefRateLimitException ex)
                 {
@@ -886,7 +947,7 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, ProfilePrefs? profilePrefs, CancellationToken ct)
+    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, ProfilePrefs? profilePrefs, GuiPrefs prefs, CancellationToken ct)
     {
         Log.LogInformation($"[bg-refresh] Profile '{name}' (NIP {profile.Nip}, env {profile.Environment}) starting");
         using IServiceScope scope = GetScope(profile);
@@ -948,24 +1009,32 @@ public class GuiCommand : IWithConfigCommand
                 _invoiceCache.MarkAsNotified(profileKey, toNotify);
                 string? slackUrl = profilePrefs?.SlackWebhookUrl;
                 string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
-                List<Task> webhookTasks = [];
+                string? emailTo = profilePrefs?.NotificationEmail;
+                List<(string Name, Task<bool> Task)> webhookTasks = [];
                 if (!string.IsNullOrEmpty(slackUrl))
                 {
-                    webhookTasks.Add(SendSlackNotificationAsync(slackUrl, name, toNotify.Count, ct));
+                    webhookTasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, name, toNotify.Count, ct)));
                 }
                 if (!string.IsNullOrEmpty(teamsUrl))
                 {
-                    webhookTasks.Add(SendTeamsNotificationAsync(teamsUrl, name, toNotify.Count, ct));
+                    webhookTasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, name, toNotify.Count, ct)));
+                }
+                if (!string.IsNullOrEmpty(emailTo))
+                {
+                    webhookTasks.Add(("Email", SendEmailNotificationAsync(emailTo, name, toNotify.Count, prefs, ct)));
                 }
                 if (webhookTasks.Count > 0)
                 {
-                    await Task.WhenAll(webhookTasks).ConfigureAwait(false);
+                    await Task.WhenAll(webhookTasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
+                    List<string> channelsOk = webhookTasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
+                    List<string> channelsFailed = webhookTasks.Where(t => !t.Task.IsCompletedSuccessfully || !t.Task.Result).Select(t => t.Name).ToList();
+                    _invoiceCache.UpdateNotifiedChannels(profileKey, toNotify, channelsOk, channelsFailed);
                 }
             }
         }
     }
 
-    private static async Task SendSlackNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
+    private static async Task<bool> SendSlackNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
     {
         string text = $"KSeF: {newCount} nowych faktur dla profilu {profileName}";
         string json = JsonSerializer.Serialize(new { text });
@@ -975,25 +1044,25 @@ public class GuiCommand : IWithConfigCommand
             using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
+                string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 if (throwOnHttpError)
                 {
-                    string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    throw new HttpRequestException(
-                        $"HTTP {(int)resp.StatusCode}: {body.Trim()}",
-                        null,
-                        resp.StatusCode);
+                    throw new HttpRequestException($"HTTP {(int)resp.StatusCode}: {body.Trim()}", null, resp.StatusCode);
                 }
                 Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
+                return false;
             }
+            return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (HttpRequestException ex) when (!throwOnHttpError)
         {
             Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
+            return false;
         }
     }
 
-    private static async Task SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
+    private static async Task<bool> SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
     {
         Dictionary<string, object> payload = new()
         {
@@ -1011,21 +1080,116 @@ public class GuiCommand : IWithConfigCommand
             using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
+                string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 if (throwOnHttpError)
                 {
-                    string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    throw new HttpRequestException(
-                        $"HTTP {(int)resp.StatusCode}: {body.Trim()}",
-                        null,
-                        resp.StatusCode);
+                    throw new HttpRequestException($"HTTP {(int)resp.StatusCode}: {body.Trim()}", null, resp.StatusCode);
                 }
                 Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
+                return false;
             }
+            return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (HttpRequestException ex) when (!throwOnHttpError)
         {
             Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task<bool> SendEmailNotificationAsync(
+        string toEmail, string profileName, int newCount, GuiPrefs prefs, CancellationToken ct, bool throwOnError = false)
+    {
+        string host = prefs.SmtpHost ?? "";
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            if (throwOnError) { throw new InvalidOperationException("Brak skonfigurowanego serwera SMTP."); }
+            Log.LogWarning($"[email-notify] SMTP host not configured, skipping for profile '{profileName}'");
+            return false;
+        }
+        int port = prefs.SmtpPort ?? 587;
+
+        // System.Net.Mail.SmtpClient only supports STARTTLS (explicit TLS, typically port 587).
+        // It does NOT support implicit SSL/SMTPS (port 465). Fail fast with a clear message.
+        if (string.Equals(prefs.SmtpSecurity, "Ssl", StringComparison.OrdinalIgnoreCase))
+        {
+            const string implicitSslMsg =
+                "System.Net.Mail nie obsługuje implicit SSL (port 465 / SMTPS). " +
+                "Zmień protokół na StartTls i port na 587, lub zainstaluj MailKit jako zamiennik.";
+            if (throwOnError) { throw new NotSupportedException(implicitSslMsg); }
+            Log.LogWarning($"[email-notify] Implicit SSL not supported — skipping for profile '{profileName}'. {implicitSslMsg}");
+            return false;
+        }
+
+        // SmtpClient.Timeout only covers socket read/write, not the TCP connect phase.
+        // Use a linked CancellationToken to enforce a hard wall-clock deadline for the entire call.
+        int timeoutMs = throwOnError ? 15_000 : 20_000;
+        using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(timeoutMs);
+        CancellationToken deadline = timeoutCts.Token;
+
+        // Phase 1: TCP pre-check (5 s sub-deadline) — distinguishes DNS/TCP from SMTP protocol errors.
+        Log.LogDebug($"[email-notify] Phase 1: TCP connect {host}:{port}…");
+        using CancellationTokenSource tcpCts = CancellationTokenSource.CreateLinkedTokenSource(deadline);
+        tcpCts.CancelAfter(5_000);
+        try
+        {
+            using TcpClient tcp = new TcpClient();
+            await tcp.ConnectAsync(host, port, tcpCts.Token).ConfigureAwait(false);
+            Log.LogDebug($"[email-notify] Phase 1: TCP OK — proceeding to SMTP handshake");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException)
+        {
+            string msg = $"Przekroczono limit czasu TCP dla {host}:{port} (5 s) — sprawdź adres serwera i port.";
+            if (throwOnError) { throw new TimeoutException(msg); }
+            Log.LogWarning($"[email-notify] TCP timeout for profile '{profileName}': {msg}");
+            return false;
+        }
+        catch (SocketException ex)
+        {
+            string msg = $"Nie można nawiązać połączenia TCP z {host}:{port} — {ex.Message} (SocketError: {ex.SocketErrorCode})";
+            if (throwOnError) { throw new InvalidOperationException(msg, ex); }
+            Log.LogWarning($"[email-notify] TCP error for profile '{profileName}': {msg}");
+            return false;
+        }
+
+        // Phase 2: SMTP handshake (TLS / EHLO / AUTH / DATA).
+        Log.LogDebug($"[email-notify] Phase 2: SMTP handshake {prefs.SmtpSecurity ?? "StartTls"} user={prefs.SmtpUser ?? "(none)"}…");
+        try
+        {
+            using SmtpClient smtp = new SmtpClient(host, port);
+            smtp.EnableSsl = prefs.SmtpSecurity != "None";
+            smtp.DeliveryMethod = SmtpDeliveryMethod.Network;
+            smtp.Timeout = timeoutMs;
+            if (!string.IsNullOrEmpty(prefs.SmtpUser))
+            {
+                smtp.Credentials = new NetworkCredential(prefs.SmtpUser, prefs.SmtpPassword ?? "");
+            }
+            string from = !string.IsNullOrWhiteSpace(prefs.SmtpFrom) ? prefs.SmtpFrom! : prefs.SmtpUser ?? "ksefcli@localhost";
+            string subject = $"KSeF: {newCount} nowych faktur dla profilu {profileName}";
+            string body = $"Znaleziono {newCount} nowych faktur dla profilu \"{profileName}\".";
+            using MailMessage msg = new MailMessage(from, toEmail, subject, body);
+            await smtp.SendMailAsync(msg, deadline).ConfigureAwait(false);
+            Log.LogInformation($"[email-notify] Sent to '{toEmail}' for profile '{profileName}': {newCount} invoice(s)");
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Deadline fired during SMTP handshake (TLS/EHLO/AUTH/DATA), not TCP — TCP already passed.
+            string msg = $"Przekroczono limit czasu podczas handshake SMTP z {host}:{port} ({timeoutMs / 1000} s) — sprawdź ustawienia TLS i dane logowania.";
+            if (throwOnError) { throw new TimeoutException(msg); }
+            Log.LogWarning($"[email-notify] SMTP timeout for profile '{profileName}': {msg}");
+            return false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            string msg = $"Błąd SMTP ({ex.GetType().Name}): {ex.Message}";
+            if (throwOnError) { throw new InvalidOperationException(msg, ex); }
+            Log.LogWarning($"[email-notify] SMTP error for profile '{profileName}': {ex.Message}");
+            return false;
         }
     }
 
