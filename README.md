@@ -34,7 +34,7 @@
 | 🌐 **GUI w przeglądarce** | Interfejs lokalny dostępny bez instalacji                                                 |
 | 📄 **Eksport PDF**        | Natywny renderer (QuestPDF) — bez Node.js, git ani zewnętrznych narzędzi                  |
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
-| 🔔 **Powiadomienia**      | Powiadomienia OS i webhooki Slack / Teams per profil                                      |
+| 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
 | 🌙 **Tryb ciemny**        | Trzy niezależne tryby: GUI, podgląd faktury, szczegóły                                    |
 | 🐳 **Docker**             | Gotowy `docker-compose` z Traefik i Ofelia                                                |
@@ -152,7 +152,7 @@ Token długoterminowy: portal KSeF → _Integracja → Tokeny_.
 
 ### 🔔 Powiadomienia
 
-Aplikacja obsługuje dwa kanały powiadomień o nowych fakturach, konfigurowane **per profil** w edytorze konfiguracji (przycisk ✎ Konfiguracja):
+Aplikacja obsługuje trzy kanały powiadomień o nowych fakturach, konfigurowane **per profil** w edytorze konfiguracji (przycisk ✎ Konfiguracja):
 
 #### Powiadomienia systemowe (OS)
 
@@ -181,6 +181,23 @@ https://xxx.webhook.office.com/webhookb2/...
 ```
 
 Wiadomość wysyłana jest jako **MessageCard** z tytułem i liczbą nowych faktur.
+
+#### E-mail (SMTP)
+
+Skonfiguruj serwer SMTP w **Preferencjach** (ikona ⚙ Preferencje):
+
+| Pole             | Opis                                                        | Domyślnie  |
+| ---------------- | ----------------------------------------------------------- | ---------- |
+| Serwer SMTP      | Adres serwera, np. `smtp.gmail.com`                         | —          |
+| Port             | Port SMTP                                                   | `587`      |
+| Zabezpieczenia   | `StartTLS` — STARTTLS (port 587); `Brak` — bez szyfrowania  | `StartTLS` |
+| Użytkownik       | Nazwa użytkownika / login                                   | —          |
+| Hasło            | Hasło SMTP lub hasło aplikacji                              | —          |
+| Adres nadawcy    | Nagłówek `From:` (gdy pusty — używany jest login)           | —          |
+
+Adres odbiorcy konfigurowany jest **osobno dla każdego profilu** w edytorze konfiguracji (pole **Adres e-mail powiadomień**).
+
+> **Uwaga:** Obsługiwany jest wyłącznie protokół STARTTLS (port 587). Implicit SSL (SMTPS, port 465) nie jest obsługiwany.
 
 #### Weryfikacja konfiguracji
 
@@ -279,7 +296,7 @@ PDF generowany **natywnie** przez [QuestPDF](https://www.questpdf.com/) — czys
 | 🌐 **Browser GUI**  | Local interface, no installation needed                              |
 | 📄 **PDF export**   | Native renderer (QuestPDF) — no Node.js, git, or external tools      |
 | 🔄 **Auto-refresh**    | Background search every N minutes; OS notifications for new invoices    |
-| 🔔 **Notifications**   | OS desktop notifications and Slack / Teams webhooks per profile         |
+| 🔔 **Notifications**   | OS desktop notifications, Slack / Teams webhooks, and e-mail (SMTP) per profile |
 | 💾 **SQLite cache**    | Search results stored locally; profile switching without re-fetching    |
 | 🌙 **Dark mode**       | Three independent modes: GUI, invoice preview, details panel            |
 | 🐳 **Docker**          | Ready-to-use `docker-compose` with Traefik and Ofelia                   |
@@ -397,7 +414,7 @@ Obtain a long-term token from the KSeF portal: _Integracja → Tokeny_.
 
 ### 🔔 Notifications
 
-The app supports two notification channels for new invoices, configured **per profile** in the configuration editor (✎ Configuration button):
+The app supports three notification channels for new invoices, configured **per profile** in the configuration editor (✎ Configuration button):
 
 #### OS (desktop) notifications
 
@@ -426,6 +443,23 @@ https://xxx.webhook.office.com/webhookb2/...
 ```
 
 The message is sent as a **MessageCard** with a title and invoice count.
+
+#### E-mail (SMTP)
+
+Configure the SMTP server in **Preferences** (⚙ Preferences icon):
+
+| Field         | Description                                               | Default    |
+| ------------- | --------------------------------------------------------- | ---------- |
+| SMTP Server   | Server address, e.g. `smtp.gmail.com`                     | —          |
+| Port          | SMTP port                                                 | `587`      |
+| Security      | `StartTLS` — STARTTLS (port 587); `None` — plain          | `StartTLS` |
+| Username      | SMTP username / login                                     | —          |
+| Password      | SMTP password or app password                             | —          |
+| From address  | `From:` header (uses username if empty)                   | —          |
+
+The recipient address is configured **per profile** in the configuration editor (**Notification e-mail** field).
+
+> **Note:** Only STARTTLS (port 587) is supported. Implicit SSL (SMTPS, port 465) is not supported.
 
 #### Testing the configuration
 
