@@ -1062,8 +1062,8 @@ public class GuiCommand : IWithConfigCommand
             };
             foreach (InvoiceSummary inv in invoices.Take(maxRows))
             {
-                string sellerNip = inv.Seller?.Nip ?? "—";
-                string sellerName = inv.Seller?.Name ?? "—";
+                string sellerNip = EscapeSlackMarkdown(inv.Seller?.Nip ?? "—");
+                string sellerName = EscapeSlackMarkdown(inv.Seller?.Name ?? "—");
                 blocks.Add(new
                 {
                     type = "section",
@@ -1206,6 +1206,12 @@ public class GuiCommand : IWithConfigCommand
     }
 
     /// <summary>Masks the local part of an e-mail address for safe logging (e.g. "j***e@example.com").</summary>
+    /// <summary>Escapes Slack mrkdwn special characters to prevent accidental formatting.</summary>
+    private static string EscapeSlackMarkdown(string text) =>
+        text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+            .Replace("*", "\\*").Replace("_", "\\_").Replace("~", "\\~")
+            .Replace("`", "\\`");
+
     private static string MaskEmail(string email)
     {
         int at = email.IndexOf('@');
@@ -1370,7 +1376,7 @@ public class GuiCommand : IWithConfigCommand
                 <span style="font-size:20px;font-weight:700;letter-spacing:-.3px">KSeF — Nowe faktury</span>
                 <span style="float:right;font-size:13px;opacity:.85;margin-top:4px">
             """);
-        sb.Append($"Profil: {profileName}");
+        sb.Append($"Profil: {WebUtility.HtmlEncode(profileName)}");
         sb.Append("""
                 </span>
               </td></tr>
@@ -1396,8 +1402,8 @@ public class GuiCommand : IWithConfigCommand
             foreach ((InvoiceSummary inv, int idx) in invoices.Take(maxRows).Select((inv, i) => (inv, i)))
             {
                 string rowBg = idx % 2 == 0 ? "#fff" : "#f9fafb";
-                string sellerName = inv.Seller?.Name ?? "—";
-                string sellerNip = inv.Seller?.Nip ?? "—";
+                string sellerName = WebUtility.HtmlEncode(inv.Seller?.Name ?? "—");
+                string sellerNip = WebUtility.HtmlEncode(inv.Seller?.Nip ?? "—");
                 sb.Append($"""
                     <tr style="background:{rowBg}">
                       <td style="border:1px solid #dde3ec;padding:7px 10px;white-space:nowrap">{inv.IssueDate:yyyy-MM-dd}</td>
