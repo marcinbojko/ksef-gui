@@ -57,7 +57,8 @@ public class GuiCommand : IWithConfigCommand
         bool? IncludeInAutoRefresh = null,
         string? SlackWebhookUrl = null,
         string? TeamsWebhookUrl = null,
-        string? NotificationEmail = null);
+        string? NotificationEmail = null,
+        bool? ExtendedNotifications = null);
 
     private record GuiPrefs(
         string? OutputDir = null,
@@ -98,7 +99,8 @@ public class GuiCommand : IWithConfigCommand
         bool IncludeInAutoRefresh = true,
         string? SlackWebhookUrl = null,
         string? TeamsWebhookUrl = null,
-        string? NotificationEmail = null);
+        string? NotificationEmail = null,
+        bool ExtendedNotifications = false);
 
     private record ConfigEditorData(
         string ActiveProfile,
@@ -497,7 +499,8 @@ public class GuiCommand : IWithConfigCommand
                     IncludeInAutoRefresh: !ppMap.TryGetValue(kvp.Key, out ProfilePrefs? pp) || pp.IncludeInAutoRefresh != false,
                     SlackWebhookUrl: pp?.SlackWebhookUrl,
                     TeamsWebhookUrl: pp?.TeamsWebhookUrl,
-                    NotificationEmail: pp?.NotificationEmail))
+                    NotificationEmail: pp?.NotificationEmail,
+                    ExtendedNotifications: pp?.ExtendedNotifications ?? false))
                 .ToArray();
             return Task.FromResult<object>(new ConfigEditorData(
                 ActiveProfile: rawConfig.ActiveProfile,
@@ -583,7 +586,8 @@ public class GuiCommand : IWithConfigCommand
                         IncludeInAutoRefresh: p.IncludeInAutoRefresh,
                         SlackWebhookUrl: string.IsNullOrWhiteSpace(p.SlackWebhookUrl) ? null : p.SlackWebhookUrl,
                         TeamsWebhookUrl: string.IsNullOrWhiteSpace(p.TeamsWebhookUrl) ? null : p.TeamsWebhookUrl,
-                        NotificationEmail: string.IsNullOrWhiteSpace(p.NotificationEmail) ? null : p.NotificationEmail);
+                        NotificationEmail: string.IsNullOrWhiteSpace(p.NotificationEmail) ? null : p.NotificationEmail,
+                        ExtendedNotifications: p.ExtendedNotifications ? true : null);
                 }
                 // Remove entries for profiles that no longer exist
                 foreach (string stale in updatedPpMap.Keys.Except(data.Profiles.Select(p => p.Name)).ToList())
@@ -637,18 +641,20 @@ public class GuiCommand : IWithConfigCommand
             string? slackUrl = pp?.SlackWebhookUrl;
             string? teamsUrl = pp?.TeamsWebhookUrl;
             string? emailTo = pp?.NotificationEmail;
+            bool extended = pp?.ExtendedNotifications ?? false;
+            IReadOnlyList<InvoiceSummary> fakeInvoices = MakeFakeInvoices();
             List<(string Name, Task<bool> Task)> tasks = [];
             if (!string.IsNullOrEmpty(slackUrl))
             {
-                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, 3, ct, throwOnHttpError: false)));
+                tasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, profileName, fakeInvoices, extended, ct, throwOnHttpError: false)));
             }
             if (!string.IsNullOrEmpty(teamsUrl))
             {
-                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, 3, ct, throwOnHttpError: false)));
+                tasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, profileName, fakeInvoices, extended, ct, throwOnHttpError: false)));
             }
             if (!string.IsNullOrEmpty(emailTo))
             {
-                tasks.Add(("Email", SendEmailNotificationAsync(emailTo, profileName, 3, prefs, ct, throwOnError: false)));
+                tasks.Add(("Email", SendEmailNotificationAsync(emailTo, profileName, fakeInvoices, extended, prefs, ct, throwOnError: false)));
             }
             if (tasks.Count == 0)
             {
@@ -695,7 +701,8 @@ public class GuiCommand : IWithConfigCommand
             }
 
             Log.LogInformation($"[test-email] Sending test to '{MaskEmail(toEmail)}' via {prefs.SmtpHost}:{prefs.SmtpPort ?? 587} ({prefs.SmtpSecurity ?? "StartTls"})...");
-            await SendEmailNotificationAsync(toEmail, "test", 1, prefs, ct, throwOnError: true).ConfigureAwait(false);
+            bool extendedTest = prefs.ProfilePrefs?.GetValueOrDefault(ActiveProfile)?.ExtendedNotifications ?? false;
+            await SendEmailNotificationAsync(toEmail, "test", MakeFakeInvoices(), extendedTest, prefs, ct, throwOnError: true).ConfigureAwait(false);
             return $"Testowy e-mail wysłany do: {toEmail}";
         };
 
@@ -995,9 +1002,8 @@ public class GuiCommand : IWithConfigCommand
         if (newCount > 0 && prev != null)
         {
             HashSet<string> alreadyNotified = _invoiceCache.LoadNotifiedKsefNumbers(profileKey);
-            List<string> toNotify = invoices
+            List<InvoiceSummary> toNotify = invoices
                 .Where(i => !prevKeys.Contains(i.KsefNumber) && !alreadyNotified.Contains(i.KsefNumber))
-                .Select(i => i.KsefNumber)
                 .ToList();
 
             if (toNotify.Count > 0)
@@ -1006,38 +1012,87 @@ public class GuiCommand : IWithConfigCommand
                 // If a webhook call fails, the invoice is still marked and will not be retried.
                 // This avoids duplicate notifications on transient errors at the cost of
                 // potentially missing one delivery. Change order here if at-least-once is preferred.
-                _invoiceCache.MarkAsNotified(profileKey, toNotify);
+                _invoiceCache.MarkAsNotified(profileKey, toNotify.Select(i => i.KsefNumber));
                 string? slackUrl = profilePrefs?.SlackWebhookUrl;
                 string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
                 string? emailTo = profilePrefs?.NotificationEmail;
+                bool extended = profilePrefs?.ExtendedNotifications ?? false;
                 List<(string Name, Task<bool> Task)> webhookTasks = [];
                 if (!string.IsNullOrEmpty(slackUrl))
                 {
-                    webhookTasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, name, toNotify.Count, ct)));
+                    webhookTasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, name, toNotify, extended, ct)));
                 }
                 if (!string.IsNullOrEmpty(teamsUrl))
                 {
-                    webhookTasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, name, toNotify.Count, ct)));
+                    webhookTasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, name, toNotify, extended, ct)));
                 }
                 if (!string.IsNullOrEmpty(emailTo))
                 {
-                    webhookTasks.Add(("Email", SendEmailNotificationAsync(emailTo, name, toNotify.Count, prefs, ct)));
+                    webhookTasks.Add(("Email", SendEmailNotificationAsync(emailTo, name, toNotify, extended, prefs, ct)));
                 }
                 if (webhookTasks.Count > 0)
                 {
                     await Task.WhenAll(webhookTasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
                     List<string> channelsOk = webhookTasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
                     List<string> channelsFailed = webhookTasks.Where(t => !t.Task.IsCompletedSuccessfully || !t.Task.Result).Select(t => t.Name).ToList();
-                    _invoiceCache.UpdateNotifiedChannels(profileKey, toNotify, channelsOk, channelsFailed);
+                    _invoiceCache.UpdateNotifiedChannels(profileKey, toNotify.Select(i => i.KsefNumber), channelsOk, channelsFailed);
                 }
             }
         }
     }
 
-    private static async Task<bool> SendSlackNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
+    private static async Task<bool> SendSlackNotificationAsync(
+        string webhookUrl, string profileName, IReadOnlyList<InvoiceSummary> invoices, bool extended,
+        CancellationToken ct, bool throwOnHttpError = false)
     {
-        string text = $"KSeF: {newCount} nowych faktur dla profilu {profileName}";
-        string json = JsonSerializer.Serialize(new { text });
+        int count = invoices.Count;
+        object payload;
+        if (extended && count > 0)
+        {
+            // Block Kit — up to 5 invoice rows, then context footer
+            const int maxRows = 5;
+            List<object> blocks = new()
+            {
+                new
+                {
+                    type = "header",
+                    text = new { type = "plain_text", text = $"KSeF: {count} nowych faktur — {profileName}", emoji = true },
+                },
+                new { type = "divider" },
+            };
+            foreach (InvoiceSummary inv in invoices.Take(maxRows))
+            {
+                string sellerNip = inv.Seller?.Nip ?? "—";
+                string sellerName = inv.Seller?.Name ?? "—";
+                blocks.Add(new
+                {
+                    type = "section",
+                    fields = new[]
+                    {
+                        new { type = "mrkdwn", text = $"*Data:* {inv.IssueDate:yyyy-MM-dd}" },
+                        new { type = "mrkdwn", text = $"*NIP:* {sellerNip}" },
+                        new { type = "mrkdwn", text = $"*Sprzedawca:* {sellerName}" },
+                    },
+                });
+                blocks.Add(new { type = "divider" });
+            }
+            if (count > maxRows)
+            {
+                blocks.Add(new
+                {
+                    type = "context",
+                    elements = new[] { new { type = "mrkdwn", text = $"_… i {count - maxRows} więcej_" } },
+                });
+            }
+            payload = new { blocks };
+        }
+        else
+        {
+            string text = $"KSeF: {count} nowych faktur dla profilu *{profileName}*";
+            payload = new { text };
+        }
+
+        string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
         try
         {
@@ -1067,17 +1122,59 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private static async Task<bool> SendTeamsNotificationAsync(string webhookUrl, string profileName, int newCount, CancellationToken ct, bool throwOnHttpError = false)
+    private static async Task<bool> SendTeamsNotificationAsync(
+        string webhookUrl, string profileName, IReadOnlyList<InvoiceSummary> invoices, bool extended,
+        CancellationToken ct, bool throwOnHttpError = false)
     {
-        Dictionary<string, object> payload = new()
+        int count = invoices.Count;
+        object payload;
+        if (extended && count > 0)
         {
-            ["@type"] = "MessageCard",
-            ["@context"] = "https://schema.org/extensions",
-            ["summary"] = $"KSeF: {newCount} nowych faktur",
-            ["themeColor"] = "0078D4",
-            ["title"] = "KSeF: Nowe faktury",
-            ["text"] = $"Profil **{profileName}**: {newCount} nowych faktur",
-        };
+            const int maxRows = 8;
+            List<object> facts = invoices.Take(maxRows).Select(inv =>
+            {
+                string sellerNip = inv.Seller?.Nip ?? "—";
+                string sellerName = inv.Seller?.Name ?? "—";
+                return (object)new
+                {
+                    name = $"{inv.IssueDate:yyyy-MM-dd} · {sellerNip}",
+                    value = sellerName,
+                };
+            }).ToList();
+            if (count > maxRows)
+            {
+                facts.Add(new { name = "…", value = $"i {count - maxRows} więcej" });
+            }
+            payload = new
+            {
+                @type = "MessageCard",
+                @context = "https://schema.org/extensions",
+                summary = $"KSeF: {count} nowych faktur",
+                themeColor = "1A6FC4",
+                title = $"KSeF: Nowe faktury — {profileName}",
+                sections = new[]
+                {
+                    new
+                    {
+                        activityTitle = $"Znaleziono **{count}** nowych faktur",
+                        facts,
+                    },
+                },
+            };
+        }
+        else
+        {
+            payload = new
+            {
+                @type = "MessageCard",
+                @context = "https://schema.org/extensions",
+                summary = $"KSeF: {count} nowych faktur",
+                themeColor = "1A6FC4",
+                title = "KSeF: Nowe faktury",
+                text = $"Profil **{profileName}**: {count} nowych faktur",
+            };
+        }
+
         string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
         try
@@ -1121,7 +1218,8 @@ public class GuiCommand : IWithConfigCommand
     }
 
     private async Task<bool> SendEmailNotificationAsync(
-        string toEmail, string profileName, int newCount, GuiPrefs prefs, CancellationToken ct, bool throwOnError = false)
+        string toEmail, string profileName, IReadOnlyList<InvoiceSummary> invoices, bool extended,
+        GuiPrefs prefs, CancellationToken ct, bool throwOnError = false)
     {
         string host = prefs.SmtpHost ?? "";
         if (string.IsNullOrWhiteSpace(host))
@@ -1190,11 +1288,15 @@ public class GuiCommand : IWithConfigCommand
                 smtp.Credentials = new NetworkCredential(prefs.SmtpUser, prefs.SmtpPassword ?? "");
             }
             string from = !string.IsNullOrWhiteSpace(prefs.SmtpFrom) ? prefs.SmtpFrom! : prefs.SmtpUser ?? "ksefcli@localhost";
-            string subject = $"KSeF: {newCount} nowych faktur dla profilu {profileName}";
-            string body = $"Znaleziono {newCount} nowych faktur dla profilu \"{profileName}\".";
-            using MailMessage msg = new MailMessage(from, toEmail, subject, body);
+            int count = invoices.Count;
+            string subject = $"KSeF: {count} nowych faktur dla profilu {profileName}";
+            string body = BuildEmailBody(profileName, invoices, extended);
+            using MailMessage msg = new MailMessage(from, toEmail, subject, body)
+            {
+                IsBodyHtml = true,
+            };
             await smtp.SendMailAsync(msg, deadline).ConfigureAwait(false);
-            Log.LogInformation($"[email-notify] Sent to '{MaskEmail(toEmail)}' for profile '{profileName}': {newCount} invoice(s)");
+            Log.LogInformation($"[email-notify] Sent to '{MaskEmail(toEmail)}' for profile '{profileName}': {count} invoice(s)");
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -1213,6 +1315,120 @@ public class GuiCommand : IWithConfigCommand
             Log.LogWarning($"[email-notify] SMTP error for profile '{profileName}': {ex.Message}");
             return false;
         }
+    }
+
+    private static IReadOnlyList<InvoiceSummary> MakeFakeInvoices() =>
+    [
+        new InvoiceSummary
+        {
+            KsefNumber = "1234567890-20240101-ABCDEF-01",
+            InvoiceNumber = "FV/2024/001",
+            IssueDate = DateTimeOffset.UtcNow.AddDays(-2),
+            Seller = new KSeF.Client.Core.Models.Invoices.Seller { Nip = "1234567890", Name = "Przykładowa Firma Sp. z o.o." },
+            Buyer = new KSeF.Client.Core.Models.Invoices.Buyer { Name = "Odbiorca Testowy Sp. z o.o." },
+            GrossAmount = 1230.00m, NetAmount = 1000.00m, VatAmount = 230.00m, Currency = "PLN",
+        },
+        new InvoiceSummary
+        {
+            KsefNumber = "0987654321-20240101-FEDCBA-02",
+            InvoiceNumber = "FV/2024/002",
+            IssueDate = DateTimeOffset.UtcNow.AddDays(-1),
+            Seller = new KSeF.Client.Core.Models.Invoices.Seller { Nip = "9876543210", Name = "Dostawca Usług S.A." },
+            Buyer = new KSeF.Client.Core.Models.Invoices.Buyer { Name = "Odbiorca Testowy Sp. z o.o." },
+            GrossAmount = 3690.00m, NetAmount = 3000.00m, VatAmount = 690.00m, Currency = "PLN",
+        },
+        new InvoiceSummary
+        {
+            KsefNumber = "1111222233-20240101-AABBCC-03",
+            InvoiceNumber = "FV/2024/003",
+            IssueDate = DateTimeOffset.UtcNow,
+            Seller = new KSeF.Client.Core.Models.Invoices.Seller { Nip = "1111222233", Name = "Kowalski i Wspólnicy" },
+            Buyer = new KSeF.Client.Core.Models.Invoices.Buyer { Name = "Odbiorca Testowy Sp. z o.o." },
+            GrossAmount = 615.00m, NetAmount = 500.00m, VatAmount = 115.00m, Currency = "PLN",
+        },
+    ];
+
+    private static string BuildEmailBody(string profileName, IReadOnlyList<InvoiceSummary> invoices, bool extended)
+    {
+        int count = invoices.Count;
+        const int maxRows = 10;
+
+        StringBuilder sb = new StringBuilder();
+        sb.Append("""
+            <!DOCTYPE html>
+            <html lang="pl"><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            </head>
+            <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#333">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5">
+            <tr><td style="padding:24px 16px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                   style="max-width:640px;margin:0 auto;background:#fff;border-radius:6px;
+                          box-shadow:0 1px 4px rgba(0,0,0,.12)">
+              <!-- Header -->
+              <tr><td style="background:#1a6fc4;color:#fff;padding:20px 28px;border-radius:6px 6px 0 0">
+                <span style="font-size:20px;font-weight:700;letter-spacing:-.3px">KSeF — Nowe faktury</span>
+                <span style="float:right;font-size:13px;opacity:.85;margin-top:4px">
+            """);
+        sb.Append($"Profil: {profileName}");
+        sb.Append("""
+                </span>
+              </td></tr>
+              <!-- Body -->
+              <tr><td style="padding:24px 28px">
+            """);
+        sb.Append($"<p style=\"margin:0 0 16px\">Znaleziono <strong>{count}</strong> nowych faktur.");
+        if (extended && count > 0)
+        {
+            sb.Append("""
+                </p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                       style="border-collapse:collapse;font-size:13px">
+                  <thead>
+                    <tr style="background:#f0f4fa">
+                      <th style="border:1px solid #dde3ec;padding:8px 10px;text-align:left;white-space:nowrap">Data</th>
+                      <th style="border:1px solid #dde3ec;padding:8px 10px;text-align:left;white-space:nowrap">NIP</th>
+                      <th style="border:1px solid #dde3ec;padding:8px 10px;text-align:left">Sprzedawca</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                """);
+            foreach ((InvoiceSummary inv, int idx) in invoices.Take(maxRows).Select((inv, i) => (inv, i)))
+            {
+                string rowBg = idx % 2 == 0 ? "#fff" : "#f9fafb";
+                string sellerName = inv.Seller?.Name ?? "—";
+                string sellerNip = inv.Seller?.Nip ?? "—";
+                sb.Append($"""
+                    <tr style="background:{rowBg}">
+                      <td style="border:1px solid #dde3ec;padding:7px 10px;white-space:nowrap">{inv.IssueDate:yyyy-MM-dd}</td>
+                      <td style="border:1px solid #dde3ec;padding:7px 10px;white-space:nowrap">{sellerNip}</td>
+                      <td style="border:1px solid #dde3ec;padding:7px 10px">{sellerName}</td>
+                    </tr>
+                    """);
+            }
+            sb.Append("  </tbody></table>");
+            if (count > maxRows)
+            {
+                sb.Append($"<p style=\"margin:10px 0 0;font-size:12px;color:#666\">… i {count - maxRows} więcej faktur.</p>");
+            }
+        }
+        else
+        {
+            sb.Append("</p>");
+        }
+
+        sb.Append("""
+              </td></tr>
+              <!-- Footer -->
+              <tr><td style="background:#f0f4fa;padding:12px 28px;border-radius:0 0 6px 6px;
+                             font-size:11px;color:#888;text-align:center">
+                Wiadomość wysłana automatycznie przez KSeFCli
+              </td></tr>
+            </table>
+            </td></tr></table>
+            </body></html>
+            """);
+        return sb.ToString();
     }
 
     private static object MapInvoicesToJson(List<InvoiceSummary> invoices) =>

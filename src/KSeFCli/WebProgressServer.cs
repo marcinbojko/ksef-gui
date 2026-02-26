@@ -1534,6 +1534,9 @@ function renderProfileCard(p, i) {
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
     ' Uwzględnij w auto-odświeżaniu (tło)</label>' +
+    '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
+    '<input type="checkbox" id="cfgExtNotif' + i + '"' + (p.extendedNotifications ? ' checked' : '') + '>' +
+    ' Rozszerzone powiadomienia (data, NIP, nazwa firmy)</label>' +
     '<button type="button" class="btn-sm btn-danger" onclick="deleteProfile(' + i + ')">Usuń profil</button>' +
     '</div>' +
     '</div>';
@@ -1610,6 +1613,7 @@ function deleteProfile(i) {
       slackWebhookUrl: document.getElementById('cfgSlackWebhook' + j)?.value || null,
       teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + j)?.value || null,
       notificationEmail: document.getElementById('cfgNotifEmail' + j)?.value || null,
+      extendedNotifications: document.getElementById('cfgExtNotif' + j)?.checked || false,
     };
   }
   // If deleting the active profile, reassign to the nearest remaining one
@@ -1645,6 +1649,7 @@ async function saveConfigEditor() {
       slackWebhookUrl: document.getElementById('cfgSlackWebhook' + i)?.value || null,
       teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + i)?.value || null,
       notificationEmail: document.getElementById('cfgNotifEmail' + i)?.value || null,
+      extendedNotifications: document.getElementById('cfgExtNotif' + i)?.checked || false,
     });
   }
   const payload = { activeProfile, configFilePath: cfgData.configFilePath, profiles };
