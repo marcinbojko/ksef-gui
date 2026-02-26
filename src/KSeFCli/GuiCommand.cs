@@ -1088,7 +1088,8 @@ public class GuiCommand : IWithConfigCommand
         }
         else
         {
-            string text = $"KSeF: {count} nowych faktur dla profilu *{profileName}*";
+            string escapedProfile = EscapeSlackMarkdown(profileName);
+            string text = $"KSeF: {count} nowych faktur dla profilu *{escapedProfile}*";
             payload = new { text };
         }
 
@@ -1133,8 +1134,8 @@ public class GuiCommand : IWithConfigCommand
             const int maxRows = 8;
             List<object> facts = invoices.Take(maxRows).Select(inv =>
             {
-                string sellerNip = inv.Seller?.Nip ?? "—";
-                string sellerName = inv.Seller?.Name ?? "—";
+                string sellerNip = EscapeForTeamsMarkdown(inv.Seller?.Nip ?? "—");
+                string sellerName = EscapeForTeamsMarkdown(inv.Seller?.Name ?? "—");
                 return (object)new
                 {
                     name = $"{inv.IssueDate:yyyy-MM-dd} · {sellerNip}",
@@ -1205,13 +1206,20 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    /// <summary>Masks the local part of an e-mail address for safe logging (e.g. "j***e@example.com").</summary>
+    /// <summary>Escapes Teams MessageCard Markdown characters to prevent accidental formatting.</summary>
+    private static string EscapeForTeamsMarkdown(string text) =>
+        text.Replace("\\", "\\\\").Replace("*", "\\*").Replace("_", "\\_")
+            .Replace("`", "\\`").Replace("~", "\\~")
+            .Replace("[", "\\[").Replace("]", "\\]")
+            .Replace("(", "\\(").Replace(")", "\\)");
+
     /// <summary>Escapes Slack mrkdwn special characters to prevent accidental formatting.</summary>
     private static string EscapeSlackMarkdown(string text) =>
         text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
             .Replace("*", "\\*").Replace("_", "\\_").Replace("~", "\\~")
             .Replace("`", "\\`");
 
+    /// <summary>Masks the local part of an e-mail address for safe logging (e.g. "j***e@example.com").</summary>
     private static string MaskEmail(string email)
     {
         int at = email.IndexOf('@');
