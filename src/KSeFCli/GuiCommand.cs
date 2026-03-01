@@ -978,7 +978,7 @@ public class GuiCommand : IWithConfigCommand
         SearchParams baseParams = cachedParams ?? new SearchParams("Subject2", "thismonth", null, "Issue");
         SearchParams sp = baseParams with
         {
-            From = autoRefreshCurrentMonth ? "thismonth" : baseParams.From,
+            From = autoRefreshCurrentMonth ? "thismonth" : (!string.IsNullOrWhiteSpace(baseParams.From) ? baseParams.From : "thismonth"),
             To = null,
         };
         InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
