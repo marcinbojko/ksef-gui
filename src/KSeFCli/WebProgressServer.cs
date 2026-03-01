@@ -559,7 +559,7 @@ button:disabled{opacity:.4;cursor:default}
 .cfg-modal{width:600px;max-height:85vh}
 .cfg-profile-card{border:1px solid #ddd;border-radius:8px;padding:.8rem 1rem;margin-bottom:.8rem;position:relative}
 .cfg-profile-card .cfg-card-title{font-weight:600;font-size:.9rem;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem}
-.cfg-card-footer{display:flex;justify-content:space-between;align-items:center;padding-top:.4rem;border-top:1px solid #ddd}
+.cfg-card-footer{display:flex;justify-content:space-between;align-items:flex-start;padding-top:.4rem;border-top:1px solid #ddd}
 .cfg-field{display:flex;flex-direction:column;margin-bottom:.5rem}
 .cfg-field label{font-size:.75rem;color:#666;margin-bottom:.2rem}
 .cfg-field input,.cfg-field select{padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem}
@@ -1531,13 +1531,18 @@ function renderProfileCard(p, i) {
     '<input type="email" id="cfgNotifEmail' + i + '" value="' + esc(p.notificationEmail||'') + '" placeholder="odbiorca@example.com">' +
     '</div>' +
     '<div class="cfg-card-footer">' +
+    '<div style="display:flex;flex-direction:column;gap:.35rem">' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgAutoRefresh' + i + '"' + (p.includeInAutoRefresh ? ' checked' : '') + '>' +
     ' Uwzględnij w auto-odświeżaniu (tło)</label>' +
     '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
+    '<input type="checkbox" id="cfgAutoRefreshCurrentMonth' + i + '"' + (p.autoRefreshCurrentMonth !== false ? ' checked' : '') + '>' +
+    ' Auto-odświeżanie: ogranicz do bieżącego miesiąca</label>' +
+    '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem">' +
     '<input type="checkbox" id="cfgExtNotif' + i + '"' + (p.extendedNotifications ? ' checked' : '') + '>' +
     ' Rozszerzone powiadomienia (data, NIP, nazwa firmy)</label>' +
-    '<button type="button" class="btn-sm btn-danger" onclick="deleteProfile(' + i + ')">Usuń profil</button>' +
+    '</div>' +
+    '<button type="button" class="btn-sm btn-danger" onclick="deleteProfile(' + i + ')" style="align-self:flex-end">Usuń profil</button>' +
     '</div>' +
     '</div>';
 }
@@ -1610,6 +1615,7 @@ function deleteProfile(i) {
       certPasswordEnv: am === 'certificate' ? (document.getElementById('cfgCertPassEnv' + j)?.value || null) : null,
       certPasswordFile: am === 'certificate' ? (document.getElementById('cfgCertPassFile' + j)?.value || null) : null,
       includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + j)?.checked ?? cfgData.profiles[j].includeInAutoRefresh,
+      autoRefreshCurrentMonth: document.getElementById('cfgAutoRefreshCurrentMonth' + j)?.checked ?? true,
       slackWebhookUrl: document.getElementById('cfgSlackWebhook' + j)?.value || null,
       teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + j)?.value || null,
       notificationEmail: document.getElementById('cfgNotifEmail' + j)?.value || null,
@@ -1646,6 +1652,7 @@ async function saveConfigEditor() {
       certPasswordEnv: authMethod === 'certificate' ? (document.getElementById('cfgCertPassEnv' + i)?.value || null) : null,
       certPasswordFile: authMethod === 'certificate' ? (document.getElementById('cfgCertPassFile' + i)?.value || null) : null,
       includeInAutoRefresh: document.getElementById('cfgAutoRefresh' + i)?.checked || false,
+      autoRefreshCurrentMonth: document.getElementById('cfgAutoRefreshCurrentMonth' + i)?.checked ?? true,
       slackWebhookUrl: document.getElementById('cfgSlackWebhook' + i)?.value || null,
       teamsWebhookUrl: document.getElementById('cfgTeamsWebhook' + i)?.value || null,
       notificationEmail: document.getElementById('cfgNotifEmail' + i)?.value || null,

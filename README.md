@@ -166,12 +166,6 @@ Wklej adres Incoming Webhook Slacka w polu **Slack Webhook URL** dla danego prof
 https://hooks.slack.com/services/T.../B.../...
 ```
 
-Każde wykrycie nowych faktur wysyła wiadomość na skonfigurowany kanał:
-
-```
-KSeF: 3 nowych faktur dla profilu firma1
-```
-
 #### Microsoft Teams
 
 Wklej adres Incoming Webhook Teams w polu **Teams Webhook URL** dla danego profilu.
@@ -180,30 +174,50 @@ Wklej adres Incoming Webhook Teams w polu **Teams Webhook URL** dla danego profi
 https://xxx.webhook.office.com/webhookb2/...
 ```
 
-Wiadomość wysyłana jest jako **MessageCard** z tytułem i liczbą nowych faktur.
-
 #### E-mail (SMTP)
 
-Skonfiguruj serwer SMTP w **Preferencjach** (ikona ⚙ Preferencje):
+Skonfiguruj serwer SMTP w **Preferencjach** (zakładka **Email**):
 
 | Pole             | Opis                                                        | Domyślnie  |
 | ---------------- | ----------------------------------------------------------- | ---------- |
 | Serwer SMTP      | Adres serwera, np. `smtp.gmail.com`                         | —          |
-| Port             | Port SMTP                                                   | `587`      |
-| Zabezpieczenia   | `StartTLS` — STARTTLS (port 587); `Brak` — bez szyfrowania  | `StartTLS` |
+| Protokół         | `StartTLS` (port 587); `Brak` — bez szyfrowania             | `StartTLS` |
+| Port             | Ustawiany automatycznie po wyborze protokołu                | `587`      |
 | Użytkownik       | Nazwa użytkownika / login                                   | —          |
 | Hasło            | Hasło SMTP lub hasło aplikacji                              | —          |
 | Adres nadawcy    | Nagłówek `From:` (gdy pusty — używany jest login)           | —          |
 
-Adres odbiorcy konfigurowany jest **osobno dla każdego profilu** w edytorze konfiguracji (pole **Adres e-mail powiadomień**).
+Adres odbiorcy konfigurowany jest **osobno dla każdego profilu** w edytorze konfiguracji (pole **Adres e-mail powiadomień**). Zakładka Email zawiera przycisk **Wyślij test** umożliwiający weryfikację konfiguracji — wystarczy podać adres odbiorcy i kliknąć przycisk.
 
 > **Uwaga:** Obsługiwany jest wyłącznie protokół STARTTLS (port 587). Implicit SSL (SMTPS, port 465) nie jest obsługiwany.
 
+#### Rozszerzone powiadomienia
+
+Dla każdego profilu dostępny jest checkbox **Rozszerzone powiadomienia** w edytorze konfiguracji. Gdy włączony, każda wiadomość zawiera szczegóły wykrytych faktur:
+
+| Pole           | Opis                    |
+| -------------- | ----------------------- |
+| Data           | Data wystawienia        |
+| NIP            | NIP sprzedawcy          |
+| Nazwa firmy    | Nazwa sprzedawcy        |
+
+Gdy wyłączony — wysyłana jest tylko informacja o liczbie nowych faktur.
+
 #### Weryfikacja konfiguracji
 
-W edytorze konfiguracji widoczny jest przycisk **🔔 Testuj** dla każdego profilu — wysyła próbną wiadomość do skonfigurowanych kanałów i zwraca wynik (sukces lub błąd z kodem HTTP i treścią odpowiedzi).
+W edytorze konfiguracji widoczny jest przycisk **🔔 Testuj** dla każdego profilu — wysyła próbną wiadomość do skonfigurowanych kanałów i zwraca wynik (sukces lub błąd z kodem HTTP i treścią odpowiedzi). Jeśli włączone są rozszerzone powiadomienia, test wysyłany jest z przykładowymi danymi faktur.
 
 > Powiadomienia wysyłane są wyłącznie dla profili z włączonym **auto-odświeżaniem** (checkbox _Uwzględnij w auto-odświeżaniu_). Każda faktura jest notyfikowana tylko raz (zapisana w bazie SQLite), więc restart aplikacji nie powoduje powtórnych powiadomień.
+
+#### Zakres dat w auto-odświeżaniu
+
+W edytorze konfiguracji dla każdego profilu dostępne są ustawienia sterujące zakresem wyszukiwania podczas auto-odświeżania:
+
+| Ustawienie                                    | Opis                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Auto-odświeżanie: ogranicz do bieżącego miesiąca** | Gdy włączone (domyślnie), data `Od` jest zawsze ustawiana na 1. dzień bieżącego miesiąca — niezależnie od ustawień GUI. Gdy wyłączone, `Od` pochodzi z ostatniego ręcznego wyszukiwania. |
+
+Data `Do` jest zawsze ustawiana na bieżący moment — nigdy nie jest pobierana z GUI, co zapobiega pominięciu faktur po zmianie miesiąca.
 
 ### 🐳 Docker / serwer domowy
 
@@ -428,12 +442,6 @@ Paste an Incoming Webhook URL into the **Slack Webhook URL** field for the profi
 https://hooks.slack.com/services/T.../B.../...
 ```
 
-Each new-invoice detection posts a message to the configured channel:
-
-```
-KSeF: 3 nowych faktur dla profilu company1
-```
-
 #### Microsoft Teams
 
 Paste an Incoming Webhook URL into the **Teams Webhook URL** field for the profile.
@@ -442,30 +450,50 @@ Paste an Incoming Webhook URL into the **Teams Webhook URL** field for the profi
 https://xxx.webhook.office.com/webhookb2/...
 ```
 
-The message is sent as a **MessageCard** with a title and invoice count.
-
 #### E-mail (SMTP)
 
-Configure the SMTP server in **Preferences** (⚙ Preferences icon):
+Configure the SMTP server in **Preferences** (⚙ Preferences icon, **Email** tab):
 
 | Field         | Description                                               | Default    |
 | ------------- | --------------------------------------------------------- | ---------- |
 | SMTP Server   | Server address, e.g. `smtp.gmail.com`                     | —          |
-| Port          | SMTP port                                                 | `587`      |
-| Security      | `StartTLS` — STARTTLS (port 587); `None` — plain          | `StartTLS` |
+| Protocol      | `StartTLS` (port 587); `None` — unencrypted               | `StartTLS` |
+| Port          | Set automatically when protocol is selected               | `587`      |
 | Username      | SMTP username / login                                     | —          |
 | Password      | SMTP password or app password                             | —          |
 | From address  | `From:` header (uses username if empty)                   | —          |
 
-The recipient address is configured **per profile** in the configuration editor (**Notification e-mail** field).
+The recipient address is configured **per profile** in the configuration editor (**Notification e-mail** field). The Email tab also includes a **Send test** button — enter a recipient address and click to verify the SMTP configuration immediately.
 
 > **Note:** Only STARTTLS (port 587) is supported. Implicit SSL (SMTPS, port 465) is not supported.
 
+#### Extended notifications
+
+Each profile has an **Extended notifications** checkbox in the configuration editor. When enabled, notification messages include details of the detected invoices:
+
+| Field        | Description              |
+| ------------ | ------------------------ |
+| Date         | Invoice issue date       |
+| NIP          | Seller's tax ID (NIP)    |
+| Company name | Seller's name            |
+
+When disabled, only the invoice count is included in the notification.
+
 #### Testing the configuration
 
-The configuration editor shows a **🔔 Test** button for each profile — it sends a sample notification to all configured channels and returns the result (success or an HTTP error code with response body).
+The configuration editor shows a **🔔 Test** button for each profile — it sends a sample notification to all configured channels and returns the result (success or an HTTP error code with response body). If extended notifications are enabled, the test is sent with sample invoice data.
 
 > Notifications are sent only for profiles with **auto-refresh enabled** (the _Include in auto-refresh_ checkbox). Each invoice is notified exactly once (tracked in the local SQLite database), so restarting the app does not trigger duplicate notifications.
+
+#### Auto-refresh date range
+
+Each profile in the configuration editor has a setting to control the search date range used during auto-refresh:
+
+| Setting                                    | Description                                                                                                    |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| **Auto-refresh: limit to current month**   | When enabled (default), the `From` date is always set to the 1st of the current month, regardless of GUI settings. When disabled, `From` is taken from the last manual search. |
+
+The `To` date is always set to the current moment — it is never taken from the GUI, which prevents missed invoices after a month boundary.
 
 ### 🐳 Docker / home server
 

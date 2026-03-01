@@ -58,7 +58,8 @@ public class GuiCommand : IWithConfigCommand
         string? SlackWebhookUrl = null,
         string? TeamsWebhookUrl = null,
         string? NotificationEmail = null,
-        bool? ExtendedNotifications = null);
+        bool? ExtendedNotifications = null,
+        bool? AutoRefreshCurrentMonth = null);
 
     private record GuiPrefs(
         string? OutputDir = null,
@@ -100,7 +101,8 @@ public class GuiCommand : IWithConfigCommand
         string? SlackWebhookUrl = null,
         string? TeamsWebhookUrl = null,
         string? NotificationEmail = null,
-        bool ExtendedNotifications = false);
+        bool ExtendedNotifications = false,
+        bool AutoRefreshCurrentMonth = true);
 
     private record ConfigEditorData(
         string ActiveProfile,
@@ -500,7 +502,8 @@ public class GuiCommand : IWithConfigCommand
                     SlackWebhookUrl: pp?.SlackWebhookUrl,
                     TeamsWebhookUrl: pp?.TeamsWebhookUrl,
                     NotificationEmail: pp?.NotificationEmail,
-                    ExtendedNotifications: pp?.ExtendedNotifications ?? false))
+                    ExtendedNotifications: pp?.ExtendedNotifications ?? false,
+                    AutoRefreshCurrentMonth: pp?.AutoRefreshCurrentMonth ?? true))
                 .ToArray();
             return Task.FromResult<object>(new ConfigEditorData(
                 ActiveProfile: rawConfig.ActiveProfile,
@@ -587,7 +590,8 @@ public class GuiCommand : IWithConfigCommand
                         SlackWebhookUrl: string.IsNullOrWhiteSpace(p.SlackWebhookUrl) ? null : p.SlackWebhookUrl,
                         TeamsWebhookUrl: string.IsNullOrWhiteSpace(p.TeamsWebhookUrl) ? null : p.TeamsWebhookUrl,
                         NotificationEmail: string.IsNullOrWhiteSpace(p.NotificationEmail) ? null : p.NotificationEmail,
-                        ExtendedNotifications: p.ExtendedNotifications ? true : null);
+                        ExtendedNotifications: p.ExtendedNotifications ? true : null,
+                        AutoRefreshCurrentMonth: p.AutoRefreshCurrentMonth ? null : false);
                 }
                 // Remove entries for profiles that no longer exist
                 foreach (string stale in updatedPpMap.Keys.Except(data.Profiles.Select(p => p.Name)).ToList())
@@ -964,8 +968,16 @@ public class GuiCommand : IWithConfigCommand
         (List<InvoiceSummary>? prev, SearchParams? cachedParams, _) = _invoiceCache.Load(profileKey);
         HashSet<string> prevKeys = prev?.Select(i => i.KsefNumber).ToHashSet() ?? [];
 
-        // Use last manual search params for this profile, or default to "this month"
-        SearchParams sp = cachedParams ?? new SearchParams("Subject2", "thismonth", null, "Issue");
+        // Use last manual search params for this profile, or default to "this month".
+        // Always clear To: auto-refresh must search up to now(), not a stale GUI date.
+        // Optionally pin From to the start of the current month regardless of GUI setting.
+        bool autoRefreshCurrentMonth = profilePrefs?.AutoRefreshCurrentMonth ?? true;
+        SearchParams baseParams = cachedParams ?? new SearchParams("Subject2", "thismonth", null, "Issue");
+        SearchParams sp = baseParams with
+        {
+            From = autoRefreshCurrentMonth ? "thismonth" : baseParams.From,
+            To = null,
+        };
         InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
 
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
