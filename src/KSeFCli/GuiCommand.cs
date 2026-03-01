@@ -585,13 +585,16 @@ public class GuiCommand : IWithConfigCommand
                     ?? new Dictionary<string, ProfilePrefs>();
                 foreach (ProfileEditorData p in data.Profiles)
                 {
+                    // Bool? fields use null to represent the default value, keeping JSON compact.
+                    // ExtendedNotifications default=false  → store true | null
+                    // AutoRefreshCurrentMonth default=true → store null | false
                     updatedPpMap[p.Name] = new ProfilePrefs(
                         IncludeInAutoRefresh: p.IncludeInAutoRefresh,
                         SlackWebhookUrl: string.IsNullOrWhiteSpace(p.SlackWebhookUrl) ? null : p.SlackWebhookUrl,
                         TeamsWebhookUrl: string.IsNullOrWhiteSpace(p.TeamsWebhookUrl) ? null : p.TeamsWebhookUrl,
                         NotificationEmail: string.IsNullOrWhiteSpace(p.NotificationEmail) ? null : p.NotificationEmail,
-                        ExtendedNotifications: p.ExtendedNotifications ? true : null,
-                        AutoRefreshCurrentMonth: p.AutoRefreshCurrentMonth ? null : false);
+                        ExtendedNotifications: p.ExtendedNotifications ? true : null,       // null = false (default)
+                        AutoRefreshCurrentMonth: p.AutoRefreshCurrentMonth ? null : false);  // null = true  (default)
                 }
                 // Remove entries for profiles that no longer exist
                 foreach (string stale in updatedPpMap.Keys.Except(data.Profiles.Select(p => p.Name)).ToList())
