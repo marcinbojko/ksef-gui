@@ -269,13 +269,13 @@ Sieć lokalna (LAN)  :80 / :443
 <details>
 <summary><b>Woluminy</b></summary>
 
-| Ścieżka               | Typ          | Opis                              |
-| --------------------- | ------------ | --------------------------------- |
-| `ksefcli-output`      | named volume | Pobrane faktury (`/data`)         |
-| `ksefcli-config`      | named volume | `ksefcli.yaml`                    |
-| `ksefcli-cache`       | named volume | Tokeny, preferencje, cache SQLite |
-| `traefik-acme`        | named volume | Certyfikaty TLS Let's Encrypt     |
-| `./ofelia/config.ini` | bind (ro)    | Harmonogram Ofelia                |
+| Ścieżka               | Typ          | Opis                                                                    |
+| --------------------- | ------------ | ----------------------------------------------------------------------- |
+| `ksefcli-output`      | named volume | Pobrane faktury (`/data`)                                               |
+| `ksefcli-config`      | named volume | `ksefcli.yaml` + preferencje GUI (`gui-prefs.json`) w `~/.config/ksefcli` |
+| `ksefcli-cache`       | named volume | Tokeny sesji, cache SQLite, logi w `~/.cache/ksefcli`                  |
+| `traefik-acme`        | named volume | Certyfikaty TLS Let's Encrypt                                           |
+| `./ofelia/config.ini` | bind (ro)    | Harmonogram Ofelia                                                      |
 
 </details>
 
@@ -545,13 +545,13 @@ Local network (LAN)  :80 / :443
 <details>
 <summary><b>Volumes</b></summary>
 
-| Path                  | Type         | Description                             |
-| --------------------- | ------------ | --------------------------------------- |
-| `ksefcli-output`      | named volume | Downloaded invoices (`/data`)           |
-| `ksefcli-config`      | named volume | `ksefcli.yaml`                          |
-| `ksefcli-cache`       | named volume | Session tokens, GUI prefs, SQLite cache |
-| `traefik-acme`        | named volume | Let's Encrypt TLS certificates          |
-| `./ofelia/config.ini` | bind (ro)    | Ofelia scheduler configuration          |
+| Path                  | Type         | Description                                                                  |
+| --------------------- | ------------ | ---------------------------------------------------------------------------- |
+| `ksefcli-output`      | named volume | Downloaded invoices (`/data`)                                                |
+| `ksefcli-config`      | named volume | `ksefcli.yaml` + GUI preferences (`gui-prefs.json`) in `~/.config/ksefcli`  |
+| `ksefcli-cache`       | named volume | Session tokens, SQLite cache, logs in `~/.cache/ksefcli`                    |
+| `traefik-acme`        | named volume | Let's Encrypt TLS certificates                                               |
+| `./ofelia/config.ini` | bind (ro)    | Ofelia scheduler configuration                                               |
 
 </details>
 

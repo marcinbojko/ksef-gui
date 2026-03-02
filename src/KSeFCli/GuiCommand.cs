@@ -47,7 +47,9 @@ public class GuiCommand : IWithConfigCommand
     private Dictionary<string, string> _allProfiles = new(); // name → NIP
     private bool _setupRequired = false;
 
-    private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
+    private static readonly string PrefsPath = Path.Combine(ConfigDir, "gui-prefs.json");
+    // Legacy location used before preferences were moved from ~/.cache to ~/.config.
+    private static readonly string LegacyPrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     private const int DefaultLanPort = 18150;
@@ -111,6 +113,21 @@ public class GuiCommand : IWithConfigCommand
 
     private static GuiPrefs LoadPrefs()
     {
+        // One-time migration: move gui-prefs.json from the old cache location to ~/.config.
+        if (!File.Exists(PrefsPath) && File.Exists(LegacyPrefsPath))
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
+                File.Move(LegacyPrefsPath, PrefsPath);
+                Log.LogInformation($"[prefs] Migrated gui-prefs.json from {LegacyPrefsPath} to {PrefsPath}");
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"[prefs] Migration failed: {ex.Message}");
+            }
+        }
+
         try
         {
             if (File.Exists(PrefsPath))
@@ -120,7 +137,13 @@ public class GuiCommand : IWithConfigCommand
                     ?? new GuiPrefs();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Log instead of silently swallowing: a JsonException here (e.g. from a partially
+            // written file) would cause every subsequent SavePrefs call to use an empty GuiPrefs
+            // as the base, wiping SMTP credentials and webhook URLs from disk.
+            Log.LogWarning($"[prefs] Failed to load {PrefsPath}: {ex.GetType().Name}: {ex.Message}. Using defaults.");
+        }
         return new GuiPrefs();
     }
 
@@ -129,9 +152,17 @@ public class GuiCommand : IWithConfigCommand
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
-            File.WriteAllText(PrefsPath, JsonSerializer.Serialize(prefs));
+            // Write atomically: write to a temp file first, then rename.
+            // File.WriteAllText is not atomic — a crash mid-write leaves a corrupt JSON file
+            // that permanently breaks LoadPrefs (silent catch → empty GuiPrefs → data loss).
+            string tempPath = PrefsPath + ".tmp";
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(prefs));
+            File.Move(tempPath, PrefsPath, overwrite: true);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
     }
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
