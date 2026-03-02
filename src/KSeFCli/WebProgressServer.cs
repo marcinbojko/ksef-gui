@@ -1332,9 +1332,10 @@ async function savePrefs() {
     smtpFrom: $('smtpFrom').value || null
   };
   const mins = prefs.autoRefreshMinutes;
-  // Values 1–9 are below the server minimum of 10 — normalise to 0 (disabled) so the timer
-  // and notification-permission request are consistent with what the server will ignore.
+  // Values 1–9 are below the server minimum of 10 — normalise to 0 (disabled) so the timer,
+  // notification-permission request, and the persisted value are all consistent.
   const effectiveMins = (mins > 0 && mins < 10) ? 0 : mins;
+  prefs.autoRefreshMinutes = effectiveMins;
   const resp = await fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) });
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const data = await resp.json();
