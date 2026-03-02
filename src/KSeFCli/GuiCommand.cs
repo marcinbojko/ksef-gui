@@ -47,9 +47,9 @@ public class GuiCommand : IWithConfigCommand
     private Dictionary<string, string> _allProfiles = new(); // name → NIP
     private bool _setupRequired = false;
 
-    private static readonly string PrefsPath = Path.Combine(ConfigDir, "gui-prefs.json");
+    private static readonly string PrefsPath = Path.Join(ConfigDir, "gui-prefs.json");
     // Legacy location used before preferences were moved from ~/.cache to ~/.config.
-    private static readonly string LegacyPrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
+    private static readonly string LegacyPrefsPath = Path.Join(CacheDir, "gui-prefs.json");
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     private const int DefaultLanPort = 18150;
@@ -116,33 +116,70 @@ public class GuiCommand : IWithConfigCommand
         // One-time migration: move gui-prefs.json from the old cache location to ~/.config.
         if (!File.Exists(PrefsPath) && File.Exists(LegacyPrefsPath))
         {
+            bool moved = false;
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
                 File.Move(LegacyPrefsPath, PrefsPath);
                 Log.LogInformation($"[prefs] Migrated gui-prefs.json from {LegacyPrefsPath} to {PrefsPath}");
+                moved = true;
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Log.LogWarning($"[prefs] Migration failed: {ex.Message}");
+                Log.LogWarning($"[prefs] File.Move migration failed ({ex.GetType().Name}: {ex.Message}); trying non-destructive copy.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Log.LogWarning($"[prefs] File.Move migration failed ({ex.GetType().Name}: {ex.Message}); trying non-destructive copy.");
+            }
+
+            if (!moved)
+            {
+                // Non-destructive fallback: copy without removing the legacy file.
+                // If this also fails, the read loop below will still find and parse LegacyPrefsPath.
+                try
+                {
+                    File.Copy(LegacyPrefsPath, PrefsPath, overwrite: false);
+                    Log.LogInformation($"[prefs] Copied gui-prefs.json to {PrefsPath} (legacy file preserved at {LegacyPrefsPath})");
+                }
+                catch (IOException ex)
+                {
+                    Log.LogWarning($"[prefs] File.Copy also failed ({ex.GetType().Name}: {ex.Message}); will read legacy prefs directly.");
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    Log.LogWarning($"[prefs] File.Copy also failed ({ex.GetType().Name}: {ex.Message}); will read legacy prefs directly.");
+                }
             }
         }
 
-        try
+        // Try PrefsPath first, then fall back to LegacyPrefsPath (still present when copy failed).
+        // Log and continue to the next candidate on any read/parse failure; return defaults only
+        // if both are unavailable or unparseable.
+        foreach (string candidate in (string[])[PrefsPath, LegacyPrefsPath])
         {
-            if (File.Exists(PrefsPath))
+            try
             {
-                string json = File.ReadAllText(PrefsPath);
+                if (!File.Exists(candidate)) { continue; }
+                string json = File.ReadAllText(candidate);
+                // Log instead of silently swallowing: a JsonException here (e.g. from a partially
+                // written file) would cause every subsequent SavePrefs call to use an empty GuiPrefs
+                // as the base, wiping SMTP credentials and webhook URLs from disk.
                 return JsonSerializer.Deserialize<GuiPrefs>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new GuiPrefs();
             }
-        }
-        catch (Exception ex)
-        {
-            // Log instead of silently swallowing: a JsonException here (e.g. from a partially
-            // written file) would cause every subsequent SavePrefs call to use an empty GuiPrefs
-            // as the base, wiping SMTP credentials and webhook URLs from disk.
-            Log.LogWarning($"[prefs] Failed to load {PrefsPath}: {ex.GetType().Name}: {ex.Message}. Using defaults.");
+            catch (IOException ex)
+            {
+                Log.LogWarning($"[prefs] Failed to load {candidate}: {ex.GetType().Name}: {ex.Message}.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Log.LogWarning($"[prefs] Failed to load {candidate}: {ex.GetType().Name}: {ex.Message}.");
+            }
+            catch (JsonException ex)
+            {
+                Log.LogWarning($"[prefs] Failed to parse {candidate}: {ex.GetType().Name}: {ex.Message}.");
+            }
         }
         return new GuiPrefs();
     }
@@ -159,7 +196,15 @@ public class GuiCommand : IWithConfigCommand
             File.WriteAllText(tempPath, JsonSerializer.Serialize(prefs));
             File.Move(tempPath, PrefsPath, overwrite: true);
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
+        catch (JsonException ex)
         {
             Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
         }

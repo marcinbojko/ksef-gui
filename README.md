@@ -115,6 +115,16 @@ Przy pierwszym uruchomieniu bez pliku konfiguracyjnego GUI otwiera **kreator kon
 |     4     | `<katalog-exe>/ksefcli.yaml`                  |
 |     5     | `~/.config/ksefcli/ksefcli.yaml` _(domyślne)_ |
 
+#### Lokalizacje plików (Linux/macOS)
+
+| Plik                                   | Opis                      |
+| -------------------------------------- | ------------------------- |
+| `~/.config/ksefcli/ksefcli.yaml`       | Konfiguracja profili      |
+| `~/.config/ksefcli/gui-prefs.json`     | Preferencje GUI           |
+| `~/.cache/ksefcli/ksefcli.json`        | Tokeny sesji              |
+| `~/.cache/ksefcli/db/invoice-cache.db` | Cache faktur (SQLite)     |
+| `~/.cache/ksefcli/*.log`               | Logi                      |
+
 ```yaml
 active_profile: firma1
 
@@ -390,6 +400,16 @@ On first launch without a config file the GUI opens the **setup wizard** automat
 |    3     | `./ksefcli.yaml` — current directory         |
 |    4     | `<exe-dir>/ksefcli.yaml`                     |
 |    5     | `~/.config/ksefcli/ksefcli.yaml` _(default)_ |
+
+#### Data file locations (Linux/macOS)
+
+| File                                   | Description                 |
+| -------------------------------------- | --------------------------- |
+| `~/.config/ksefcli/ksefcli.yaml`       | Profile configuration       |
+| `~/.config/ksefcli/gui-prefs.json`     | GUI preferences             |
+| `~/.cache/ksefcli/ksefcli.json`        | Session tokens              |
+| `~/.cache/ksefcli/db/invoice-cache.db` | Invoice cache (SQLite)      |
+| `~/.cache/ksefcli/*.log`               | Logs                        |
 
 ```yaml
 active_profile: company1
