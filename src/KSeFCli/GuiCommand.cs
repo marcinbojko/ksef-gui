@@ -217,8 +217,14 @@ public class GuiCommand : IWithConfigCommand
             {
                 // Best-effort cleanup; File.Delete does not throw if file does not exist.
                 try { File.Delete(tempPath); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
+                catch (IOException ex)
+                {
+                    Log.LogDebug($"[prefs] Failed to delete temp prefs file '{tempPath}': {ex.Message}");
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    Log.LogDebug($"[prefs] Failed to delete temp prefs file '{tempPath}': {ex.Message}");
+                }
             }
         }
     }
