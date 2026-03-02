@@ -115,6 +115,16 @@ Przy pierwszym uruchomieniu bez pliku konfiguracyjnego GUI otwiera **kreator kon
 |     4     | `<katalog-exe>/ksefcli.yaml`                  |
 |     5     | `~/.config/ksefcli/ksefcli.yaml` _(domyślne)_ |
 
+#### Lokalizacje plików (Linux/macOS)
+
+| Plik                                   | Opis                      |
+| -------------------------------------- | ------------------------- |
+| `~/.config/ksefcli/ksefcli.yaml`       | Konfiguracja profili      |
+| `~/.config/ksefcli/gui-prefs.json`     | Preferencje GUI           |
+| `~/.cache/ksefcli/ksefcli.json`        | Tokeny sesji              |
+| `~/.cache/ksefcli/db/invoice-cache.db` | Cache faktur (SQLite)     |
+| `~/.cache/ksefcli/*.log`               | Logi                      |
+
 ```yaml
 active_profile: firma1
 
@@ -269,13 +279,13 @@ Sieć lokalna (LAN)  :80 / :443
 <details>
 <summary><b>Woluminy</b></summary>
 
-| Ścieżka               | Typ          | Opis                              |
-| --------------------- | ------------ | --------------------------------- |
-| `ksefcli-output`      | named volume | Pobrane faktury (`/data`)         |
-| `ksefcli-config`      | named volume | `ksefcli.yaml`                    |
-| `ksefcli-cache`       | named volume | Tokeny, preferencje, cache SQLite |
-| `traefik-acme`        | named volume | Certyfikaty TLS Let's Encrypt     |
-| `./ofelia/config.ini` | bind (ro)    | Harmonogram Ofelia                |
+| Ścieżka               | Typ          | Opis                                                                    |
+| --------------------- | ------------ | ----------------------------------------------------------------------- |
+| `ksefcli-output`      | named volume | Pobrane faktury (`/data`)                                               |
+| `ksefcli-config`      | named volume | `ksefcli.yaml` + preferencje GUI (`gui-prefs.json`) w `~/.config/ksefcli` |
+| `ksefcli-cache`       | named volume | Tokeny sesji, cache SQLite, logi w `~/.cache/ksefcli`                  |
+| `traefik-acme`        | named volume | Certyfikaty TLS Let's Encrypt                                           |
+| `./ofelia/config.ini` | bind (ro)    | Harmonogram Ofelia                                                      |
 
 </details>
 
@@ -390,6 +400,16 @@ On first launch without a config file the GUI opens the **setup wizard** automat
 |    3     | `./ksefcli.yaml` — current directory         |
 |    4     | `<exe-dir>/ksefcli.yaml`                     |
 |    5     | `~/.config/ksefcli/ksefcli.yaml` _(default)_ |
+
+#### Data file locations (Linux/macOS)
+
+| File                                   | Description                 |
+| -------------------------------------- | --------------------------- |
+| `~/.config/ksefcli/ksefcli.yaml`       | Profile configuration       |
+| `~/.config/ksefcli/gui-prefs.json`     | GUI preferences             |
+| `~/.cache/ksefcli/ksefcli.json`        | Session tokens              |
+| `~/.cache/ksefcli/db/invoice-cache.db` | Invoice cache (SQLite)      |
+| `~/.cache/ksefcli/*.log`               | Logs                        |
 
 ```yaml
 active_profile: company1
@@ -545,13 +565,13 @@ Local network (LAN)  :80 / :443
 <details>
 <summary><b>Volumes</b></summary>
 
-| Path                  | Type         | Description                             |
-| --------------------- | ------------ | --------------------------------------- |
-| `ksefcli-output`      | named volume | Downloaded invoices (`/data`)           |
-| `ksefcli-config`      | named volume | `ksefcli.yaml`                          |
-| `ksefcli-cache`       | named volume | Session tokens, GUI prefs, SQLite cache |
-| `traefik-acme`        | named volume | Let's Encrypt TLS certificates          |
-| `./ofelia/config.ini` | bind (ro)    | Ofelia scheduler configuration          |
+| Path                  | Type         | Description                                                                  |
+| --------------------- | ------------ | ---------------------------------------------------------------------------- |
+| `ksefcli-output`      | named volume | Downloaded invoices (`/data`)                                                |
+| `ksefcli-config`      | named volume | `ksefcli.yaml` + GUI preferences (`gui-prefs.json`) in `~/.config/ksefcli`  |
+| `ksefcli-cache`       | named volume | Session tokens, SQLite cache, logs in `~/.cache/ksefcli`                    |
+| `traefik-acme`        | named volume | Let's Encrypt TLS certificates                                               |
+| `./ofelia/config.ini` | bind (ro)    | Ofelia scheduler configuration                                               |
 
 </details>
 

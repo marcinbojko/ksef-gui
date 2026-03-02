@@ -40,8 +40,10 @@ LABEL org.opencontainers.image.licenses="GPL-3.0"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
-# Create cache and output directories (config dir managed by named volume)
-RUN mkdir -p /root/.cache/ksefcli /data
+# Pre-create data directories. Both config and cache dirs are overridden by
+# named volumes in docker-compose, but creating them here ensures the image
+# works standalone (docker run without -v) with correct ownership.
+RUN mkdir -p /root/.config/ksefcli /root/.cache/ksefcli /data
 
 WORKDIR /output
 

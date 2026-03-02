@@ -47,7 +47,9 @@ public class GuiCommand : IWithConfigCommand
     private Dictionary<string, string> _allProfiles = new(); // name → NIP
     private bool _setupRequired = false;
 
-    private static readonly string PrefsPath = Path.Combine(CacheDir, "gui-prefs.json");
+    private static readonly string PrefsPath = Path.Join(ConfigDir, "gui-prefs.json");
+    // Legacy location used before preferences were moved from ~/.cache to ~/.config.
+    private static readonly string LegacyPrefsPath = Path.Join(CacheDir, "gui-prefs.json");
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     private const int DefaultLanPort = 18150;
@@ -111,27 +113,121 @@ public class GuiCommand : IWithConfigCommand
 
     private static GuiPrefs LoadPrefs()
     {
-        try
+        // One-time migration: move gui-prefs.json from the old cache location to ~/.config.
+        if (!File.Exists(PrefsPath) && File.Exists(LegacyPrefsPath))
         {
-            if (File.Exists(PrefsPath))
+            bool moved = false;
+            try
             {
-                string json = File.ReadAllText(PrefsPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
+                File.Move(LegacyPrefsPath, PrefsPath);
+                Log.LogInformation($"[prefs] Migrated gui-prefs.json from {LegacyPrefsPath} to {PrefsPath}");
+                moved = true;
+            }
+            catch (IOException ex)
+            {
+                Log.LogWarning($"[prefs] File.Move migration failed ({ex.GetType().Name}: {ex.Message}); trying non-destructive copy.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Log.LogWarning($"[prefs] File.Move migration failed ({ex.GetType().Name}: {ex.Message}); trying non-destructive copy.");
+            }
+
+            if (!moved)
+            {
+                // Non-destructive fallback: copy without removing the legacy file.
+                // If this also fails, the read loop below will still find and parse LegacyPrefsPath.
+                try
+                {
+                    File.Copy(LegacyPrefsPath, PrefsPath, overwrite: false);
+                    Log.LogInformation($"[prefs] Copied gui-prefs.json to {PrefsPath} (legacy file preserved at {LegacyPrefsPath})");
+                }
+                catch (IOException ex)
+                {
+                    Log.LogWarning($"[prefs] File.Copy also failed ({ex.GetType().Name}: {ex.Message}); will read legacy prefs directly.");
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    Log.LogWarning($"[prefs] File.Copy also failed ({ex.GetType().Name}: {ex.Message}); will read legacy prefs directly.");
+                }
+            }
+        }
+
+        // Try PrefsPath first, then fall back to LegacyPrefsPath (still present when copy failed).
+        // Log and continue to the next candidate on any read/parse failure; return defaults only
+        // if both are unavailable or unparseable.
+        foreach (string candidate in new[] { PrefsPath, LegacyPrefsPath })
+        {
+            try
+            {
+                if (!File.Exists(candidate)) { continue; }
+                string json = File.ReadAllText(candidate);
+                // Log instead of silently swallowing: a JsonException here (e.g. from a partially
+                // written file) would cause every subsequent SavePrefs call to use an empty GuiPrefs
+                // as the base, wiping SMTP credentials and webhook URLs from disk.
                 return JsonSerializer.Deserialize<GuiPrefs>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new GuiPrefs();
             }
+            catch (IOException ex)
+            {
+                Log.LogWarning($"[prefs] Failed to load {candidate}: {ex.GetType().Name}: {ex.Message}.");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Log.LogWarning($"[prefs] Failed to load {candidate}: {ex.GetType().Name}: {ex.Message}.");
+            }
+            catch (JsonException ex)
+            {
+                Log.LogWarning($"[prefs] Failed to parse {candidate}: {ex.GetType().Name}: {ex.Message}.");
+            }
         }
-        catch { }
         return new GuiPrefs();
     }
 
     private static void SavePrefs(GuiPrefs prefs)
     {
+        // Unique suffix per invocation avoids collisions when saves run concurrently.
+        string tempPath = Path.Join(Path.GetDirectoryName(PrefsPath)!, $".gui-prefs-{Guid.NewGuid():N}.tmp");
+        bool committed = false;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
-            File.WriteAllText(PrefsPath, JsonSerializer.Serialize(prefs));
+            // Write atomically: write to a unique temp file first, then rename.
+            // File.WriteAllText is not atomic — a crash mid-write leaves a corrupt JSON file
+            // that permanently breaks LoadPrefs (silent catch → empty GuiPrefs → data loss).
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(prefs));
+            File.Move(tempPath, PrefsPath, overwrite: true);
+            committed = true;
         }
-        catch { }
+        catch (IOException ex)
+        {
+            Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
+        finally
+        {
+            if (!committed)
+            {
+                // Best-effort cleanup; File.Delete does not throw if file does not exist.
+                try { File.Delete(tempPath); }
+                catch (IOException)
+                {
+                    // Swallow I/O errors during best-effort cleanup; main failure is already logged.
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    // Log permission issues so repeated cleanup failures are visible for diagnostics.
+                    Log.LogWarning($"[prefs] Failed to delete temporary prefs file '{tempPath}': {ex.Message}");
+                }
+            }
+        }
     }
 
     public override async Task<int> ExecuteAsync(CancellationToken cancellationToken)
@@ -912,7 +1008,7 @@ public class GuiCommand : IWithConfigCommand
 
             GuiPrefs prefs = LoadPrefs();
             int minutes = prefs.AutoRefreshMinutes ?? 0;
-            if (minutes < 1)
+            if (minutes < 10)
             {
                 continue;
             }
@@ -984,7 +1080,26 @@ public class GuiCommand : IWithConfigCommand
         InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
 
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
+        List<InvoiceSummary> invoices;
+        try
+        {
+            invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
+            // Suggestion 1: invalidate the stored access token after every successful fetch.
+            // KSeF revokes access tokens as soon as the search session completes, so ValidUntil
+            // (~2 h) is misleading. Expiring it here ensures the next cycle does a TokenRefresh
+            // instead of reusing a server-revoked token and cascading into three 401s.
+            ExpireStoredAccessToken(name, profile);
+        }
+        catch (KsefApiException ex401) when (ex401.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // Suggestion 2: server revoked the token mid-fetch — expire it and retry once.
+            Log.LogWarning($"[bg-refresh] '{name}': HTTP 401 mid-fetch — forcing token refresh and retrying once");
+            ExpireStoredAccessToken(name, profile);
+            // GetAccessTokenForProfile sees the expired access token and performs TokenRefresh.
+            string freshToken = await GetAccessTokenForProfile(name, profile, scope, ct).ConfigureAwait(false);
+            invoices = await FetchAllPagesAsync(client, filters, freshToken, ct, abortOn429: true).ConfigureAwait(false);
+            ExpireStoredAccessToken(name, profile);
+        }
 
         if (prev == null)
         {
@@ -1051,6 +1166,10 @@ public class GuiCommand : IWithConfigCommand
                     List<string> channelsOk = webhookTasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
                     List<string> channelsFailed = webhookTasks.Where(t => !t.Task.IsCompletedSuccessfully || !t.Task.Result).Select(t => t.Name).ToList();
                     _invoiceCache.UpdateNotifiedChannels(profileKey, toNotify.Select(i => i.KsefNumber), channelsOk, channelsFailed);
+                }
+                else
+                {
+                    Log.LogWarning($"[bg-refresh] Profile '{name}': {toNotify.Count} new invoice(s) detected but no notification channels configured (Slack, Teams, e-mail).");
                 }
             }
         }
