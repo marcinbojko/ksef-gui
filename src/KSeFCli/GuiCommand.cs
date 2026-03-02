@@ -226,12 +226,6 @@ public class GuiCommand : IWithConfigCommand
                     // Log permission issues so repeated cleanup failures are visible for diagnostics.
                     Log.LogWarning($"[prefs] Failed to delete temporary prefs file '{tempPath}': {ex.Message}");
                 }
-                    Log.LogDebug($"[prefs] Failed to delete temp prefs file '{tempPath}': {ex.Message}");
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    Log.LogDebug($"[prefs] Failed to delete temp prefs file '{tempPath}': {ex.Message}");
-                }
             }
         }
     }
