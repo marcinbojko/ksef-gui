@@ -428,20 +428,27 @@ public abstract class IWithConfigCommand : IGlobalCommand
     /// </summary>
     protected internal void ExpireStoredAccessToken(string profileName, ProfileConfig profile)
     {
-        TokenStore tokenStore = GetTokenStore();
-        TokenStore.Key key = new TokenStore.Key(profileName, profile);
-        TokenStore.Data? stored = tokenStore.GetToken(key);
-        if (stored == null)
+        try
         {
-            return;
-        }
+            TokenStore tokenStore = GetTokenStore();
+            TokenStore.Key key = new TokenStore.Key(profileName, profile);
+            TokenStore.Data? stored = tokenStore.GetToken(key);
+            if (stored == null)
+            {
+                return;
+            }
 
-        tokenStore.SetToken(key, new TokenStore.Data(new AuthenticationOperationStatusResponse
+            tokenStore.SetToken(key, new TokenStore.Data(new AuthenticationOperationStatusResponse
+            {
+                AccessToken = new TokenInfo { Token = string.Empty, ValidUntil = DateTime.MinValue },
+                RefreshToken = stored.Response.RefreshToken,
+            }));
+            Log.LogDebug($"[bg-refresh] '{profileName}': access token invalidated (KSeF revokes after search session)");
+        }
+        catch (IOException ex)
         {
-            AccessToken = new TokenInfo { Token = string.Empty, ValidUntil = DateTime.MinValue },
-            RefreshToken = stored.Response.RefreshToken,
-        }));
-        Log.LogDebug($"[bg-refresh] '{profileName}': access token invalidated (KSeF revokes after search session)");
+            Log.LogWarning($"[bg-refresh] '{profileName}': failed to expire stored access token — {ex.Message}");
+        }
     }
 
     public async Task<ICryptographyService> GetCryptographicService(IServiceScope scope, CancellationToken cancellationToken)
