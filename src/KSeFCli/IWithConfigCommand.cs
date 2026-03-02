@@ -418,6 +418,32 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return authResponse.AccessToken.Token;
     }
 
+    /// <summary>
+    /// Overwrites the stored access token for the given profile with an already-expired sentinel
+    /// so the next call to <see cref="GetAccessTokenForProfile"/> is forced to perform a
+    /// <see cref="TokenRefresh"/> instead of reusing a server-revoked token.
+    /// KSeF revokes access tokens as soon as a search session completes, regardless of the
+    /// <c>ValidUntil</c> timestamp reported at login (~2 hours). Calling this after every
+    /// successful fetch prevents three consecutive 401 cycles at the start of each bg-refresh.
+    /// </summary>
+    protected internal void ExpireStoredAccessToken(string profileName, ProfileConfig profile)
+    {
+        TokenStore tokenStore = GetTokenStore();
+        TokenStore.Key key = new TokenStore.Key(profileName, profile);
+        TokenStore.Data? stored = tokenStore.GetToken(key);
+        if (stored == null)
+        {
+            return;
+        }
+
+        tokenStore.SetToken(key, new TokenStore.Data(new AuthenticationOperationStatusResponse
+        {
+            AccessToken = new TokenInfo { Token = string.Empty, ValidUntil = DateTime.MinValue },
+            RefreshToken = stored.Response.RefreshToken,
+        }));
+        Log.LogDebug($"[bg-refresh] '{profileName}': access token invalidated (KSeF revokes after search session)");
+    }
+
     public async Task<ICryptographyService> GetCryptographicService(IServiceScope scope, CancellationToken cancellationToken)
     {
         ICryptographyService cryptographyService = scope.ServiceProvider.GetRequiredService<ICryptographyService>();

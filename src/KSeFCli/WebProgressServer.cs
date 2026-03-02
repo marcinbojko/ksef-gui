@@ -918,8 +918,8 @@ body.dark .pref-label{color:#aaa}
           <div style="display:flex;align-items:center;gap:.5rem">
             <input id="autoRefreshMinutes" type="number" value="0" min="0" max="1440" step="1"
                    style="width:5rem"
-                   title="0 = wyłączone, 1–1440 minut">
-            <span style="font-size:.75rem;color:#999">0 = wyłączone</span>
+                   title="0 = wyłączone, min. 10 minut">
+            <span style="font-size:.75rem;color:#999">0 = wyłączone, min. 10</span>
           </div>
         </div>
         <div class="pref-row">

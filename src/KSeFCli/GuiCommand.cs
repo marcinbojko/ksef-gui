@@ -912,7 +912,7 @@ public class GuiCommand : IWithConfigCommand
 
             GuiPrefs prefs = LoadPrefs();
             int minutes = prefs.AutoRefreshMinutes ?? 0;
-            if (minutes < 1)
+            if (minutes < 10)
             {
                 continue;
             }
@@ -984,7 +984,26 @@ public class GuiCommand : IWithConfigCommand
         InvoiceQueryFilters filters = await BuildFiltersAsync(sp, ct).ConfigureAwait(false);
 
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
-        List<InvoiceSummary> invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
+        List<InvoiceSummary> invoices;
+        try
+        {
+            invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
+            // Suggestion 1: invalidate the stored access token after every successful fetch.
+            // KSeF revokes access tokens as soon as the search session completes, so ValidUntil
+            // (~2 h) is misleading. Expiring it here ensures the next cycle does a TokenRefresh
+            // instead of reusing a server-revoked token and cascading into three 401s.
+            ExpireStoredAccessToken(name, profile);
+        }
+        catch (KsefApiException ex401) when (ex401.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // Suggestion 2: server revoked the token mid-fetch — expire it and retry once.
+            Log.LogWarning($"[bg-refresh] '{name}': HTTP 401 mid-fetch — forcing token refresh and retrying once");
+            ExpireStoredAccessToken(name, profile);
+            // GetAccessTokenForProfile sees the expired access token and performs TokenRefresh.
+            string freshToken = await GetAccessTokenForProfile(name, profile, scope, ct).ConfigureAwait(false);
+            invoices = await FetchAllPagesAsync(client, filters, freshToken, ct, abortOn429: true).ConfigureAwait(false);
+            ExpireStoredAccessToken(name, profile);
+        }
 
         if (prev == null)
         {
@@ -1051,6 +1070,10 @@ public class GuiCommand : IWithConfigCommand
                     List<string> channelsOk = webhookTasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
                     List<string> channelsFailed = webhookTasks.Where(t => !t.Task.IsCompletedSuccessfully || !t.Task.Result).Select(t => t.Name).ToList();
                     _invoiceCache.UpdateNotifiedChannels(profileKey, toNotify.Select(i => i.KsefNumber), channelsOk, channelsFailed);
+                }
+                else
+                {
+                    Log.LogWarning($"[bg-refresh] Profile '{name}': {toNotify.Count} new invoice(s) detected but no notification channels configured (Slack, Teams, e-mail).");
                 }
             }
         }
