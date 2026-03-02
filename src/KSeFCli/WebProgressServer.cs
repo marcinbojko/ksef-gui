@@ -1332,13 +1332,16 @@ async function savePrefs() {
     smtpFrom: $('smtpFrom').value || null
   };
   const mins = prefs.autoRefreshMinutes;
+  // Values 1–9 are below the server minimum of 10 — normalise to 0 (disabled) so the timer
+  // and notification-permission request are consistent with what the server will ignore.
+  const effectiveMins = (mins > 0 && mins < 10) ? 0 : mins;
   const resp = await fetch('/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prefs) });
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const data = await resp.json();
   if (data?.error) throw new Error(data.error);
   // Only mutate runtime state after the save is confirmed on disk
-  startAutoRefresh(mins);
-  if (mins > 0) requestNotificationPermission();
+  startAutoRefresh(effectiveMins);
+  if (effectiveMins > 0) requestNotificationPermission();
 }
 
 async function onProfileChange() {
@@ -2053,7 +2056,8 @@ async function doSearch() {
 
 function startAutoRefresh(minutes) {
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
-  if (!minutes || minutes < 1) return;
+  // Values 1–9 are below the server-enforced minimum of 10 minutes; treat them as disabled.
+  if (!minutes || minutes < 10) return;
   autoRefreshTimer = setInterval(() => { if (lastSearchParams) silentRefresh(); }, minutes * 60 * 1000);
 }
 
