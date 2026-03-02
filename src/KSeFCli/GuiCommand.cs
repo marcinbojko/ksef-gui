@@ -156,7 +156,7 @@ public class GuiCommand : IWithConfigCommand
         // Try PrefsPath first, then fall back to LegacyPrefsPath (still present when copy failed).
         // Log and continue to the next candidate on any read/parse failure; return defaults only
         // if both are unavailable or unparseable.
-        foreach (string candidate in (string[])[PrefsPath, LegacyPrefsPath])
+        foreach (string candidate in new[] { PrefsPath, LegacyPrefsPath })
         {
             try
             {
@@ -186,15 +186,18 @@ public class GuiCommand : IWithConfigCommand
 
     private static void SavePrefs(GuiPrefs prefs)
     {
+        // Unique suffix per invocation avoids collisions when saves run concurrently.
+        string tempPath = Path.Join(Path.GetDirectoryName(PrefsPath)!, $".gui-prefs-{Guid.NewGuid():N}.tmp");
+        bool committed = false;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(PrefsPath)!);
-            // Write atomically: write to a temp file first, then rename.
+            // Write atomically: write to a unique temp file first, then rename.
             // File.WriteAllText is not atomic — a crash mid-write leaves a corrupt JSON file
             // that permanently breaks LoadPrefs (silent catch → empty GuiPrefs → data loss).
-            string tempPath = PrefsPath + ".tmp";
             File.WriteAllText(tempPath, JsonSerializer.Serialize(prefs));
             File.Move(tempPath, PrefsPath, overwrite: true);
+            committed = true;
         }
         catch (IOException ex)
         {
@@ -207,6 +210,16 @@ public class GuiCommand : IWithConfigCommand
         catch (JsonException ex)
         {
             Log.LogWarning($"[prefs] Failed to save {PrefsPath}: {ex.Message}");
+        }
+        finally
+        {
+            if (!committed)
+            {
+                // Best-effort cleanup; File.Delete does not throw if file does not exist.
+                try { File.Delete(tempPath); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
     }
 
