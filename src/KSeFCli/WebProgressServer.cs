@@ -66,6 +66,10 @@ internal sealed class WebProgressServer : IDisposable
     /// Returns a result message string.</summary>
     public Func<string, CancellationToken, Task<string>>? OnTestEmail { get; set; }
 
+    /// <summary>Called to fetch notification delivery status per profile.
+    /// Returns an object keyed by profile name with last-sent, pending-retry, and error state.</summary>
+    public Func<Task<object>>? OnNotificationStatus { get; set; }
+
     public bool Lan { get; }
 
     /// <summary>
@@ -460,6 +464,16 @@ internal sealed class WebProgressServer : IDisposable
                     ? await OnTestEmail(body, ct).ConfigureAwait(false)
                     : "Brak obsługi testu e-mail.";
                 return JsonSerializer.Serialize(new { ok = true, message = result });
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/notification-status" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                object data = OnNotificationStatus != null
+                    ? await OnNotificationStatus().ConfigureAwait(false)
+                    : new { };
+                return JsonSerializer.Serialize(data, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             }).ConfigureAwait(false);
         }
         else if (path == "/quit" && method == "POST")
@@ -1301,10 +1315,12 @@ function updateAuthButton() {
   }
 }
 
-// Fetch token status on load and periodically
+// Fetch token and notification status on load and periodically
 fetchTokenStatus();
+fetchNotifStatus();
 setInterval(() => { updateAuthButton(); }, 15000);
 setInterval(() => { fetchTokenStatus(); }, 60000);
+setInterval(() => { fetchNotifStatus(); }, 120000);
 
 async function savePrefs() {
   const prefs = {
@@ -1931,6 +1947,16 @@ function connectSSE() {
           markProfileBadge(d.profileName, d.newCount);
           notifyNewInvoices(d.profileName, d.newCount);
         }
+        fetchNotifStatus();
+        break;
+      case 'notification_outcome':
+        // d = { profileName, isRetry, channelsOk, channelsFailed, pendingRetries? }
+        if (d.channelsFailed && d.channelsFailed.length > 0) {
+          console.warn('[notif] Delivery failed for profile "' + d.profileName + '",' +
+            (d.isRetry ? ' retry' : ' initial') +
+            ' channels: [' + d.channelsFailed.join(', ') + ']');
+        }
+        fetchNotifStatus();
         break;
     }
   };
@@ -1953,15 +1979,33 @@ function markProfileBadge(name, count) {
   updateProfileSelectBadges();
 }
 
+const notifStatusBadges = {}; // profileName → { pendingRetries, lastSentAt, hasErrors }
+
 function updateProfileSelectBadges() {
   const sel = $('profileSelect');
   if (!sel) return;
   for (const opt of sel.options) {
-    const badge = profileBadges[opt.value];
+    const invBadge = profileBadges[opt.value];
+    const notif = notifStatusBadges[opt.value];
     const base = opt.dataset.base || opt.textContent;
     opt.dataset.base = base;
-    opt.textContent = badge ? base + ' \uD83D\uDD14' + badge : base;
+    let label = base;
+    if (invBadge) { label += ' \uD83D\uDD14' + invBadge; }
+    if (notif && notif.pendingRetries > 0) { label += ' \u26A0\uFE0F' + notif.pendingRetries; }
+    opt.textContent = label;
   }
+}
+
+async function fetchNotifStatus() {
+  try {
+    const res = await fetch('/notification-status');
+    if (!res.ok) { return; }
+    const data = await res.json();
+    for (const [name, status] of Object.entries(data)) {
+      notifStatusBadges[name] = status;
+    }
+    updateProfileSelectBadges();
+  } catch (e) { /* ignore — server may not be ready yet */ }
 }
 
 // Extensible notification hook — swap for email/Slack in future
