@@ -818,7 +818,7 @@ public class GuiCommand : IWithConfigCommand
         {
             KsefCliConfig statusConfig;
             try { statusConfig = CurrentConfig; }
-            catch (Exception) { return Task.FromResult<object>(new { }); }
+            catch (InvalidOperationException) { return Task.FromResult<object>(new { }); }
             Dictionary<string, object> result = [];
             foreach ((string profName, ProfileConfig profCfg) in statusConfig.Profiles)
             {
@@ -1244,6 +1244,10 @@ public class GuiCommand : IWithConfigCommand
         string? slackUrl = profilePrefs?.SlackWebhookUrl;
         string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
         string? emailTo = profilePrefs?.NotificationEmail;
+        string slackHost = Uri.TryCreate(slackUrl, UriKind.Absolute, out Uri? slackUri)
+            ? slackUri.Host : slackUrl ?? "";
+        string teamsHost = Uri.TryCreate(teamsUrl, UriKind.Absolute, out Uri? teamsUri)
+            ? teamsUri.Host : teamsUrl ?? "";
 
         // Build per-channel invoice lists from the current cache
         Dictionary<string, List<InvoiceSummary>> retryInvoicesByChannel = [];
@@ -1271,11 +1275,11 @@ public class GuiCommand : IWithConfigCommand
             switch (ch)
             {
                 case "Slack" when !string.IsNullOrEmpty(slackUrl):
-                    Log.LogInformation($"[bg-retry] '{name}' Slack: retrying {chInvoices.Count} invoice(s) (host={new Uri(slackUrl).Host})");
+                    Log.LogInformation($"[bg-retry] '{name}' Slack: retrying {chInvoices.Count} invoice(s) (host={slackHost})");
                     retryTasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, name, chInvoices, extended, ct)));
                     break;
                 case "Teams" when !string.IsNullOrEmpty(teamsUrl):
-                    Log.LogInformation($"[bg-retry] '{name}' Teams: retrying {chInvoices.Count} invoice(s) (host={new Uri(teamsUrl).Host})");
+                    Log.LogInformation($"[bg-retry] '{name}' Teams: retrying {chInvoices.Count} invoice(s) (host={teamsHost})");
                     retryTasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, name, chInvoices, extended, ct)));
                     break;
                 case "Email" when !string.IsNullOrEmpty(emailTo):
@@ -1290,14 +1294,8 @@ public class GuiCommand : IWithConfigCommand
 
         if (retryTasks.Count == 0) { return; }
 
-        try
-        {
-            await Task.WhenAll(retryTasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Log.LogWarning($"[bg-retry] '{name}' one or more retry tasks faulted: {ex.Message}");
-        }
+        await Task.WhenAll(retryTasks.Select(t => (Task)t.Task))
+            .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         HashSet<string> succeeded = retryTasks
             .Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result)
             .Select(t => t.Channel).ToHashSet();
@@ -1390,7 +1388,8 @@ public class GuiCommand : IWithConfigCommand
 
         string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-        string webhookHost = new Uri(webhookUrl).Host;
+        string webhookHost = Uri.TryCreate(webhookUrl, UriKind.Absolute, out Uri? swUri)
+            ? swUri.Host : webhookUrl;
         Log.LogDebug($"[slack-notify] POST to '{webhookHost}' for profile '{profileName}': {count} invoice(s)");
         try
         {
@@ -1479,7 +1478,8 @@ public class GuiCommand : IWithConfigCommand
 
         string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-        string webhookHost = new Uri(webhookUrl).Host;
+        string webhookHost = Uri.TryCreate(webhookUrl, UriKind.Absolute, out Uri? twUri)
+            ? twUri.Host : webhookUrl;
         Log.LogDebug($"[teams-notify] POST to '{webhookHost}' for profile '{profileName}': {count} invoice(s)");
         try
         {

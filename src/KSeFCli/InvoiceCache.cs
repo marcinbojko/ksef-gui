@@ -354,7 +354,7 @@ internal sealed class InvoiceCache
             string? channelsOk = reader.IsDBNull(1) ? null : reader.GetString(1);
             string channelsFailed = reader.GetString(2);
             int retryCount = reader.GetInt32(3);
-            List<string> failedList = [.. channelsFailed.Split(',').Where(s => !string.IsNullOrEmpty(s))];
+            IReadOnlyList<string> failedList = [.. channelsFailed.Split(',').Where(s => !string.IsNullOrEmpty(s))];
             result.Add(new PendingRetry(ksefNumber, channelsOk, failedList, retryCount));
         }
         if (result.Count > 0)
@@ -474,7 +474,7 @@ internal sealed class InvoiceCache
     public record PendingRetry(
         string KsefNumber,
         string? ChannelsOk,
-        List<string> ChannelsFailed,
+        IReadOnlyList<string> ChannelsFailed,
         int RetryCount);
 
     /// <summary>Snapshot of the most recent notification state for a profile, used by the UI status badge.</summary>
