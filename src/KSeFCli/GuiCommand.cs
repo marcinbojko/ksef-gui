@@ -421,14 +421,19 @@ public class GuiCommand : IWithConfigCommand
                 SmtpHost: root.TryGetProperty("smtpHost", out JsonElement smh) ? smh.GetString() : null,
                 SmtpPort: root.TryGetProperty("smtpPort", out JsonElement smpo) && smpo.TryGetInt32(out int smpoVal) ? smpoVal : (int?)null,
                 SmtpSecurity: root.TryGetProperty("smtpSecurity", out JsonElement smse) ? smse.GetString() : null,
-                SmtpUser: root.TryGetProperty("smtpUser", out JsonElement smui) ? smui.GetString() : null,
-                // Preserve existing password if JS sends null/empty (password field may be blank when re-opening prefs).
+                SmtpUser: root.TryGetProperty("smtpUser", out JsonElement smui)
+                    ? smui.GetString()
+                    : null,
+                // Preserve existing password if JS sends null/empty
+                // (password field may be blank when re-opening prefs).
                 SmtpPassword: root.TryGetProperty("smtpPassword", out JsonElement smpw)
                     && smpw.ValueKind != JsonValueKind.Null
                     && !string.IsNullOrEmpty(smpw.GetString())
                     ? smpw.GetString()
                     : existingPrefs.SmtpPassword,
-                SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr) ? smfr.GetString() : null,
+                SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr)
+                    ? smfr.GetString()
+                    : null,
                 // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
                 // so this prevents webhook URLs from being wiped on every prefs save.
                 ProfilePrefs: existingPrefs.ProfilePrefs);
@@ -809,6 +814,28 @@ public class GuiCommand : IWithConfigCommand
             return $"Testowy e-mail wysłany do: {toEmail}";
         };
 
+        server.OnNotificationStatus = () =>
+        {
+            KsefCliConfig statusConfig;
+            try { statusConfig = CurrentConfig; }
+            catch (InvalidOperationException) { return Task.FromResult<object>(new { }); }
+            Dictionary<string, object> result = [];
+            foreach ((string profName, ProfileConfig profCfg) in statusConfig.Profiles)
+            {
+                string profKey = new TokenStore.Key(profName, profCfg).ToCacheKey();
+                InvoiceCache.NotificationStatus status = _invoiceCache.LoadNotificationStatus(profKey);
+                result[profName] = new
+                {
+                    lastSentAt = status.LastSentAt,
+                    pendingRetries = status.PendingRetries,
+                    channelsOk = status.LastChannelsOk,
+                    channelsFailed = status.LastChannelsFailed,
+                    hasErrors = status.PendingRetries > 0,
+                };
+            }
+            return Task.FromResult<object>(result);
+        };
+
         server.Start(cancellationToken);
         Log.LogInformation($"GUI running at {server.LocalUrl}");
         _ = Task.Run(() => RunBackgroundProfileRefreshAsync(cancellationToken), cancellationToken);
@@ -1126,6 +1153,9 @@ public class GuiCommand : IWithConfigCommand
             }).ConfigureAwait(false);
         }
 
+        // Retry previously failed notification channels before dispatching new notifications.
+        await DispatchPendingRetriesAsync(profileKey, invoices, name, profilePrefs, prefs, ct).ConfigureAwait(false);
+
         // Webhooks fire only for invoices that are both new (not in prev cache) and not yet
         // notified (not in notification_sent table). This prevents duplicate webhook calls
         // across refresh cycles and across app restarts.
@@ -1139,14 +1169,18 @@ public class GuiCommand : IWithConfigCommand
             if (toNotify.Count > 0)
             {
                 // Deliberate at-most-once ordering: mark as notified BEFORE sending webhooks.
-                // If a webhook call fails, the invoice is still marked and will not be retried.
-                // This avoids duplicate notifications on transient errors at the cost of
-                // potentially missing one delivery. Change order here if at-least-once is preferred.
+                // If a webhook call fails, the invoice is still marked and will not be retried
+                // immediately — instead DispatchPendingRetriesAsync will retry on the next cycle
+                // using exponential backoff (5, 10, 20 min, up to 3 attempts).
                 _invoiceCache.MarkAsNotified(profileKey, toNotify.Select(i => i.KsefNumber));
                 string? slackUrl = profilePrefs?.SlackWebhookUrl;
                 string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
                 string? emailTo = profilePrefs?.NotificationEmail;
                 bool extended = profilePrefs?.ExtendedNotifications ?? false;
+                Log.LogDebug($"[bg-refresh] '{name}' channels: " +
+                    $"Slack={(!string.IsNullOrEmpty(slackUrl) ? "configured" : "none")} " +
+                    $"Teams={(!string.IsNullOrEmpty(teamsUrl) ? "configured" : "none")} " +
+                    $"Email={(!string.IsNullOrEmpty(emailTo) ? MaskEmail(emailTo) : "none")}");
                 List<(string Name, Task<bool> Task)> webhookTasks = [];
                 if (!string.IsNullOrEmpty(slackUrl))
                 {
@@ -1166,12 +1200,137 @@ public class GuiCommand : IWithConfigCommand
                     List<string> channelsOk = webhookTasks.Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result).Select(t => t.Name).ToList();
                     List<string> channelsFailed = webhookTasks.Where(t => !t.Task.IsCompletedSuccessfully || !t.Task.Result).Select(t => t.Name).ToList();
                     _invoiceCache.UpdateNotifiedChannels(profileKey, toNotify.Select(i => i.KsefNumber), channelsOk, channelsFailed);
+                    if (channelsFailed.Count > 0)
+                    {
+                        Log.LogWarning($"[bg-refresh] '{name}': {channelsFailed.Count} channel(s) failed — [{string.Join(", ", channelsFailed)}] — will retry in 5 min");
+                    }
+                    if (_server != null)
+                    {
+                        await _server.SendEventAsync("notification_outcome", new
+                        {
+                            profileName = name,
+                            invoiceCount = toNotify.Count,
+                            channelsOk,
+                            channelsFailed,
+                            pendingRetries = channelsFailed.Count,
+                        }).ConfigureAwait(false);
+                    }
                 }
                 else
                 {
                     Log.LogWarning($"[bg-refresh] Profile '{name}': {toNotify.Count} new invoice(s) detected but no notification channels configured (Slack, Teams, e-mail).");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Retries delivery to channels that failed in a previous cycle. Matches pending ksef_numbers
+    /// against the current invoice cache, sends per-channel, then updates retry state with
+    /// exponential backoff (5→10→20 min, max 3 attempts total).
+    /// </summary>
+    private async Task DispatchPendingRetriesAsync(
+        string profileKey, List<InvoiceSummary> invoices,
+        string name, ProfilePrefs? profilePrefs, GuiPrefs prefs, CancellationToken ct)
+    {
+        List<InvoiceCache.PendingRetry> pending = _invoiceCache.LoadPendingRetries(profileKey);
+        if (pending.Count == 0) { return; }
+
+        IEnumerable<string> allFailedChannels = pending.SelectMany(p => p.ChannelsFailed).Distinct();
+        Log.LogInformation($"[bg-retry] '{name}': {pending.Count} invoice(s) with pending retries — channels: [{string.Join(", ", allFailedChannels)}]");
+
+        Dictionary<string, InvoiceSummary> invoiceMap = invoices.ToDictionary(i => i.KsefNumber);
+        bool extended = profilePrefs?.ExtendedNotifications ?? false;
+        string? slackUrl = profilePrefs?.SlackWebhookUrl;
+        string? teamsUrl = profilePrefs?.TeamsWebhookUrl;
+        string? emailTo = profilePrefs?.NotificationEmail;
+        string slackHost = Uri.TryCreate(slackUrl, UriKind.Absolute, out Uri? slackUri)
+            ? slackUri.Host : slackUrl ?? "";
+        string teamsHost = Uri.TryCreate(teamsUrl, UriKind.Absolute, out Uri? teamsUri)
+            ? teamsUri.Host : teamsUrl ?? "";
+
+        // Build per-channel invoice lists from the current cache
+        Dictionary<string, List<InvoiceSummary>> retryInvoicesByChannel = [];
+        foreach (InvoiceCache.PendingRetry retry in pending)
+        {
+            foreach (string ch in retry.ChannelsFailed)
+            {
+                if (!retryInvoicesByChannel.ContainsKey(ch)) { retryInvoicesByChannel[ch] = []; }
+                if (invoiceMap.TryGetValue(retry.KsefNumber, out InvoiceSummary? inv))
+                {
+                    retryInvoicesByChannel[ch].Add(inv);
+                }
+            }
+        }
+
+        // Track which channels were actually dispatched (vs. skipped due to missing URL/data)
+        List<(string Channel, Task<bool> Task)> retryTasks = [];
+        foreach ((string ch, List<InvoiceSummary> chInvoices) in retryInvoicesByChannel)
+        {
+            if (chInvoices.Count == 0)
+            {
+                Log.LogWarning($"[bg-retry] '{name}' {ch}: {pending.Count(p => p.ChannelsFailed.Contains(ch))} pending invoice(s) no longer in cache — will retry next cycle");
+                continue;
+            }
+            switch (ch)
+            {
+                case "Slack" when !string.IsNullOrEmpty(slackUrl):
+                    Log.LogInformation($"[bg-retry] '{name}' Slack: retrying {chInvoices.Count} invoice(s) (host={slackHost})");
+                    retryTasks.Add(("Slack", SendSlackNotificationAsync(slackUrl, name, chInvoices, extended, ct)));
+                    break;
+                case "Teams" when !string.IsNullOrEmpty(teamsUrl):
+                    Log.LogInformation($"[bg-retry] '{name}' Teams: retrying {chInvoices.Count} invoice(s) (host={teamsHost})");
+                    retryTasks.Add(("Teams", SendTeamsNotificationAsync(teamsUrl, name, chInvoices, extended, ct)));
+                    break;
+                case "Email" when !string.IsNullOrEmpty(emailTo):
+                    Log.LogInformation($"[bg-retry] '{name}' Email: retrying {chInvoices.Count} invoice(s) to {MaskEmail(emailTo)}");
+                    retryTasks.Add(("Email", SendEmailNotificationAsync(emailTo, name, chInvoices, extended, prefs, ct)));
+                    break;
+                default:
+                    Log.LogWarning($"[bg-retry] '{name}' {ch}: has pending retries but channel URL is no longer configured");
+                    break;
+            }
+        }
+
+        if (retryTasks.Count == 0) { return; }
+
+        await Task.WhenAll(retryTasks.Select(t => (Task)t.Task))
+            .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        HashSet<string> succeeded = retryTasks
+            .Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result)
+            .Select(t => t.Channel).ToHashSet();
+        HashSet<string> stillFailed = retryTasks
+            .Where(t => !t.Task.IsCompletedSuccessfully || !t.Task.Result)
+            .Select(t => t.Channel).ToHashSet();
+        HashSet<string> dispatched = retryTasks.Select(t => t.Channel).ToHashSet();
+
+        Log.LogInformation($"[bg-retry] '{name}' outcomes: ok=[{string.Join(",", succeeded)}] still-failed=[{string.Join(",", stillFailed)}]");
+
+        foreach (InvoiceCache.PendingRetry retry in pending)
+        {
+            // Merge newly-succeeded channels into the ok list
+            List<string> nowOk = [
+                .. (retry.ChannelsOk?.Split(',').Where(s => !string.IsNullOrEmpty(s)) ?? []),
+                .. retry.ChannelsFailed.Where(succeeded.Contains),
+            ];
+            // Channels still failing + channels that were skipped (no data/URL) stay in failed
+            List<string> remaining = retry.ChannelsFailed
+                .Where(ch => stillFailed.Contains(ch) || !dispatched.Contains(ch))
+                .ToList();
+            bool anyAttempted = retry.ChannelsFailed.Any(dispatched.Contains);
+            int newRetryCount = anyAttempted ? retry.RetryCount + 1 : retry.RetryCount;
+            _invoiceCache.UpdateRetryOutcome(profileKey, [retry.KsefNumber], nowOk, remaining, newRetryCount);
+        }
+
+        if (_server != null)
+        {
+            await _server.SendEventAsync("notification_outcome", new
+            {
+                profileName = name,
+                isRetry = true,
+                channelsOk = succeeded.ToList(),
+                channelsFailed = stillFailed.ToList(),
+            }).ConfigureAwait(false);
         }
     }
 
@@ -1229,6 +1388,9 @@ public class GuiCommand : IWithConfigCommand
 
         string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+        string webhookHost = Uri.TryCreate(webhookUrl, UriKind.Absolute, out Uri? swUri)
+            ? swUri.Host : webhookUrl;
+        Log.LogDebug($"[slack-notify] POST to '{webhookHost}' for profile '{profileName}': {count} invoice(s)");
         try
         {
             using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
@@ -1239,20 +1401,24 @@ public class GuiCommand : IWithConfigCommand
                 {
                     throw new HttpRequestException($"HTTP {(int)resp.StatusCode}: {body.Trim()}", null, resp.StatusCode);
                 }
-                Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
+                Log.LogWarning($"[slack-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}' (host={webhookHost}): {body.Trim()}");
                 return false;
             }
+            Log.LogInformation($"[slack-notify] Delivered to '{webhookHost}' for profile '{profileName}': {count} invoice(s)");
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (OperationCanceledException ex) when (!throwOnHttpError)
         {
-            Log.LogWarning($"[slack-notify] Timeout for profile '{profileName}': {ex.Message}");
+            Log.LogWarning($"[slack-notify] Timeout ({_httpClient.Timeout.TotalSeconds:F0}s) for profile '{profileName}' (host={webhookHost}): {ex.Message}");
             return false;
         }
         catch (HttpRequestException ex) when (!throwOnHttpError)
         {
-            Log.LogWarning($"[slack-notify] Failed for profile '{profileName}': {ex.Message}");
+            string netDetail = ex.InnerException is SocketException se
+                ? $"SocketError={se.SocketErrorCode} — {se.Message}"
+                : ex.Message;
+            Log.LogWarning($"[slack-notify] Network error for profile '{profileName}' (host={webhookHost}): {netDetail}");
             return false;
         }
     }
@@ -1312,6 +1478,9 @@ public class GuiCommand : IWithConfigCommand
 
         string json = JsonSerializer.Serialize(payload);
         using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+        string webhookHost = Uri.TryCreate(webhookUrl, UriKind.Absolute, out Uri? twUri)
+            ? twUri.Host : webhookUrl;
+        Log.LogDebug($"[teams-notify] POST to '{webhookHost}' for profile '{profileName}': {count} invoice(s)");
         try
         {
             using HttpResponseMessage resp = await _httpClient.PostAsync(webhookUrl, content, ct).ConfigureAwait(false);
@@ -1322,20 +1491,24 @@ public class GuiCommand : IWithConfigCommand
                 {
                     throw new HttpRequestException($"HTTP {(int)resp.StatusCode}: {body.Trim()}", null, resp.StatusCode);
                 }
-                Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}'");
+                Log.LogWarning($"[teams-notify] HTTP {(int)resp.StatusCode} for profile '{profileName}' (host={webhookHost}): {body.Trim()}");
                 return false;
             }
+            Log.LogInformation($"[teams-notify] Delivered to '{webhookHost}' for profile '{profileName}': {count} invoice(s)");
             return true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (OperationCanceledException ex) when (!throwOnHttpError)
         {
-            Log.LogWarning($"[teams-notify] Timeout for profile '{profileName}': {ex.Message}");
+            Log.LogWarning($"[teams-notify] Timeout ({_httpClient.Timeout.TotalSeconds:F0}s) for profile '{profileName}' (host={webhookHost}): {ex.Message}");
             return false;
         }
         catch (HttpRequestException ex) when (!throwOnHttpError)
         {
-            Log.LogWarning($"[teams-notify] Failed for profile '{profileName}': {ex.Message}");
+            string netDetail = ex.InnerException is SocketException se
+                ? $"SocketError={se.SocketErrorCode} — {se.Message}"
+                : ex.Message;
+            Log.LogWarning($"[teams-notify] Network error for profile '{profileName}' (host={webhookHost}): {netDetail}");
             return false;
         }
     }
@@ -1405,7 +1578,7 @@ public class GuiCommand : IWithConfigCommand
         {
             using TcpClient tcp = new TcpClient();
             await tcp.ConnectAsync(host, port, tcpCts.Token).ConfigureAwait(false);
-            Log.LogDebug($"[email-notify] Phase 1: TCP OK — proceeding to SMTP handshake");
+            Log.LogDebug($"[email-notify] Phase 1: TCP OK ({host}:{port}) — proceeding to SMTP handshake");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (OperationCanceledException)
@@ -1458,9 +1631,11 @@ public class GuiCommand : IWithConfigCommand
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            string msg = $"Błąd SMTP ({ex.GetType().Name}): {ex.Message}";
+            // Include inner exception detail (e.g. SmtpException status code, auth failure reason)
+            string inner = ex.InnerException is not null ? $" (inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message})" : "";
+            string msg = $"Błąd SMTP ({ex.GetType().Name}): {ex.Message}{inner}";
             if (throwOnError) { throw new InvalidOperationException(msg, ex); }
-            Log.LogWarning($"[email-notify] SMTP error for profile '{profileName}': {ex.Message}");
+            Log.LogWarning($"[email-notify] SMTP error for profile '{profileName}' ({host}:{port}): {ex.GetType().Name}: {ex.Message}{inner}");
             return false;
         }
     }
