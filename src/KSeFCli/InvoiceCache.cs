@@ -375,8 +375,9 @@ internal sealed class InvoiceCache
         string? ok = channelsOk.Count > 0 ? string.Join(",", channelsOk) : null;
         string? failed = channelsFailed.Count > 0 ? string.Join(",", channelsFailed) : null;
         // Backoff: retryCount=1 → 10 min, retryCount=2 → 20 min, retryCount=3 → done
+        double backoffMinutes = 5.0 * Math.Pow(2, retryCount);
         string? nextRetryAt = failed is not null && retryCount < 3
-            ? DateTime.UtcNow.AddMinutes(5 * (1 << retryCount)).ToString("o")
+            ? DateTime.UtcNow.AddMinutes(backoffMinutes).ToString("o")
             : null;
 
         using SqliteConnection conn = Open();
@@ -412,7 +413,7 @@ internal sealed class InvoiceCache
         string summary = ok is not null ? $"ok=[{ok}]" : "ok=[]";
         if (failed is not null)
         {
-            string backoffLabel = retryCount < 3 ? $"next={5 * (1 << retryCount)}m" : "max-retries-reached";
+            string backoffLabel = retryCount < 3 ? $"next={backoffMinutes}m" : "max-retries-reached";
             summary += $" failed=[{failed}] retry_count={retryCount} {backoffLabel}";
         }
         Log.LogInformation($"[notif-retry] Outcome for profile key {profileKey[..Math.Min(24, profileKey.Length)]}… — {summary}");
@@ -424,7 +425,6 @@ internal sealed class InvoiceCache
     /// </summary>
     public NotificationStatus LoadNotificationStatus(string profileKey)
     {
-        string now = DateTime.UtcNow.ToString("o");
         using SqliteConnection conn = Open();
 
         using SqliteCommand latestCmd = conn.CreateCommand();
@@ -456,10 +456,8 @@ internal sealed class InvoiceCache
             WHERE profile_key    = @key
               AND channels_failed IS NOT NULL
               AND retry_count     < 3
-              AND (next_retry_at IS NULL OR next_retry_at <= @now)
             """;
         pendingCmd.Parameters.AddWithValue("@key", profileKey);
-        pendingCmd.Parameters.AddWithValue("@now", now);
         int pendingRetries = (int)(long)(pendingCmd.ExecuteScalar() ?? 0L);
 
         return new NotificationStatus(lastSentAt, pendingRetries, lastOk, lastFailed, lastRetryCount);

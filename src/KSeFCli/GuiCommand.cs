@@ -421,14 +421,19 @@ public class GuiCommand : IWithConfigCommand
                 SmtpHost: root.TryGetProperty("smtpHost", out JsonElement smh) ? smh.GetString() : null,
                 SmtpPort: root.TryGetProperty("smtpPort", out JsonElement smpo) && smpo.TryGetInt32(out int smpoVal) ? smpoVal : (int?)null,
                 SmtpSecurity: root.TryGetProperty("smtpSecurity", out JsonElement smse) ? smse.GetString() : null,
-                SmtpUser: root.TryGetProperty("smtpUser", out JsonElement smui) ? smui.GetString() : null,
-                // Preserve existing password if JS sends null/empty (password field may be blank when re-opening prefs).
+                SmtpUser: root.TryGetProperty("smtpUser", out JsonElement smui)
+                    ? smui.GetString()
+                    : null,
+                // Preserve existing password if JS sends null/empty
+                // (password field may be blank when re-opening prefs).
                 SmtpPassword: root.TryGetProperty("smtpPassword", out JsonElement smpw)
                     && smpw.ValueKind != JsonValueKind.Null
                     && !string.IsNullOrEmpty(smpw.GetString())
                     ? smpw.GetString()
                     : existingPrefs.SmtpPassword,
-                SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr) ? smfr.GetString() : null,
+                SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr)
+                    ? smfr.GetString()
+                    : null,
                 // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
                 // so this prevents webhook URLs from being wiped on every prefs save.
                 ProfilePrefs: existingPrefs.ProfilePrefs);
@@ -813,7 +818,7 @@ public class GuiCommand : IWithConfigCommand
         {
             KsefCliConfig statusConfig;
             try { statusConfig = CurrentConfig; }
-            catch { return Task.FromResult<object>(new { }); }
+            catch (Exception) { return Task.FromResult<object>(new { }); }
             Dictionary<string, object> result = [];
             foreach ((string profName, ProfileConfig profCfg) in statusConfig.Profiles)
             {
@@ -1285,7 +1290,14 @@ public class GuiCommand : IWithConfigCommand
 
         if (retryTasks.Count == 0) { return; }
 
-        await Task.WhenAll(retryTasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
+        try
+        {
+            await Task.WhenAll(retryTasks.Select(t => (Task)t.Task)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[bg-retry] '{name}' one or more retry tasks faulted: {ex.Message}");
+        }
         HashSet<string> succeeded = retryTasks
             .Where(t => t.Task.IsCompletedSuccessfully && t.Task.Result)
             .Select(t => t.Channel).ToHashSet();
@@ -1307,7 +1319,9 @@ public class GuiCommand : IWithConfigCommand
             List<string> remaining = retry.ChannelsFailed
                 .Where(ch => stillFailed.Contains(ch) || !dispatched.Contains(ch))
                 .ToList();
-            _invoiceCache.UpdateRetryOutcome(profileKey, [retry.KsefNumber], nowOk, remaining, retry.RetryCount + 1);
+            bool anyAttempted = retry.ChannelsFailed.Any(dispatched.Contains);
+            int newRetryCount = anyAttempted ? retry.RetryCount + 1 : retry.RetryCount;
+            _invoiceCache.UpdateRetryOutcome(profileKey, [retry.KsefNumber], nowOk, remaining, newRetryCount);
         }
 
         if (_server != null)
