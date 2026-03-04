@@ -66,6 +66,19 @@ public class PdfGenerationTests
         Assert.True(IsPdfHeader(pdf), "Expected %PDF header when KSeF number is omitted");
     }
 
+    [Fact]
+    public void GeneratePdf_WithKsefReferenceNumber_IsLargerThanWithout()
+    {
+        // A QR code image is embedded when a KSeF number is provided;
+        // the resulting PDF must be strictly larger than one without it.
+        byte[] pdfWithQr = KSeFInvoicePdf.FromXml(
+            LoadSampleXml(), null, "9999999999-20240315-ABCDEF123456-01");
+        byte[] pdfWithout = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, null);
+        Assert.True(
+            pdfWithQr.Length > pdfWithout.Length,
+            $"Expected PDF with QR ({pdfWithQr.Length} B) to be larger than without ({pdfWithout.Length} B)");
+    }
+
     // ── Parser field coverage ─────────────────────────────────────────────────
 
     [Fact]

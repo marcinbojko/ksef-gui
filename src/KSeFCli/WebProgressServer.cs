@@ -3,6 +3,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
+using KSeF.Client.Api.Services;
+
 namespace KSeFCli;
 
 internal record SearchParams(string SubjectType, string From, string? To, string DateType, string? Source = null);
@@ -476,6 +478,35 @@ internal sealed class WebProgressServer : IDisposable
                 return JsonSerializer.Serialize(data, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             }).ConfigureAwait(false);
         }
+        else if (path == "/qr" && method == "GET")
+        {
+            string? ksefNumber = ctx.Request.QueryString["n"];
+            if (string.IsNullOrWhiteSpace(ksefNumber))
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.Close();
+                return;
+            }
+
+            try
+            {
+                string qrUrl = "https://ksef.mf.gov.pl/r/?p=" + Uri.EscapeDataString(ksefNumber);
+                byte[] png = QrCodeService.GenerateQrCode(qrUrl);
+                ctx.Response.ContentType = "image/png";
+                ctx.Response.StatusCode = 200;
+                ctx.Response.ContentLength64 = png.Length;
+                ctx.Response.Headers.Add("Cache-Control", "public, max-age=3600");
+                await ctx.Response.OutputStream.WriteAsync(png, ct).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                ctx.Response.StatusCode = 500;
+            }
+            finally
+            {
+                ctx.Response.Close();
+            }
+        }
         else if (path == "/quit" && method == "POST")
         {
             ctx.Response.StatusCode = 200;
@@ -642,7 +673,9 @@ tr.has-files>td{background:rgba(46,125,50,.05)}
 tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .preview-page{padding:2rem;max-width:800px;margin:0 auto;font-size:.85rem;line-height:1.5}
 .preview-title{text-align:center;font-size:1.1rem;font-weight:700;margin-bottom:.3rem}
-.preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:1.2rem}
+.preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:.6rem}
+.preview-qr{text-align:center;margin-bottom:1rem}.preview-qr img{width:90px;height:90px;border:1px solid #ddd;border-radius:4px}
+.preview-qr a{display:inline-block;font-size:.7rem;color:#666;margin-top:.25rem;text-decoration:none}
 .preview-parties{display:flex;gap:1.5rem;margin-bottom:1.2rem}
 .preview-party{flex:1;border:1px solid #ddd;border-radius:6px;padding:.8rem}
 .preview-party h5{font-size:.75rem;text-transform:uppercase;color:#888;margin-bottom:.3rem;letter-spacing:.5px}
@@ -2492,6 +2525,15 @@ function renderPreview(pop, d, inv) {
   if (d.invoiceType) html += ' | Typ: ' + escHtml(d.invoiceType);
   if (d.currency) html += ' | Waluta: ' + escHtml(d.currency);
   html += '</div>';
+
+  if (inv.ksefNumber) {
+    const qrSrc = '/qr?n=' + encodeURIComponent(inv.ksefNumber);
+    const verifyUrl = 'https://ksef.mf.gov.pl/r/?p=' + encodeURIComponent(inv.ksefNumber);
+    html += '<div class="preview-qr">';
+    html += '<img src="' + qrSrc + '" alt="QR KSeF" title="Skanuj aby zweryfikowac fakture w KSeF">';
+    html += '<br><a href="' + verifyUrl + '" target="_blank" rel="noopener">Weryfikuj w KSeF</a>';
+    html += '</div>';
+  }
 
   html += '<div class="preview-parties">';
   html += '<div class="preview-party"><h5>Sprzedawca</h5>';

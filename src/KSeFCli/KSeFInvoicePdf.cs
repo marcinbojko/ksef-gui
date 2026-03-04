@@ -4,6 +4,8 @@ using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Schema;
 
+using KSeF.Client.Api.Services;
+
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -893,11 +895,24 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     // ── Header ───────────────────────────────────────────────────────────────
 
+    private static byte[]? BuildKsefQrPng(string? ksefNumber)
+    {
+        if (string.IsNullOrEmpty(ksefNumber))
+        {
+            return null;
+        }
+
+        string url = "https://ksef.mf.gov.pl/r/?p=" + Uri.EscapeDataString(ksefNumber);
+        return QrCodeService.GenerateQrCode(url);
+    }
+
     private void ComposeHeader(IContainer c, InvoiceData d)
     {
+        byte[]? qrPng = BuildKsefQrPng(d.KsefReferenceNumber);
+
         c.Column(col =>
         {
-            // Top bar: KSeF branding + invoice number
+            // Top bar: KSeF branding + invoice number (+ optional QR code)
             col.Item().BorderBottom(1.5f).BorderColor(Blue).PaddingBottom(6).Row(row =>
             {
                 row.RelativeItem().Column(left =>
@@ -910,6 +925,10 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     left.Item().PaddingTop(1).Text(InvoiceSubtitle(d.RodzajFaktury))
                         .FontSize(9).FontColor(Gray);
                 });
+                if (qrPng is not null)
+                {
+                    row.ConstantItem(55).AlignMiddle().Padding(2).Image(qrPng);
+                }
                 row.ConstantItem(210).AlignRight().Column(right =>
                 {
                     right.Item().Text("Numer Faktury:").FontSize(7).FontColor(Gray);
