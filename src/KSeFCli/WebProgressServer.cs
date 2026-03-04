@@ -480,8 +480,9 @@ internal sealed class WebProgressServer : IDisposable
         }
         else if (path == "/qr" && method == "GET")
         {
-            string? ksefNumber = ctx.Request.QueryString["n"];
-            if (string.IsNullOrWhiteSpace(ksefNumber))
+            const int MaxKsefLength = 200;
+            string? ksefNumber = ctx.Request.QueryString["n"]?.Trim();
+            if (string.IsNullOrEmpty(ksefNumber) || ksefNumber.Length > MaxKsefLength)
             {
                 ctx.Response.StatusCode = 400;
                 ctx.Response.Close();
@@ -675,7 +676,7 @@ tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .preview-title{text-align:center;font-size:1.1rem;font-weight:700;margin-bottom:.3rem}
 .preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:.6rem}
 .preview-qr{text-align:center;margin-bottom:1rem}.preview-qr img{width:90px;height:90px;border:1px solid #ddd;border-radius:4px}
-.preview-qr a{display:inline-block;font-size:.7rem;color:#666;margin-top:.25rem;text-decoration:none}
+.preview-qr a{display:inline-block;font-size:.7rem;color:#666;margin-top:.25rem;text-decoration:none}@media(prefers-color-scheme:dark){.preview-qr a{color:#aaa}}
 .preview-parties{display:flex;gap:1.5rem;margin-bottom:1.2rem}
 .preview-party{flex:1;border:1px solid #ddd;border-radius:6px;padding:.8rem}
 .preview-party h5{font-size:.75rem;text-transform:uppercase;color:#888;margin-bottom:.3rem;letter-spacing:.5px}

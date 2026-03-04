@@ -202,7 +202,7 @@ public class PdfGenerationTests
     }
 
     [Fact]
-    public void FromXml_KsefReferenceNumber_PassedThroughToData()
+    public void ParserAndSanitizer_PreserveKsefReferenceNumber()
     {
         // Verify the number survives the Sanitize step and arrives at the generator.
         // We test via the parser+sanitize pipeline rather than byte-scanning the PDF.

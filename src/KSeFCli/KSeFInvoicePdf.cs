@@ -902,8 +902,16 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
             return null;
         }
 
-        string url = "https://ksef.mf.gov.pl/r/?p=" + Uri.EscapeDataString(ksefNumber);
-        return QrCodeService.GenerateQrCode(url);
+        try
+        {
+            string url = "https://ksef.mf.gov.pl/r/?p=" + Uri.EscapeDataString(ksefNumber);
+            return QrCodeService.GenerateQrCode(url);
+        }
+        catch (Exception)
+        {
+            // QR generation failure degrades gracefully — ComposeHeader handles null by omitting the QR column.
+            return null;
+        }
     }
 
     private void ComposeHeader(IContainer c, InvoiceData d)
@@ -1609,14 +1617,27 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
 public static class KSeFInvoicePdf
 {
+    // KSeF reference numbers follow the pattern NIP-YYYYMMDD-HASH-SEQ; cap at 256 (same as TZnakowy in FA3.xsd).
+    private const int MaxKsefReferenceNumberLength = 256;
+
     public static byte[] FromXml(
         string xmlContent,
         string? colorScheme = null,
         string? ksefReferenceNumber = null)
     {
+        string? normalizedKsefRef = ksefReferenceNumber?.Trim();
+        if (string.IsNullOrEmpty(normalizedKsefRef))
+        {
+            normalizedKsefRef = null;
+        }
+        else if (normalizedKsefRef.Length > MaxKsefReferenceNumberLength)
+        {
+            normalizedKsefRef = normalizedKsefRef[..MaxKsefReferenceNumberLength];
+        }
+
         InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
         return KSeFInvoicePdfGenerator.Generate(
-            data with { KsefReferenceNumber = ksefReferenceNumber },
+            data with { KsefReferenceNumber = normalizedKsefRef },
             PdfColorScheme.FromName(colorScheme));
     }
 }
