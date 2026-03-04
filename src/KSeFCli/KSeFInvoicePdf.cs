@@ -74,7 +74,10 @@ internal record InvoiceData(
     string? Bdo,
     string? SystemInfo,
     // Not in the XML — injected from API response metadata after parsing
-    string? KsefReferenceNumber
+    string? KsefReferenceNumber,
+    // Pre-computed KSeF verification URL: https://qr.ksef.mf.gov.pl/invoice/{nip}/{dd-MM-yyyy}/{hash}
+    // Built by IVerificationLinkService in the download/search pipeline; null when not available.
+    string? KsefVerificationUrl
 );
 
 // ── Parser ───────────────────────────────────────────────────────────────────
@@ -265,7 +268,8 @@ internal static class KSeFInvoiceParser
             Regon: rejestry is null ? null : Val(rejestry, "REGON"),
             Bdo: rejestry is null ? null : Val(rejestry, "BDO"),
             SystemInfo: Val(naglowek, "SystemInfo"),
-            KsefReferenceNumber: null
+            KsefReferenceNumber: null,
+            KsefVerificationUrl: null
         );
     }
 
@@ -895,17 +899,16 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     // ── Header ───────────────────────────────────────────────────────────────
 
-    private static byte[]? BuildKsefQrPng(string? ksefNumber)
+    private static byte[]? BuildKsefQrPng(string? ksefVerificationUrl)
     {
-        if (string.IsNullOrEmpty(ksefNumber))
+        if (string.IsNullOrEmpty(ksefVerificationUrl))
         {
             return null;
         }
 
         try
         {
-            string url = "https://ksef.mf.gov.pl/r/?p=" + Uri.EscapeDataString(ksefNumber);
-            return QrCodeService.GenerateQrCode(url);
+            return QrCodeService.GenerateQrCode(ksefVerificationUrl);
         }
         catch (Exception)
         {
@@ -916,7 +919,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     private void ComposeHeader(IContainer c, InvoiceData d)
     {
-        byte[]? qrPng = BuildKsefQrPng(d.KsefReferenceNumber);
+        byte[]? qrPng = BuildKsefQrPng(d.KsefVerificationUrl);
 
         c.Column(col =>
         {
@@ -1623,7 +1626,8 @@ public static class KSeFInvoicePdf
     public static byte[] FromXml(
         string xmlContent,
         string? colorScheme = null,
-        string? ksefReferenceNumber = null)
+        string? ksefReferenceNumber = null,
+        string? ksefVerificationUrl = null)
     {
         string? normalizedKsefRef = ksefReferenceNumber?.Trim();
         if (string.IsNullOrEmpty(normalizedKsefRef))
@@ -1635,9 +1639,15 @@ public static class KSeFInvoicePdf
             normalizedKsefRef = normalizedKsefRef[..MaxKsefReferenceNumberLength];
         }
 
+        string? normalizedVerificationUrl = ksefVerificationUrl?.Trim();
+        if (string.IsNullOrEmpty(normalizedVerificationUrl))
+        {
+            normalizedVerificationUrl = null;
+        }
+
         InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
         return KSeFInvoicePdfGenerator.Generate(
-            data with { KsefReferenceNumber = normalizedKsefRef },
+            data with { KsefReferenceNumber = normalizedKsefRef, KsefVerificationUrl = normalizedVerificationUrl },
             PdfColorScheme.FromName(colorScheme));
     }
 }

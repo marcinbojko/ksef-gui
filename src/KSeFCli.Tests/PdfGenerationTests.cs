@@ -66,14 +66,37 @@ public class PdfGenerationTests
         Assert.True(IsPdfHeader(pdf), "Expected %PDF header when KSeF number is omitted");
     }
 
-    [Fact]
-    public void GeneratePdf_WithKsefReferenceNumber_IsLargerThanWithout()
+    [Theory]
+    [InlineData("   ")]
+    [InlineData("\t\n")]
+    public void FromXml_WhitespaceOnlyKsefReferenceNumber_TreatedAsNull(string whitespace)
     {
-        // A QR code image is embedded when a KSeF number is provided;
+        // Whitespace-only inputs must be normalized to null — the PDF must be identical to passing null.
+        byte[] pdfWithWhitespace = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, whitespace);
+        byte[] pdfWithNull = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, null);
+        Assert.True(IsPdfHeader(pdfWithWhitespace));
+        Assert.Equal(pdfWithNull.Length, pdfWithWhitespace.Length);
+    }
+
+    [Fact]
+    public void FromXml_OversizedKsefReferenceNumber_TruncatesAndReturnsPdf()
+    {
+        // A string longer than 256 chars must be truncated — the result must still be a valid PDF.
+        string oversize = new('X', 300);
+        byte[] pdf = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, oversize);
+        Assert.True(IsPdfHeader(pdf));
+        Assert.True(pdf.Length > 1024);
+    }
+
+    [Fact]
+    public void GeneratePdf_WithKsefVerificationUrl_IsLargerThanWithout()
+    {
+        // A QR code image is embedded when a KSeF verification URL is provided;
         // the resulting PDF must be strictly larger than one without it.
+        const string VerificationUrl = "https://qr.ksef.mf.gov.pl/invoice/9999999999/15-03-2024/AAABBBCCC";
         byte[] pdfWithQr = KSeFInvoicePdf.FromXml(
-            LoadSampleXml(), null, "9999999999-20240315-ABCDEF123456-01");
-        byte[] pdfWithout = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, null);
+            LoadSampleXml(), null, "9999999999-20240315-ABCDEF123456-01", VerificationUrl);
+        byte[] pdfWithout = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, null, null);
         Assert.True(
             pdfWithQr.Length > pdfWithout.Length,
             $"Expected PDF with QR ({pdfWithQr.Length} B) to be larger than without ({pdfWithout.Length} B)");

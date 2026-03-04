@@ -480,9 +480,9 @@ internal sealed class WebProgressServer : IDisposable
         }
         else if (path == "/qr" && method == "GET")
         {
-            const int MaxKsefLength = 200;
-            string? ksefNumber = ctx.Request.QueryString["n"]?.Trim();
-            if (string.IsNullOrEmpty(ksefNumber) || ksefNumber.Length > MaxKsefLength)
+            const int MaxQrUrlLength = 2048;
+            string? qrUrl = ctx.Request.QueryString["url"]?.Trim();
+            if (string.IsNullOrEmpty(qrUrl) || qrUrl.Length > MaxQrUrlLength)
             {
                 ctx.Response.StatusCode = 400;
                 ctx.Response.Close();
@@ -491,7 +491,6 @@ internal sealed class WebProgressServer : IDisposable
 
             try
             {
-                string qrUrl = "https://ksef.mf.gov.pl/r/?p=" + Uri.EscapeDataString(ksefNumber);
                 byte[] png = QrCodeService.GenerateQrCode(qrUrl);
                 ctx.Response.ContentType = "image/png";
                 ctx.Response.StatusCode = 200;
@@ -499,8 +498,9 @@ internal sealed class WebProgressServer : IDisposable
                 ctx.Response.Headers.Add("Cache-Control", "public, max-age=3600");
                 await ctx.Response.OutputStream.WriteAsync(png, ct).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.Error.WriteLine($"[/qr] QR generation failed: {ex}");
                 ctx.Response.StatusCode = 500;
             }
             finally
@@ -676,7 +676,7 @@ tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .preview-title{text-align:center;font-size:1.1rem;font-weight:700;margin-bottom:.3rem}
 .preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:.6rem}
 .preview-qr{text-align:center;margin-bottom:1rem}.preview-qr img{width:90px;height:90px;border:1px solid #ddd;border-radius:4px}
-.preview-qr a{display:inline-block;font-size:.7rem;color:#666;margin-top:.25rem;text-decoration:none}@media(prefers-color-scheme:dark){.preview-qr a{color:#aaa}}
+.preview-qr a{display:inline-flex;align-items:center;gap:.25rem;font-size:.72rem;color:#1565c0;margin-top:.4rem;text-decoration:none;border:1px solid #1565c0;border-radius:4px;padding:.2rem .5rem;transition:background .15s,color .15s}.preview-qr a:hover{background:#1565c0;color:#fff}@media(prefers-color-scheme:dark){.preview-qr a{color:#90caf9;border-color:#90caf9}.preview-qr a:hover{background:#90caf9;color:#000}}
 .preview-parties{display:flex;gap:1.5rem;margin-bottom:1.2rem}
 .preview-party{flex:1;border:1px solid #ddd;border-radius:6px;padding:.8rem}
 .preview-party h5{font-size:.75rem;text-transform:uppercase;color:#888;margin-bottom:.3rem;letter-spacing:.5px}
@@ -2527,12 +2527,11 @@ function renderPreview(pop, d, inv) {
   if (d.currency) html += ' | Waluta: ' + escHtml(d.currency);
   html += '</div>';
 
-  if (inv.ksefNumber) {
-    const qrSrc = '/qr?n=' + encodeURIComponent(inv.ksefNumber);
-    const verifyUrl = 'https://ksef.mf.gov.pl/r/?p=' + encodeURIComponent(inv.ksefNumber);
+  if (inv.ksefVerificationUrl) {
+    const qrSrc = '/qr?url=' + encodeURIComponent(inv.ksefVerificationUrl);
     html += '<div class="preview-qr">';
     html += '<img src="' + qrSrc + '" alt="QR KSeF" title="Skanuj aby zweryfikowac fakture w KSeF">';
-    html += '<br><a href="' + verifyUrl + '" target="_blank" rel="noopener">Weryfikuj w KSeF</a>';
+    html += '<br><a href="' + inv.ksefVerificationUrl + '" target="_blank" rel="noopener">Weryfikuj w KSeF &#8599;</a>';
     html += '</div>';
   }
 

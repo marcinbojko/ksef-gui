@@ -10,6 +10,7 @@ using CommandLine;
 
 using KSeF.Client.Core.Exceptions;
 using KSeF.Client.Core.Interfaces.Clients;
+using KSeF.Client.Core.Interfaces.Services;
 using KSeF.Client.Core.Models.Authorization;
 using KSeF.Client.Core.Models.Invoices;
 
@@ -531,7 +532,7 @@ public class GuiCommand : IWithConfigCommand
             };
             return Task.FromResult<object>(new
             {
-                invoices = MapInvoicesToJson(_cachedInvoices),
+                invoices = MapInvoicesToJson(_cachedInvoices, _scope?.ServiceProvider.GetService<IVerificationLinkService>()),
                 @params = paramsObj,
             });
         };
@@ -1002,7 +1003,7 @@ public class GuiCommand : IWithConfigCommand
             Log.LogWarning($"Failed to save invoice cache: {ex.Message}");
         }
 
-        return MapInvoicesToJson(allInvoices);
+        return MapInvoicesToJson(allInvoices, _scope?.ServiceProvider.GetService<IVerificationLinkService>());
     }
 
     private string GetProfileCacheKey()
@@ -1754,7 +1755,7 @@ public class GuiCommand : IWithConfigCommand
         return sb.ToString();
     }
 
-    private static object MapInvoicesToJson(List<InvoiceSummary> invoices) =>
+    private static object MapInvoicesToJson(List<InvoiceSummary> invoices, IVerificationLinkService? linkSvc = null) =>
         invoices.Select(i => new
         {
             ksefNumber = i.KsefNumber,
@@ -1767,6 +1768,10 @@ public class GuiCommand : IWithConfigCommand
             netAmount = i.NetAmount,
             vatAmount = i.VatAmount,
             currency = i.Currency,
+            invoiceHash = i.InvoiceHash,
+            ksefVerificationUrl = (linkSvc != null && !string.IsNullOrEmpty(i.InvoiceHash) && !string.IsNullOrEmpty(i.Seller?.Nip))
+                ? linkSvc.BuildInvoiceVerificationUrl(i.Seller!.Nip, i.IssueDate.DateTime, i.InvoiceHash)
+                : null,
         }).ToArray();
 
     private async Task DownloadAsync(DownloadParams dlParams, CancellationToken ct)
@@ -1862,7 +1867,14 @@ public class GuiCommand : IWithConfigCommand
                         await _server.SendEventAsync("invoice_done", new { current = i, file = fileName, pdf = true, progress = n, total = toDownload.Count }).ConfigureAwait(false);
                     }
 
-                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber).ConfigureAwait(false);
+                    string? ksefVerificationUrl = null;
+                    if (!string.IsNullOrEmpty(inv.InvoiceHash) && !string.IsNullOrEmpty(inv.Seller?.Nip))
+                    {
+                        IVerificationLinkService linkSvc = _scope!.ServiceProvider.GetRequiredService<IVerificationLinkService>();
+                        ksefVerificationUrl = linkSvc.BuildInvoiceVerificationUrl(inv.Seller.Nip, inv.IssueDate.DateTime, inv.InvoiceHash);
+                    }
+
+                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl).ConfigureAwait(false);
                     string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
                     await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
                     string finalPdf = Path.Combine(outputDir, $"{fileName}.pdf");
