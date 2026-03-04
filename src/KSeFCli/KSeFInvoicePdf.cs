@@ -70,7 +70,9 @@ internal record InvoiceData(
     string? PelnaNazwa,
     string? Regon,
     string? Bdo,
-    string? SystemInfo
+    string? SystemInfo,
+    // Not in the XML — injected from API response metadata after parsing
+    string? KsefReferenceNumber
 );
 
 // ── Parser ───────────────────────────────────────────────────────────────────
@@ -260,7 +262,8 @@ internal static class KSeFInvoiceParser
             PelnaNazwa: rejestry is null ? null : Val(rejestry, "PelnaNazwa"),
             Regon: rejestry is null ? null : Val(rejestry, "REGON"),
             Bdo: rejestry is null ? null : Val(rejestry, "BDO"),
-            SystemInfo: Val(naglowek, "SystemInfo")
+            SystemInfo: Val(naglowek, "SystemInfo"),
+            KsefReferenceNumber: null
         );
     }
 
@@ -914,6 +917,14 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     if (d.RodzajFaktury is not null)
                     {
                         right.Item().Text(InvoiceSubtitle(d.RodzajFaktury)).FontSize(7.5f).FontColor(Gray);
+                    }
+                    if (!string.IsNullOrEmpty(d.KsefReferenceNumber))
+                    {
+                        right.Item().PaddingTop(4).Text(t =>
+                        {
+                            t.Span("Numer KSeF: ").FontSize(7).FontColor(Gray);
+                            t.Span(d.KsefReferenceNumber).FontSize(8).Bold().FontColor(RedAccent);
+                        });
                     }
                 });
             });
@@ -1579,9 +1590,14 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
 public static class KSeFInvoicePdf
 {
-    public static byte[] FromXml(string xmlContent, string? colorScheme = null)
+    public static byte[] FromXml(
+        string xmlContent,
+        string? colorScheme = null,
+        string? ksefReferenceNumber = null)
     {
         InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
-        return KSeFInvoicePdfGenerator.Generate(data, PdfColorScheme.FromName(colorScheme));
+        return KSeFInvoicePdfGenerator.Generate(
+            data with { KsefReferenceNumber = ksefReferenceNumber },
+            PdfColorScheme.FromName(colorScheme));
     }
 }

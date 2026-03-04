@@ -305,6 +305,49 @@ PDF generowany **natywnie** przez [QuestPDF](https://www.questpdf.com/) — czys
 | `forest`            | Ciemna zieleń — świeży akcent  |
 | `slate`             | Ciemny szary — minimalistyczny |
 
+#### Pola FA(3) renderowane w PDF
+
+Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowanym pliku PDF:
+
+| Sekcja XML | Pole / element | Opis |
+| --- | --- | --- |
+| `Naglowek` | `SystemInfo` | System wystawiający fakturę (stopka) |
+| _(metadane API)_ | `KsefReferenceNumber` | **Numer KSeF** (przekazywany z odpowiedzi API, nie z XML) |
+| `Fa` | `P_2` | Numer faktury wystawcy |
+| `Fa` | `RodzajFaktury` | Typ dokumentu (VAT, KOR, ZAL…) |
+| `Fa` | `P_1` | Data wystawienia |
+| `Fa` | `P_1M` | Miejsce wystawienia |
+| `Fa` | `P_6` | Data dostawy / wykonania usługi |
+| `Fa` › `OkresFa` | `P_6_Od`, `P_6_Do` | Okres rozliczeniowy (od–do) |
+| `Fa` › `FakturaZaliczkowa` | `NrFaZaliczkowej` | Numer faktury zaliczkowej |
+| `Fa` | `KodWaluty` | Waluta |
+| `Podmiot1` | `NIP`, `Nazwa` | NIP i nazwa sprzedawcy |
+| `Podmiot1` › `Adres` | `KodKraju`, `AdresL1`, `AdresL2` | Adres sprzedawcy |
+| `Podmiot1` › `DaneKontaktowe` | `Email`, `Telefon` | Kontakt sprzedawcy |
+| `Podmiot1` | `NrEORI` | Numer EORI sprzedawcy |
+| `Podmiot2` | `NIP`, `Nazwa` | NIP i nazwa nabywcy |
+| `Podmiot2` › `Adres` | `KodKraju`, `AdresL1`, `AdresL2` | Adres nabywcy |
+| `Podmiot2` › `DaneKontaktowe` | `Email` | E-mail nabywcy |
+| `Podmiot2` | `NrKlienta` | Numer klienta nabywcy |
+| `Fa` › `FaWiersz` | `NrWierszaFa` | Numer wiersza |
+| `Fa` › `FaWiersz` | `P_7` | Nazwa towaru/usługi |
+| `Fa` › `FaWiersz` | `P_8A`, `P_8B` | Jednostka miary, ilość |
+| `Fa` › `FaWiersz` | `P_9A`, `P_9B` | Cena jednostkowa netto / brutto |
+| `Fa` › `FaWiersz` | `P_11`, `P_11A` | Wartość netto / brutto |
+| `Fa` › `FaWiersz` | `P_12` | Stawka VAT |
+| `Fa` › `FaWiersz` | `KursWaluty` | Kurs waluty pozycji |
+| `Fa` › `FaWiersz` | `Indeks`, `GTIN`, `UU_ID` | Identyfikatory towaru |
+| `Fa` | `P_13_x`, `P_14_x` | Sumy netto i VAT per stawka |
+| `Fa` | `P_15` | Kwota należności ogółem (brutto) |
+| `Fa` › `Platnosc` | `FormaPlatnosci` | Forma płatności |
+| `Fa` › `Platnosc` | `TerminPlatnosci` / `Termin` | Termin(y) płatności |
+| `Fa` › `Platnosc` | `Zaplacono`, `DataZaplaty` | Znacznik zapłacono / data |
+| `Fa` › `Platnosc` › `RachunekBankowy` | `NrRB`, `NazwaBanku`, `OpisRachunku` | Dane rachunku bankowego |
+| `Fa` | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Dodatkowe opisy (pary klucz–wartość) |
+| `Fa` | `WZ` | Numer dokumentu WZ |
+| `Fa` › `WarunkiTransakcji` › `Umowy` | `NrUmowy` | Numery umów |
+| `Stopka` › `Rejestry` | `PelnaNazwa`, `REGON`, `BDO` | Dane rejestrowe sprzedawcy |
+
 ---
 
 ## English
@@ -590,6 +633,49 @@ PDFs are rendered by a **native built-in engine** using [QuestPDF](https://www.q
 | `navy` _(default)_ | Dark navy — classic, formal  |
 | `forest`           | Dark green — fresh accent    |
 | `slate`            | Dark grey — neutral, minimal |
+
+#### FA(3) fields rendered in PDF
+
+Fields extracted from KSeF invoice XML (FA(3) schema) and included in the generated PDF:
+
+| XML section | Field / element | Description |
+| --- | --- | --- |
+| `Naglowek` | `SystemInfo` | Issuing system name (footer) |
+| _(API metadata)_ | `KsefReferenceNumber` | **KSeF number** (injected from API response, not from XML) |
+| `Fa` | `P_2` | Issuer's invoice number |
+| `Fa` | `RodzajFaktury` | Document type (VAT, KOR, ZAL…) |
+| `Fa` | `P_1` | Issue date |
+| `Fa` | `P_1M` | Place of issue |
+| `Fa` | `P_6` | Delivery / service completion date |
+| `Fa` › `OkresFa` | `P_6_Od`, `P_6_Do` | Settlement period (from–to) |
+| `Fa` › `FakturaZaliczkowa` | `NrFaZaliczkowej` | Advance invoice number |
+| `Fa` | `KodWaluty` | Currency code |
+| `Podmiot1` | `NIP`, `Nazwa` | Seller tax ID and name |
+| `Podmiot1` › `Adres` | `KodKraju`, `AdresL1`, `AdresL2` | Seller address |
+| `Podmiot1` › `DaneKontaktowe` | `Email`, `Telefon` | Seller contact |
+| `Podmiot1` | `NrEORI` | Seller EORI number |
+| `Podmiot2` | `NIP`, `Nazwa` | Buyer tax ID and name |
+| `Podmiot2` › `Adres` | `KodKraju`, `AdresL1`, `AdresL2` | Buyer address |
+| `Podmiot2` › `DaneKontaktowe` | `Email` | Buyer e-mail |
+| `Podmiot2` | `NrKlienta` | Buyer customer number |
+| `Fa` › `FaWiersz` | `NrWierszaFa` | Line number |
+| `Fa` › `FaWiersz` | `P_7` | Item / service name |
+| `Fa` › `FaWiersz` | `P_8A`, `P_8B` | Unit of measure, quantity |
+| `Fa` › `FaWiersz` | `P_9A`, `P_9B` | Unit net / gross price |
+| `Fa` › `FaWiersz` | `P_11`, `P_11A` | Net / gross line total |
+| `Fa` › `FaWiersz` | `P_12` | VAT rate |
+| `Fa` › `FaWiersz` | `KursWaluty` | Line exchange rate |
+| `Fa` › `FaWiersz` | `Indeks`, `GTIN`, `UU_ID` | Item identifiers |
+| `Fa` | `P_13_x`, `P_14_x` | Net and VAT subtotals per rate |
+| `Fa` | `P_15` | Total gross amount |
+| `Fa` › `Platnosc` | `FormaPlatnosci` | Payment method |
+| `Fa` › `Platnosc` | `TerminPlatnosci` / `Termin` | Payment due date(s) |
+| `Fa` › `Platnosc` | `Zaplacono`, `DataZaplaty` | Paid flag / payment date |
+| `Fa` › `Platnosc` › `RachunekBankowy` | `NrRB`, `NazwaBanku`, `OpisRachunku` | Bank account details |
+| `Fa` | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Additional notes (key–value pairs) |
+| `Fa` | `WZ` | WZ document reference |
+| `Fa` › `WarunkiTransakcji` › `Umowy` | `NrUmowy` | Contract number(s) |
+| `Stopka` › `Rejestry` | `PelnaNazwa`, `REGON`, `BDO` | Seller registry data |
 
 ---
 
