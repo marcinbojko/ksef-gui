@@ -445,7 +445,7 @@ internal static class KSeFInvoiceSanitizer
         try
         {
             System.Reflection.Assembly asm = typeof(KSeFInvoiceSanitizer).Assembly;
-            using System.IO.Stream? fa3Stream = asm.GetManifestResourceStream("ksefcli.Resources.FA3.xsd");
+            using System.IO.Stream? fa3Stream = asm.GetManifestResourceStream("KSeFCli.Resources.FA3.xsd");
             if (fa3Stream is null)
             {
                 Log.LogWarning("[fa3-validator] FA3.xsd not found in resources; schema validation disabled");
@@ -491,11 +491,11 @@ internal static class KSeFInvoiceSanitizer
         private static readonly Dictionary<string, string> UrlToResource = new(StringComparer.Ordinal)
         {
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/StrukturyDanych_v10-0E.xsd"]
-                = "ksefcli.Resources.StrukturyDanych.xsd",
+                = "KSeFCli.Resources.StrukturyDanych.xsd",
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/ElementarneTypyDanych_v10-0E.xsd"]
-                = "ksefcli.Resources.ElementarneTypy.xsd",
+                = "KSeFCli.Resources.ElementarneTypy.xsd",
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/KodyKrajow_v10-0E.xsd"]
-                = "ksefcli.Resources.KodyKrajow.xsd",
+                = "KSeFCli.Resources.KodyKrajow.xsd",
         };
 
         private readonly System.Reflection.Assembly _asm;
