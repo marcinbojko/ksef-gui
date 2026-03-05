@@ -413,7 +413,7 @@ public class WebProgressServerTests : IDisposable
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         string json = await response.Content.ReadAsStringAsync();
         Assert.Contains("error", json);
-        Assert.Contains("Test error", json);
+        Assert.DoesNotContain("Test error", json); // internal message must not leak to client
         cts.Cancel();
     }
 

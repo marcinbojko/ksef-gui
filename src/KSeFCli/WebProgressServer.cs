@@ -562,7 +562,8 @@ internal sealed class WebProgressServer : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            string errJson = JsonSerializer.Serialize(new { error = ex.Message });
+            Console.Error.WriteLine($"[HandleAction] Unhandled exception: {ex}");
+            string errJson = JsonSerializer.Serialize(new { error = "Internal Server Error" });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
             ctx.Response.ContentType = "application/json; charset=utf-8";
             ctx.Response.StatusCode = 500;

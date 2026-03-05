@@ -1991,7 +1991,10 @@ public class GuiCommand : IWithConfigCommand
         string xml = await _ksefClient!.GetInvoiceAsync(inv.KsefNumber, accessToken, ct).ConfigureAwait(false);
 
         XDocument doc = XDocument.Parse(xml);
-        XNamespace ns = doc.Root?.Name.Namespace ?? "http://crd.gov.pl/wzor/2025/06/25/13775/";
+        XNamespace fallbackNs = "http://crd.gov.pl/wzor/2025/06/25/13775/";
+        XNamespace ns = (doc.Root == null || doc.Root.Name.Namespace == XNamespace.None)
+            ? fallbackNs
+            : doc.Root.Name.Namespace;
 
         XElement? naglowek = doc.Descendants(ns + "Naglowek").FirstOrDefault();
         XElement? fa = doc.Descendants(ns + "Fa").FirstOrDefault();
