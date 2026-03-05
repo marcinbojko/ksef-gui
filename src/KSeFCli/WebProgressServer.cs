@@ -563,10 +563,18 @@ internal sealed class WebProgressServer : IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Console.Error.WriteLine($"[HandleAction] Unhandled exception: {ex}");
-            string errJson = JsonSerializer.Serialize(new { error = "Internal Server Error" });
+            (int statusCode, string errorMessage) = ex switch
+            {
+                ArgumentException or FormatException => (400, "Bad Request"),
+                UnauthorizedAccessException => (401, "Unauthorized"),
+                FileNotFoundException or DirectoryNotFoundException => (404, "Not Found"),
+                HttpRequestException => (502, "Bad Gateway"),
+                _ => (500, "Internal Server Error"),
+            };
+            string errJson = JsonSerializer.Serialize(new { error = errorMessage });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
             ctx.Response.ContentType = "application/json; charset=utf-8";
-            ctx.Response.StatusCode = 500;
+            ctx.Response.StatusCode = statusCode;
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
         }
@@ -2484,8 +2492,8 @@ function renderDetails(pop, d) {
     if (d.lineItems.some(l => l.exchangeRate)) html += '<th>Kurs</th>';
     html += '</tr></thead><tbody>';
     for (const l of d.lineItems) {
-      html += '<tr><td>' + (l.nr||'') + '</td><td>' + escHtml(l.name||'') + '</td><td>' + (l.unit||'') + '</td><td>' + (l.qty||'') + '</td><td class="amount">' + (l.unitPrice||'') + '</td><td class="amount">' + (l.netAmount||'') + '</td><td class="amount">' + (l.grossAmount||'') + '</td><td>' + (l.vatRate||'') + '</td>';
-      if (d.lineItems.some(li => li.exchangeRate)) html += '<td>' + (l.exchangeRate||'') + '</td>';
+      html += '<tr><td>' + escHtml(String(l.nr||'')) + '</td><td>' + escHtml(l.name||'') + '</td><td>' + escHtml(String(l.unit||'')) + '</td><td>' + escHtml(String(l.qty||'')) + '</td><td class="amount">' + escHtml(String(l.unitPrice||'')) + '</td><td class="amount">' + escHtml(String(l.netAmount||'')) + '</td><td class="amount">' + escHtml(String(l.grossAmount||'')) + '</td><td>' + escHtml(String(l.vatRate||'')) + '</td>';
+      if (d.lineItems.some(li => li.exchangeRate)) html += '<td>' + escHtml(String(l.exchangeRate||'')) + '</td>';
       html += '</tr>';
     }
     html += '</tbody></table></div>';
@@ -2494,7 +2502,7 @@ function renderDetails(pop, d) {
   if (d.additionalDescriptions && d.additionalDescriptions.length > 0) {
     html += '<div class="dp-section"><h4>Dodatkowe opisy</h4>';
     for (const ad of d.additionalDescriptions) {
-      html += dpRow(escHtml(ad.key || ''), escHtml(ad.value || ''));
+      html += dpRow(ad.key || '', ad.value || '');
     }
     html += '</div>';
   }
@@ -2504,7 +2512,7 @@ function renderDetails(pop, d) {
 
 function dpRow(label, value) {
   if (!value && value !== 0) return '';
-  return '<div class="dp-row"><span class="dp-label">' + label + '</span><span class="dp-val">' + value + '</span></div>';
+  return '<div class="dp-row"><span class="dp-label">' + escHtml(String(label)) + '</span><span class="dp-val">' + escHtml(String(value)) + '</span></div>';
 }
 
 // --- Invoice Preview ---
