@@ -1991,7 +1991,7 @@ public class GuiCommand : IWithConfigCommand
         string xml = await _ksefClient!.GetInvoiceAsync(inv.KsefNumber, accessToken, ct).ConfigureAwait(false);
 
         XDocument doc = XDocument.Parse(xml);
-        XNamespace ns = "http://crd.gov.pl/wzor/2025/06/25/13775/";
+        XNamespace ns = doc.Root?.Name.Namespace ?? "http://crd.gov.pl/wzor/2025/06/25/13775/";
 
         XElement? naglowek = doc.Descendants(ns + "Naglowek").FirstOrDefault();
         XElement? fa = doc.Descendants(ns + "Fa").FirstOrDefault();
@@ -2038,13 +2038,36 @@ public class GuiCommand : IWithConfigCommand
             periodTo = okres?.Element(ns + "P_6_Do")?.Value,
             sellerAddress = addr1,
             buyerAddress = addr2,
-            netTotal = fa?.Element(ns + "P_13_1")?.Value,
-            vatTotal = fa?.Element(ns + "P_14_1")?.Value,
-            vatTotalCurrency = fa?.Element(ns + "P_14_1W")?.Value,
+            netTotal = SumFaElements(fa, e => e.StartsWith("P_13_", StringComparison.Ordinal)),
+            vatTotal = SumFaElements(fa, e => e.StartsWith("P_14_", StringComparison.Ordinal) && !e.EndsWith("W", StringComparison.Ordinal)),
+            vatTotalCurrency = SumFaElements(fa, e => e.StartsWith("P_14_", StringComparison.Ordinal) && e.EndsWith("W", StringComparison.Ordinal)),
             grossTotal = fa?.Element(ns + "P_15")?.Value,
             lineItems,
             additionalDescriptions = additionalDesc,
         };
+    }
+
+    private static string? SumFaElements(XElement? fa, Func<string, bool> localNameFilter)
+    {
+        if (fa == null)
+        {
+            return null;
+        }
+        decimal sum = 0;
+        bool any = false;
+        foreach (XElement el in fa.Elements())
+        {
+            if (!localNameFilter(el.Name.LocalName))
+            {
+                continue;
+            }
+            if (decimal.TryParse(el.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
+            {
+                sum += val;
+                any = true;
+            }
+        }
+        return any ? sum.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : null;
     }
 
     private static string? FormatAddress(XElement? adres, XNamespace ns)

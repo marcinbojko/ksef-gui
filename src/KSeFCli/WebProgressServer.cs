@@ -565,7 +565,7 @@ internal sealed class WebProgressServer : IDisposable
             string errJson = JsonSerializer.Serialize(new { error = ex.Message });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
             ctx.Response.ContentType = "application/json; charset=utf-8";
-            ctx.Response.StatusCode = 200;
+            ctx.Response.StatusCode = 500;
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
         }
@@ -2458,7 +2458,7 @@ function renderDetails(pop, d) {
   let html = '<div class="dp-section"><h4>Naglowek</h4>';
   html += dpRow('Data utworzenia', d.createdAt);
   html += dpRow('System', d.systemInfo);
-  html += dpRow('Formularz', d.formCode + (d.schemaVersion ? ' (v' + d.schemaVersion + ')' : ''));
+  html += dpRow('Formularz', d.formCode != null ? d.formCode + (d.schemaVersion ? ' (v' + d.schemaVersion + ')' : '') : d.formCode);
   html += dpRow('Typ faktury', d.invoiceType);
   html += dpRow('Waluta', d.currency);
   if (d.periodFrom || d.periodTo) html += dpRow('Okres', (d.periodFrom || '?') + ' — ' + (d.periodTo || '?'));
@@ -2466,7 +2466,7 @@ function renderDetails(pop, d) {
 
   html += '<div class="dp-section"><h4>Kwoty</h4>';
   html += dpRow('Netto', d.netTotal);
-  html += dpRow('VAT', d.vatTotal + (d.vatTotalCurrency ? ' (walutowy: ' + d.vatTotalCurrency + ')' : ''));
+  html += dpRow('VAT', d.vatTotal != null ? d.vatTotal + (d.vatTotalCurrency ? ' (walutowy: ' + d.vatTotalCurrency + ')' : '') : d.vatTotal);
   html += dpRow('Brutto', d.grossTotal);
   html += '</div>';
 
