@@ -14,9 +14,22 @@ public class PdfGenerationTests
     }
 
     private static bool IsPdfHeader(byte[] pdf) =>
-        pdf.Length > 4 &&
+        pdf.Length >= 4 &&
         pdf[0] == (byte)'%' && pdf[1] == (byte)'P' &&
         pdf[2] == (byte)'D' && pdf[3] == (byte)'F';
+
+    private static bool ContainsSubsequence(byte[] haystack, byte[] needle)
+    {
+        int limit = haystack.Length - needle.Length;
+        for (int i = 0; i <= limit; i++)
+        {
+            if (haystack.AsSpan(i, needle.Length).SequenceEqual(needle))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // ── PDF byte sanity ───────────────────────────────────────────────────────
 
@@ -75,7 +88,7 @@ public class PdfGenerationTests
         byte[] pdfWithWhitespace = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, whitespace);
         byte[] pdfWithNull = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, null);
         Assert.True(IsPdfHeader(pdfWithWhitespace));
-        Assert.Equal(pdfWithNull.Length, pdfWithWhitespace.Length);
+        Assert.Equal(pdfWithNull, pdfWithWhitespace);
     }
 
     [Fact]
@@ -86,6 +99,11 @@ public class PdfGenerationTests
         byte[] pdf = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, oversize);
         Assert.True(IsPdfHeader(pdf));
         Assert.True(pdf.Length > 1024);
+        string expectedTruncated = oversize.Substring(0, 256);
+        byte[] truncatedBytes = System.Text.Encoding.UTF8.GetBytes(expectedTruncated);
+        byte[] oversizeBytes = System.Text.Encoding.UTF8.GetBytes(oversize);
+        Assert.True(ContainsSubsequence(pdf, truncatedBytes), "Truncated 256-char prefix should appear in PDF bytes");
+        Assert.False(ContainsSubsequence(pdf, oversizeBytes), "Full 300-char oversize string should not appear in PDF bytes");
     }
 
     [Fact]

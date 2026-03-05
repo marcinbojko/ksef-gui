@@ -488,6 +488,14 @@ internal sealed class WebProgressServer : IDisposable
                 ctx.Response.Close();
                 return;
             }
+            if (!Uri.TryCreate(qrUrl, UriKind.Absolute, out Uri? parsedQrUri)
+                || (parsedQrUri.Scheme != Uri.UriSchemeHttp && parsedQrUri.Scheme != Uri.UriSchemeHttps))
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.Close();
+                return;
+            }
+            qrUrl = parsedQrUri.AbsoluteUri;
 
             try
             {
@@ -498,7 +506,11 @@ internal sealed class WebProgressServer : IDisposable
                 ctx.Response.Headers.Add("Cache-Control", "public, max-age=3600");
                 await ctx.Response.OutputStream.WriteAsync(png, ct).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
+            {
+                Console.Error.WriteLine("[/qr] Request was canceled.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Console.Error.WriteLine($"[/qr] QR generation failed: {ex}");
                 ctx.Response.StatusCode = 500;
@@ -539,7 +551,16 @@ internal sealed class WebProgressServer : IDisposable
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
+        {
+            string errJson = JsonSerializer.Serialize(new { error = "Request was canceled." });
+            byte[] body = Encoding.UTF8.GetBytes(errJson);
+            ctx.Response.ContentType = "application/json; charset=utf-8";
+            ctx.Response.StatusCode = 408;
+            ctx.Response.ContentLength64 = body.Length;
+            await ctx.Response.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             string errJson = JsonSerializer.Serialize(new { error = ex.Message });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
@@ -2531,7 +2552,7 @@ function renderPreview(pop, d, inv) {
     const qrSrc = '/qr?url=' + encodeURIComponent(inv.ksefVerificationUrl);
     html += '<div class="preview-qr">';
     html += '<img src="' + qrSrc + '" alt="QR KSeF" title="Skanuj aby zweryfikowac fakture w KSeF">';
-    html += '<br><a href="' + inv.ksefVerificationUrl + '" target="_blank" rel="noopener">Weryfikuj w KSeF &#8599;</a>';
+    html += '<br><a href="' + escHtml(inv.ksefVerificationUrl) + '" target="_blank" rel="noopener">Weryfikuj w KSeF &#8599;</a>';
     html += '</div>';
   }
 

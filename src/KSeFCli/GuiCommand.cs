@@ -1755,6 +1755,24 @@ public class GuiCommand : IWithConfigCommand
         return sb.ToString();
     }
 
+    private static string? TryBuildVerificationUrl(
+        IVerificationLinkService? linkSvc, string? nip, DateTimeOffset issueDate, string? invoiceHash)
+    {
+        if (linkSvc == null || string.IsNullOrEmpty(nip) || string.IsNullOrEmpty(invoiceHash))
+        {
+            return null;
+        }
+        try
+        {
+            return linkSvc.BuildInvoiceVerificationUrl(nip, issueDate.Date, invoiceHash);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ksef-api] Failed to build verification URL for NIP {nip}: {ex.Message}");
+            return null;
+        }
+    }
+
     private static object MapInvoicesToJson(List<InvoiceSummary> invoices, IVerificationLinkService? linkSvc = null) =>
         invoices.Select(i => new
         {
@@ -1769,9 +1787,7 @@ public class GuiCommand : IWithConfigCommand
             vatAmount = i.VatAmount,
             currency = i.Currency,
             invoiceHash = i.InvoiceHash,
-            ksefVerificationUrl = (linkSvc != null && !string.IsNullOrEmpty(i.InvoiceHash) && !string.IsNullOrEmpty(i.Seller?.Nip))
-                ? linkSvc.BuildInvoiceVerificationUrl(i.Seller!.Nip, i.IssueDate.DateTime, i.InvoiceHash)
-                : null,
+            ksefVerificationUrl = TryBuildVerificationUrl(linkSvc, i.Seller?.Nip, i.IssueDate, i.InvoiceHash),
         }).ToArray();
 
     private async Task DownloadAsync(DownloadParams dlParams, CancellationToken ct)
@@ -1867,12 +1883,8 @@ public class GuiCommand : IWithConfigCommand
                         await _server.SendEventAsync("invoice_done", new { current = i, file = fileName, pdf = true, progress = n, total = toDownload.Count }).ConfigureAwait(false);
                     }
 
-                    string? ksefVerificationUrl = null;
-                    if (!string.IsNullOrEmpty(inv.InvoiceHash) && !string.IsNullOrEmpty(inv.Seller?.Nip))
-                    {
-                        IVerificationLinkService linkSvc = _scope!.ServiceProvider.GetRequiredService<IVerificationLinkService>();
-                        ksefVerificationUrl = linkSvc.BuildInvoiceVerificationUrl(inv.Seller.Nip, inv.IssueDate.DateTime, inv.InvoiceHash);
-                    }
+                    IVerificationLinkService? pdfLinkSvc = _scope?.ServiceProvider.GetService<IVerificationLinkService>();
+                    string? ksefVerificationUrl = TryBuildVerificationUrl(pdfLinkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
 
                     byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl).ConfigureAwait(false);
                     string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
