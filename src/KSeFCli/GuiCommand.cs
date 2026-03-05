@@ -1766,7 +1766,17 @@ public class GuiCommand : IWithConfigCommand
         {
             return linkSvc.BuildInvoiceVerificationUrl(nip, issueDate.Date, invoiceHash);
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
+        {
+            Log.LogWarning($"[ksef-api] Failed to build verification URL for NIP {nip}: {ex.Message}");
+            return null;
+        }
+        catch (FormatException ex)
+        {
+            Log.LogWarning($"[ksef-api] Failed to build verification URL for NIP {nip}: {ex.Message}");
+            return null;
+        }
+        catch (InvalidOperationException ex)
         {
             Log.LogWarning($"[ksef-api] Failed to build verification URL for NIP {nip}: {ex.Message}");
             return null;
