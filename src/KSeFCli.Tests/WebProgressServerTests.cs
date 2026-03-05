@@ -183,7 +183,7 @@ public class WebProgressServerTests : IDisposable
         using HttpClient client = new HttpClient();
         HttpResponseMessage response = await client.PostAsync($"{_server.LocalUrl}auth",
             new StringContent("", Encoding.UTF8, "application/json"));
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         string json = await response.Content.ReadAsStringAsync();
         Assert.Contains("error", json);
         cts.Cancel();
@@ -410,10 +410,10 @@ public class WebProgressServerTests : IDisposable
         using HttpClient client = new HttpClient();
         HttpResponseMessage response = await client.PostAsync($"{_server.LocalUrl}search",
             new StringContent(requestBody, Encoding.UTF8, "application/json"));
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         string json = await response.Content.ReadAsStringAsync();
         Assert.Contains("error", json);
-        Assert.Contains("Test error", json);
+        Assert.DoesNotContain("Test error", json); // internal message must not leak to client
         cts.Cancel();
     }
 

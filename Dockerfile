@@ -38,7 +38,8 @@ LABEL org.opencontainers.image.source="https://github.com/marcinbojko/ksef-gui"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
+    libssl3 ca-certificates curl \
+    libfontconfig1 libfreetype6 && rm -rf /var/lib/apt/lists/*
 
 # Pre-create data directories. Both config and cache dirs are overridden by
 # named volumes in docker-compose, but creating them here ensures the image
