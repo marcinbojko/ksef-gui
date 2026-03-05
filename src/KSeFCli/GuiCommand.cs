@@ -1768,7 +1768,7 @@ public class GuiCommand : IWithConfigCommand
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[ksef-api] Failed to build verification URL for NIP {nip}: {ex.Message}");
+            Log.LogWarning($"[ksef-api] Failed to build verification URL for NIP {nip}: {ex.Message}");
             return null;
         }
     }
