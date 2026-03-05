@@ -565,7 +565,7 @@ internal sealed class WebProgressServer : IDisposable
             Console.Error.WriteLine($"[HandleAction] Unhandled exception: {ex}");
             (int statusCode, string errorMessage) = ex switch
             {
-                ArgumentException or FormatException => (400, "Bad Request"),
+                ArgumentException or FormatException or JsonException => (400, "Bad Request"),
                 UnauthorizedAccessException => (401, "Unauthorized"),
                 FileNotFoundException or DirectoryNotFoundException => (404, "Not Found"),
                 HttpRequestException => (502, "Bad Gateway"),
@@ -2492,8 +2492,8 @@ function renderDetails(pop, d) {
     if (d.lineItems.some(l => l.exchangeRate)) html += '<th>Kurs</th>';
     html += '</tr></thead><tbody>';
     for (const l of d.lineItems) {
-      html += '<tr><td>' + escHtml(String(l.nr||'')) + '</td><td>' + escHtml(l.name||'') + '</td><td>' + escHtml(String(l.unit||'')) + '</td><td>' + escHtml(String(l.qty||'')) + '</td><td class="amount">' + escHtml(String(l.unitPrice||'')) + '</td><td class="amount">' + escHtml(String(l.netAmount||'')) + '</td><td class="amount">' + escHtml(String(l.grossAmount||'')) + '</td><td>' + escHtml(String(l.vatRate||'')) + '</td>';
-      if (d.lineItems.some(li => li.exchangeRate)) html += '<td>' + escHtml(String(l.exchangeRate||'')) + '</td>';
+      html += '<tr><td>' + escHtml(String(l.nr??'')) + '</td><td>' + escHtml(l.name??'') + '</td><td>' + escHtml(String(l.unit??'')) + '</td><td>' + escHtml(String(l.qty??'')) + '</td><td class="amount">' + escHtml(String(l.unitPrice??'')) + '</td><td class="amount">' + escHtml(String(l.netAmount??'')) + '</td><td class="amount">' + escHtml(String(l.grossAmount??'')) + '</td><td>' + escHtml(String(l.vatRate??'')) + '</td>';
+      if (d.lineItems.some(li => li.exchangeRate)) html += '<td>' + escHtml(String(l.exchangeRate??'')) + '</td>';
       html += '</tr>';
     }
     html += '</tbody></table></div>';
@@ -2502,7 +2502,7 @@ function renderDetails(pop, d) {
   if (d.additionalDescriptions && d.additionalDescriptions.length > 0) {
     html += '<div class="dp-section"><h4>Dodatkowe opisy</h4>';
     for (const ad of d.additionalDescriptions) {
-      html += dpRow(ad.key || '', ad.value || '');
+      html += dpRow(ad.key ?? '', ad.value ?? '');
     }
     html += '</div>';
   }
