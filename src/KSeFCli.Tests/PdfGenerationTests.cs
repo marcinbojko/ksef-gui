@@ -18,19 +18,6 @@ public class PdfGenerationTests
         pdf[0] == (byte)'%' && pdf[1] == (byte)'P' &&
         pdf[2] == (byte)'D' && pdf[3] == (byte)'F';
 
-    private static bool ContainsSubsequence(byte[] haystack, byte[] needle)
-    {
-        int limit = haystack.Length - needle.Length;
-        for (int i = 0; i <= limit; i++)
-        {
-            if (haystack.AsSpan(i, needle.Length).SequenceEqual(needle))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // ── PDF byte sanity ───────────────────────────────────────────────────────
 
     [Fact]
@@ -96,14 +83,12 @@ public class PdfGenerationTests
     {
         // A string longer than 256 chars must be truncated — the result must still be a valid PDF.
         string oversize = new('X', 300);
-        byte[] pdf = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, oversize);
-        Assert.True(IsPdfHeader(pdf));
-        Assert.True(pdf.Length > 1024);
         string expectedTruncated = oversize.Substring(0, 256);
-        byte[] truncatedBytes = System.Text.Encoding.UTF8.GetBytes(expectedTruncated);
-        byte[] oversizeBytes = System.Text.Encoding.UTF8.GetBytes(oversize);
-        Assert.True(ContainsSubsequence(pdf, truncatedBytes), "Truncated 256-char prefix should appear in PDF bytes");
-        Assert.False(ContainsSubsequence(pdf, oversizeBytes), "Full 300-char oversize string should not appear in PDF bytes");
+        byte[] pdfFromOversize = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, oversize);
+        byte[] pdfFromTruncated = KSeFInvoicePdf.FromXml(LoadSampleXml(), null, expectedTruncated);
+        Assert.True(IsPdfHeader(pdfFromOversize));
+        Assert.True(pdfFromOversize.Length > 1024);
+        Assert.Equal(pdfFromTruncated, pdfFromOversize);
     }
 
     [Fact]
