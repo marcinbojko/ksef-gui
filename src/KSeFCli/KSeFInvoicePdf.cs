@@ -4,6 +4,8 @@ using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Schema;
 
+using KSeF.Client.Api.Services;
+
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -70,7 +72,12 @@ internal record InvoiceData(
     string? PelnaNazwa,
     string? Regon,
     string? Bdo,
-    string? SystemInfo
+    string? SystemInfo,
+    // Not in the XML — injected from API response metadata after parsing
+    string? KsefReferenceNumber,
+    // Pre-computed KSeF verification URL: https://qr.ksef.mf.gov.pl/invoice/{nip}/{dd-MM-yyyy}/{hash}
+    // Built by IVerificationLinkService in the download/search pipeline; null when not available.
+    string? KsefVerificationUrl
 );
 
 // ── Parser ───────────────────────────────────────────────────────────────────
@@ -260,7 +267,9 @@ internal static class KSeFInvoiceParser
             PelnaNazwa: rejestry is null ? null : Val(rejestry, "PelnaNazwa"),
             Regon: rejestry is null ? null : Val(rejestry, "REGON"),
             Bdo: rejestry is null ? null : Val(rejestry, "BDO"),
-            SystemInfo: Val(naglowek, "SystemInfo")
+            SystemInfo: Val(naglowek, "SystemInfo"),
+            KsefReferenceNumber: null,
+            KsefVerificationUrl: null
         );
     }
 
@@ -436,7 +445,7 @@ internal static class KSeFInvoiceSanitizer
         try
         {
             System.Reflection.Assembly asm = typeof(KSeFInvoiceSanitizer).Assembly;
-            using System.IO.Stream? fa3Stream = asm.GetManifestResourceStream("ksefcli.Resources.FA3.xsd");
+            using System.IO.Stream? fa3Stream = asm.GetManifestResourceStream("KSeFCli.Resources.FA3.xsd");
             if (fa3Stream is null)
             {
                 Log.LogWarning("[fa3-validator] FA3.xsd not found in resources; schema validation disabled");
@@ -482,11 +491,11 @@ internal static class KSeFInvoiceSanitizer
         private static readonly Dictionary<string, string> UrlToResource = new(StringComparer.Ordinal)
         {
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/StrukturyDanych_v10-0E.xsd"]
-                = "ksefcli.Resources.StrukturyDanych.xsd",
+                = "KSeFCli.Resources.StrukturyDanych.xsd",
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/ElementarneTypyDanych_v10-0E.xsd"]
-                = "ksefcli.Resources.ElementarneTypy.xsd",
+                = "KSeFCli.Resources.ElementarneTypy.xsd",
             ["http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/KodyKrajow_v10-0E.xsd"]
-                = "ksefcli.Resources.KodyKrajow.xsd",
+                = "KSeFCli.Resources.KodyKrajow.xsd",
         };
 
         private readonly System.Reflection.Assembly _asm;
@@ -890,11 +899,31 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     // ── Header ───────────────────────────────────────────────────────────────
 
+    private static byte[]? BuildKsefQrPng(string? ksefVerificationUrl)
+    {
+        if (string.IsNullOrEmpty(ksefVerificationUrl))
+        {
+            return null;
+        }
+
+        try
+        {
+            return QrCodeService.GenerateQrCode(ksefVerificationUrl);
+        }
+        catch (Exception)
+        {
+            // QR generation failure degrades gracefully — ComposeHeader handles null by omitting the QR column.
+            return null;
+        }
+    }
+
     private void ComposeHeader(IContainer c, InvoiceData d)
     {
+        byte[]? qrPng = BuildKsefQrPng(d.KsefVerificationUrl);
+
         c.Column(col =>
         {
-            // Top bar: KSeF branding + invoice number
+            // Top bar: KSeF branding + invoice number (+ optional QR code)
             col.Item().BorderBottom(1.5f).BorderColor(Blue).PaddingBottom(6).Row(row =>
             {
                 row.RelativeItem().Column(left =>
@@ -907,6 +936,10 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     left.Item().PaddingTop(1).Text(InvoiceSubtitle(d.RodzajFaktury))
                         .FontSize(9).FontColor(Gray);
                 });
+                if (qrPng is not null)
+                {
+                    row.ConstantItem(55).AlignMiddle().Padding(2).Image(qrPng);
+                }
                 row.ConstantItem(210).AlignRight().Column(right =>
                 {
                     right.Item().Text("Numer Faktury:").FontSize(7).FontColor(Gray);
@@ -914,6 +947,14 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     if (d.RodzajFaktury is not null)
                     {
                         right.Item().Text(InvoiceSubtitle(d.RodzajFaktury)).FontSize(7.5f).FontColor(Gray);
+                    }
+                    if (!string.IsNullOrEmpty(d.KsefReferenceNumber))
+                    {
+                        right.Item().PaddingTop(4).Text(t =>
+                        {
+                            t.Span("Numer KSeF: ").FontSize(7).FontColor(Gray);
+                            t.Span(d.KsefReferenceNumber).FontSize(8).Bold().FontColor(RedAccent);
+                        });
                     }
                 });
             });
@@ -1579,9 +1620,34 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
 public static class KSeFInvoicePdf
 {
-    public static byte[] FromXml(string xmlContent, string? colorScheme = null)
+    // KSeF reference numbers follow the pattern NIP-YYYYMMDD-HASH-SEQ; cap at 256 (same as TZnakowy in FA3.xsd).
+    private const int MaxKsefReferenceNumberLength = 256;
+
+    public static byte[] FromXml(
+        string xmlContent,
+        string? colorScheme = null,
+        string? ksefReferenceNumber = null,
+        string? ksefVerificationUrl = null)
     {
+        string? normalizedKsefRef = ksefReferenceNumber?.Trim();
+        if (string.IsNullOrEmpty(normalizedKsefRef))
+        {
+            normalizedKsefRef = null;
+        }
+        else if (normalizedKsefRef.Length > MaxKsefReferenceNumberLength)
+        {
+            normalizedKsefRef = normalizedKsefRef[..MaxKsefReferenceNumberLength];
+        }
+
+        string? normalizedVerificationUrl = ksefVerificationUrl?.Trim();
+        if (string.IsNullOrEmpty(normalizedVerificationUrl))
+        {
+            normalizedVerificationUrl = null;
+        }
+
         InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
-        return KSeFInvoicePdfGenerator.Generate(data, PdfColorScheme.FromName(colorScheme));
+        return KSeFInvoicePdfGenerator.Generate(
+            data with { KsefReferenceNumber = normalizedKsefRef, KsefVerificationUrl = normalizedVerificationUrl },
+            PdfColorScheme.FromName(colorScheme));
     }
 }
