@@ -1877,6 +1877,12 @@ public class GuiCommand : IWithConfigCommand
                 return "";
             }
 
+            // Neutralize formula injection: Excel/Calc treat cells starting with =,+,-,@ as formulas
+            if (value[0] is '=' or '+' or '-' or '@')
+            {
+                value = "'" + value;
+            }
+
             if (value.Contains(';') || value.Contains('"') || value.Contains('\n'))
             {
                 return "\"" + value.Replace("\"", "\"\"") + "\"";
