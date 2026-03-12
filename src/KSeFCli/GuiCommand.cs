@@ -1803,38 +1803,40 @@ public class GuiCommand : IWithConfigCommand
 
     private Task<string> GenerateSummaryAsync(DownloadSummaryParams sumParams, CancellationToken ct)
     {
-        if (_cachedInvoices == null || _cachedInvoices.Count == 0)
+        // Snapshot mutable state immediately to avoid races with profile/cache switches
+        List<InvoiceSummary>? cached = _cachedInvoices?.ToList();
+        string profile = ActiveProfile;
+        string? nip = sumParams.SeparateByNip ? Config().Nip : null;
+
+        if (cached == null || cached.Count == 0)
         {
             throw new InvalidOperationException("Brak faktur. Wykonaj najpierw wyszukiwanie.");
         }
 
         string month = sumParams.Month; // "YYYY-MM"
-        if (string.IsNullOrWhiteSpace(month) || month.Length != 7)
+        if (!DateOnly.TryParseExact(month, "yyyy-MM", out DateOnly parsedMonth))
         {
             throw new InvalidOperationException($"Nieprawidłowy format miesiąca: '{month}'. Oczekiwany format: RRRR-MM.");
         }
 
-        List<InvoiceSummary> filtered = _cachedInvoices
-            .Where(i => i.IssueDate.ToString("yyyy-MM") == month)
+        string monthKey = parsedMonth.ToString("yyyy-MM");
+        List<InvoiceSummary> filtered = cached
+            .Where(i => i.IssueDate.ToString("yyyy-MM") == monthKey)
             .OrderBy(i => i.IssueDate)
             .ToList();
 
         string outputDir = string.IsNullOrWhiteSpace(sumParams.OutputDir) ? OutputDir : sumParams.OutputDir;
-        if (sumParams.SeparateByNip)
+        if (!string.IsNullOrEmpty(nip))
         {
-            string nip = Config().Nip;
-            if (!string.IsNullOrEmpty(nip))
-            {
-                outputDir = Path.Combine(outputDir, nip);
-            }
+            outputDir = Path.Join(outputDir, nip);
         }
         Directory.CreateDirectory(outputDir);
-        string filePath = Path.Join(outputDir, $"summary-{month}.csv");
+        string filePath = Path.Join(outputDir, $"summary-{monthKey}.csv");
 
-        Log.LogInformation($"[summary] Generating monthly summary for profile '{ActiveProfile}', month={month}, invoices in cache={_cachedInvoices.Count}, matching={filtered.Count}, output={filePath}");
+        Log.LogInformation($"[summary] Generating monthly summary for profile '{profile}', month={monthKey}, invoices in cache={cached.Count}, matching={filtered.Count}, output={filePath}");
 
         StringBuilder sb = new();
-        sb.AppendLine($"Podsumowanie faktur za: {month}");
+        sb.AppendLine($"Podsumowanie faktur za: {monthKey}");
         sb.AppendLine($"Liczba faktur: {filtered.Count}");
         sb.AppendLine();
         sb.AppendLine("Data wystawienia;Numer faktury;Sprzedawca;NIP sprzedawcy;Nabywca;Numer KSeF;Waluta;Kwota brutto");
@@ -1853,7 +1855,7 @@ public class GuiCommand : IWithConfigCommand
         }
 
         sb.AppendLine();
-        foreach (IGrouping<string, InvoiceSummary> grp in filtered.GroupBy(i => i.Currency ?? "PLN"))
+        foreach (IGrouping<string, InvoiceSummary> grp in filtered.GroupBy(i => i.Currency ?? ""))
         {
             decimal total = grp.Sum(i => i.GrossAmount);
             sb.AppendLine($"Razem {grp.Key}:;{total.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
@@ -1865,7 +1867,7 @@ public class GuiCommand : IWithConfigCommand
         byte[] bytes = [.. bom, .. content];
         File.WriteAllBytes(filePath, bytes);
 
-        Log.LogInformation($"[summary] Saved {filtered.Count} invoice(s) for {month} to {filePath} ({bytes.Length} bytes)");
+        Log.LogInformation($"[summary] Saved {filtered.Count} invoice(s) for {monthKey} to {filePath} ({bytes.Length} bytes)");
         return Task.FromResult(filePath);
 
         static string Csv(string? value)

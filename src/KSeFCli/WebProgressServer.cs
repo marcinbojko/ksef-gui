@@ -2382,7 +2382,7 @@ async function doSummary() {
     const res = await fetch('/download-summary', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Błąd serwera'); }
     const data = await res.json();
-    setStatus('Podsumowanie zapisane: ' + data.filePath, 'ok');
+    setStatus('Podsumowanie zapisane: ' + data.filePath, 'done');
   } catch (err) {
     setStatus('Błąd: ' + err.message, 'error');
   } finally {
