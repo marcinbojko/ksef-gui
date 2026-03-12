@@ -10,6 +10,7 @@ namespace KSeFCli;
 internal record SearchParams(string SubjectType, string From, string? To, string DateType, string? Source = null);
 internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null);
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip);
+internal record DownloadSummaryParams(string OutputDir, string Month, bool SeparateByNip = false);
 
 internal sealed class WebProgressServer : IDisposable
 {
@@ -24,6 +25,9 @@ internal sealed class WebProgressServer : IDisposable
 
     /// <summary>Called when the user clicks "Pobierz". Receives download params. Progress reported via SendEventAsync.</summary>
     public Func<DownloadParams, CancellationToken, Task>? OnDownload { get; set; }
+
+    /// <summary>Called when the user requests a monthly summary CSV. Returns the output file path.</summary>
+    public Func<DownloadSummaryParams, CancellationToken, Task<string>>? OnDownloadSummary { get; set; }
 
     /// <summary>Called when the user clicks "Autoryzuj". Forces re-authentication and returns status message.</summary>
     public Func<CancellationToken, Task<string>>? OnAuth { get; set; }
@@ -348,6 +352,22 @@ internal sealed class WebProgressServer : IDisposable
                     ?? new DownloadParams(".", null, false);
                 await OnDownload(dlParams, ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { ok = true });
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/download-summary" && method == "POST")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                if (OnDownloadSummary == null)
+                {
+                    throw new InvalidOperationException("Summary not configured");
+                }
+
+                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                DownloadSummaryParams sumParams = JsonSerializer.Deserialize<DownloadSummaryParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new DownloadSummaryParams(".", "");
+                string filePath = await OnDownloadSummary(sumParams, ct).ConfigureAwait(false);
+                return JsonSerializer.Serialize(new { ok = true, filePath });
             }).ConfigureAwait(false);
         }
         else if (path == "/invoice-details" && method == "GET")
@@ -1143,6 +1163,7 @@ body.dark .pref-label{color:#aaa}
 <div class="toolbar" id="downloadBar" style="display:none">
   <button class="btn-success" id="btnDownloadSel" onclick="doDownload(true)">Pobierz zaznaczone</button>
   <button class="btn-success" id="btnDownload" onclick="doDownload(false)" style="background:#1976d2">Pobierz wszystkie</button>
+  <button class="btn-success" id="btnSummary" onclick="doSummary()" style="background:#7b1fa2">Podsumowanie CSV</button>
   <span class="count" id="countLabel"></span>
 </div>
 <div class="modal-overlay" id="folderModal">
@@ -1200,7 +1221,7 @@ const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
       tableWrap = $('tableWrap'), downloadBar = $('downloadBar'), filterBar = $('filterBar'),
       selToolbar = $('selToolbar'), selCount = $('selCount'),
       btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'),
-      countLabel = $('countLabel');
+      btnSummary = $('btnSummary'), countLabel = $('countLabel');
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
 let profileSwitchGen = 0; // incremented on every profile switch; stale async results discard themselves
 let activeCurrencies = new Set();
@@ -2348,6 +2369,24 @@ async function doDownload(selOnly) {
   } catch (err) {
     setStatus('Blad: ' + err.message, 'error');
     btnSearch.disabled = false; btnDownload.disabled = false; btnDownloadSel.disabled = selectedInvoices.size === 0;
+  }
+}
+
+async function doSummary() {
+  const month = $('fromDate').value;
+  if (!month) { setStatus('Wybierz miesiąc w polu "Od".', 'error'); return; }
+  btnSummary.disabled = true;
+  setStatus('Generowanie podsumowania...', 'info');
+  try {
+    const body = { outputDir: $('outputDir').value || '.', month, separateByNip: $('separateByNip').checked };
+    const res = await fetch('/download-summary', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Błąd serwera'); }
+    const data = await res.json();
+    setStatus('Podsumowanie zapisane: ' + data.filePath, 'done');
+  } catch (err) {
+    setStatus('Błąd: ' + err.message, 'error');
+  } finally {
+    btnSummary.disabled = false;
   }
 }
 
