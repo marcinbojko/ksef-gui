@@ -352,6 +352,7 @@ public class GuiCommand : IWithConfigCommand
 
         server.OnSearch = SearchAsync;
         server.OnDownload = DownloadAsync;
+        server.OnDownloadSummary = GenerateSummaryAsync;
         server.OnAuth = AuthAsync;
         server.OnInvoiceDetails = InvoiceDetailsAsync;
         server.OnQuit = () =>
@@ -1799,6 +1800,89 @@ public class GuiCommand : IWithConfigCommand
             invoiceHash = i.InvoiceHash,
             ksefVerificationUrl = TryBuildVerificationUrl(linkSvc, i.Seller?.Nip, i.IssueDate, i.InvoiceHash),
         }).ToArray();
+
+    private Task<string> GenerateSummaryAsync(DownloadSummaryParams sumParams, CancellationToken ct)
+    {
+        if (_cachedInvoices == null || _cachedInvoices.Count == 0)
+        {
+            throw new InvalidOperationException("Brak faktur. Wykonaj najpierw wyszukiwanie.");
+        }
+
+        string month = sumParams.Month; // "YYYY-MM"
+        if (string.IsNullOrWhiteSpace(month) || month.Length != 7)
+        {
+            throw new InvalidOperationException($"Nieprawidłowy format miesiąca: '{month}'. Oczekiwany format: RRRR-MM.");
+        }
+
+        List<InvoiceSummary> filtered = _cachedInvoices
+            .Where(i => i.IssueDate.ToString("yyyy-MM") == month)
+            .OrderBy(i => i.IssueDate)
+            .ToList();
+
+        string outputDir = string.IsNullOrWhiteSpace(sumParams.OutputDir) ? OutputDir : sumParams.OutputDir;
+        if (sumParams.SeparateByNip)
+        {
+            string nip = Config().Nip;
+            if (!string.IsNullOrEmpty(nip))
+            {
+                outputDir = Path.Combine(outputDir, nip);
+            }
+        }
+        Directory.CreateDirectory(outputDir);
+        string filePath = Path.Join(outputDir, $"summary-{month}.csv");
+
+        Log.LogInformation($"[summary] Generating monthly summary for profile '{ActiveProfile}', month={month}, invoices in cache={_cachedInvoices.Count}, matching={filtered.Count}, output={filePath}");
+
+        StringBuilder sb = new();
+        sb.AppendLine($"Podsumowanie faktur za: {month}");
+        sb.AppendLine($"Liczba faktur: {filtered.Count}");
+        sb.AppendLine();
+        sb.AppendLine("Data wystawienia;Numer faktury;Sprzedawca;NIP sprzedawcy;Nabywca;Numer KSeF;Waluta;Kwota brutto");
+
+        foreach (InvoiceSummary inv in filtered)
+        {
+            string date = inv.IssueDate.ToString("yyyy-MM-dd");
+            string invoiceNumber = Csv(inv.InvoiceNumber);
+            string sellerName = Csv(inv.Seller?.Name);
+            string sellerNip = Csv(inv.Seller?.Nip);
+            string buyerName = Csv(inv.Buyer?.Name);
+            string ksefNumber = Csv(inv.KsefNumber);
+            string currency = Csv(inv.Currency);
+            string gross = inv.GrossAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            sb.AppendLine($"{date};{invoiceNumber};{sellerName};{sellerNip};{buyerName};{ksefNumber};{currency};{gross}");
+        }
+
+        sb.AppendLine();
+        foreach (IGrouping<string, InvoiceSummary> grp in filtered.GroupBy(i => i.Currency ?? "PLN"))
+        {
+            decimal total = grp.Sum(i => i.GrossAmount);
+            sb.AppendLine($"Razem {grp.Key}:;{total.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+
+        // UTF-8 with BOM for Excel compatibility
+        byte[] bom = [0xEF, 0xBB, 0xBF];
+        byte[] content = Encoding.UTF8.GetBytes(sb.ToString());
+        byte[] bytes = [.. bom, .. content];
+        File.WriteAllBytes(filePath, bytes);
+
+        Log.LogInformation($"[summary] Saved {filtered.Count} invoice(s) for {month} to {filePath} ({bytes.Length} bytes)");
+        return Task.FromResult(filePath);
+
+        static string Csv(string? value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return "";
+            }
+
+            if (value.Contains(';') || value.Contains('"') || value.Contains('\n'))
+            {
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            }
+
+            return value;
+        }
+    }
 
     private async Task DownloadAsync(DownloadParams dlParams, CancellationToken ct)
     {
