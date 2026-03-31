@@ -1057,12 +1057,6 @@ public class GuiCommand : IWithConfigCommand
             Log.LogDebug($"[bg-refresh] Cycle start — activeProfile='{snapshotActive}', profiles=[{string.Join(", ", config.Profiles.Keys)}]");
             foreach ((string name, ProfileConfig profile) in config.Profiles)
             {
-                if (name == snapshotActive)
-                {
-                    Log.LogDebug($"[bg-refresh] Skipping '{name}' (active profile, handled by JS)");
-                    continue; // JS silentRefresh handles the active profile
-                }
-
                 ProfilePrefs? profilePrefs = ppMap.TryGetValue(name, out ProfilePrefs? pp) ? pp : null;
                 if (profilePrefs?.IncludeInAutoRefresh == false)
                 {
@@ -1070,9 +1064,13 @@ public class GuiCommand : IWithConfigCommand
                     continue;
                 }
 
+                // Active profile: C# still runs (for webhooks/DB), but JS silentRefresh handles
+                // the UI update — suppress the SSE event so the browser doesn't double-notify.
+                bool isActiveProfile = name == snapshotActive;
+
                 try
                 {
-                    await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, prefs, ct).ConfigureAwait(false);
+                    await RefreshProfileInBackgroundAsync(name, profile, profilePrefs, prefs, isActiveProfile, ct).ConfigureAwait(false);
                 }
                 catch (KsefRateLimitException ex)
                 {
@@ -1086,9 +1084,9 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, ProfilePrefs? profilePrefs, GuiPrefs prefs, CancellationToken ct)
+    private async Task RefreshProfileInBackgroundAsync(string name, ProfileConfig profile, ProfilePrefs? profilePrefs, GuiPrefs prefs, bool isActiveProfile, CancellationToken ct)
     {
-        Log.LogInformation($"[bg-refresh] Profile '{name}' (NIP {profile.Nip}, env {profile.Environment}) starting");
+        Log.LogInformation($"[bg-refresh] Profile '{name}' (NIP {profile.Nip}, env {profile.Environment}) starting{(isActiveProfile ? " [active profile]" : "")}");
         using IServiceScope scope = GetScope(profile);
         string accessToken = await GetAccessTokenForProfile(name, profile, scope, ct).ConfigureAwait(false);
 
@@ -1145,7 +1143,9 @@ public class GuiCommand : IWithConfigCommand
         int newCount = invoices.Count(i => !prevKeys.Contains(i.KsefNumber));
         Log.LogInformation($"[bg-refresh] Profile '{name}': {invoices.Count} invoices, {newCount} new");
 
-        if (_server != null)
+        // Do not send SSE for the active profile: JS silentRefresh() handles the UI update.
+        // Sending it would cause double browser notifications (SSE + silentRefresh detection).
+        if (_server != null && !isActiveProfile)
         {
             await _server.SendEventAsync("background_refresh", new
             {
