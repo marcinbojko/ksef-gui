@@ -2216,8 +2216,8 @@ async function silentRefresh() {
     console.info('[auto-refresh] Cyclic search started at', new Date().toLocaleTimeString());
     const params = {
       subjectType: lastSearchParams.subjectType,
-      from: monthToFrom(lastSearchParams.fromDate) || 'thismonth',
-      to: monthToTo(lastSearchParams.toDate) || null,
+      from: 'thismonth', // always current month — matches C# bg-refresh behaviour
+      to: null,          // always up to now — never a stale past date
       dateType: lastSearchParams.dateType,
       source: 'auto'
     };
