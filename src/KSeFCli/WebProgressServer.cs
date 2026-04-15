@@ -2031,10 +2031,12 @@ function connectSSE() {
         if (d.profileName === currentSessionProfile) {
           // Active profile: C# bg-refresh already updated _cachedInvoices in-memory.
           // Reload the table so the screen matches the logs without a manual search.
-          loadCachedInvoices();
-          if (d.truncated) {
-            setStatus('\u26A0\uFE0F Wyniki obci\u0119te \u2014 KSeF zwraca maks. 10\u00A0000 faktur. Zaw\u0119\u017C zakres dat.', 'error');
-          }
+          // Must await before setting truncation status — loadCachedInvoices calls setStatus on completion.
+          loadCachedInvoices().then(() => {
+            if (d.truncated) {
+              setStatus('\u26A0\uFE0F Wyniki obci\u0119te \u2014 KSeF zwraca maks. 10\u00A0000 faktur. Zaw\u0119\u017C zakres dat.', 'error');
+            }
+          });
         }
         if (d.newCount > 0) {
           markProfileBadge(d.profileName, d.newCount);
@@ -2247,6 +2249,8 @@ async function silentRefresh() {
     countLabel.textContent = total + ' faktur';
     if (searchResult.truncated) {
       setStatus('\u26A0\uFE0F Wyniki obci\u0119te \u2014 KSeF zwraca maks. 10\u00A0000 faktur. Zaw\u0119\u017C zakres dat.', 'error');
+    } else {
+      setStatus('Auto-od\u015Bwie\u017Canie: ' + total + ' faktur.', 'idle');
     }
     buildCurrencyFilter();
     renderTable();
