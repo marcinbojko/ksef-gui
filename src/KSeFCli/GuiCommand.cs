@@ -911,8 +911,11 @@ public class GuiCommand : IWithConfigCommand
         };
     }
 
-    /// <summary>Pages through the KSeF API and returns all invoice summaries matching the filters.</summary>
-    private static async Task<List<InvoiceSummary>> FetchAllPagesAsync(
+    /// <summary>Pages through the KSeF API and returns all invoice summaries matching the filters.
+    /// The KSeF API enforces a hard limit of 10 000 results per query. If this limit is reached
+    /// (<c>IsTruncated == true</c>), the method returns partial results and sets
+    /// <c>WasTruncated</c> to <see langword="true"/> so callers can warn the user.</summary>
+    private static async Task<(List<InvoiceSummary> Invoices, bool WasTruncated)> FetchAllPagesAsync(
         IKSeFClient client,
         InvoiceQueryFilters filters,
         string accessToken,
@@ -925,9 +928,16 @@ public class GuiCommand : IWithConfigCommand
         const int pageSize = 100;
         const int maxRetries = 5;
         const int interPageDelayMs = 200;
+        const int maxApiOffset = 10_000;
 
         do
         {
+            if (currentOffset >= maxApiOffset)
+            {
+                Log.LogWarning($"Reached KSeF API offset limit ({maxApiOffset}). Returning {all.Count} partial results.");
+                return (all, true);
+            }
+
             Log.LogInformation($"Fetching page with offset {currentOffset} and size {pageSize}");
             for (int attempt = 0; ; attempt++)
             {
@@ -954,6 +964,12 @@ public class GuiCommand : IWithConfigCommand
                 all.AddRange(pagedResponse.Invoices);
             }
 
+            if (pagedResponse.IsTruncated)
+            {
+                Log.LogWarning($"KSeF API returned IsTruncated=true at offset {currentOffset}. Total results exceed 10 000. Returning {all.Count} partial results.");
+                return (all, true);
+            }
+
             currentOffset += pageSize;
 
             if (pagedResponse.HasMore == true)
@@ -962,7 +978,7 @@ public class GuiCommand : IWithConfigCommand
             }
         } while (pagedResponse.HasMore == true);
 
-        return all;
+        return (all, false);
     }
 
     private async Task<object> SearchAsync(SearchParams searchParams, CancellationToken ct)
@@ -975,11 +991,11 @@ public class GuiCommand : IWithConfigCommand
 
         InvoiceQueryFilters filters = await BuildFiltersAsync(searchParams, ct).ConfigureAwait(false);
         string accessToken = await GetAccessToken(_scope!, ct).ConfigureAwait(false);
-        List<InvoiceSummary> allInvoices = await FetchAllPagesAsync(_ksefClient!, filters, accessToken, ct).ConfigureAwait(false);
+        (List<InvoiceSummary> allInvoices, bool wasTruncated) = await FetchAllPagesAsync(_ksefClient!, filters, accessToken, ct).ConfigureAwait(false);
 
         Log.LogInformation(isCyclic
-            ? $"[ksef-api] cyclic-search done — {allInvoices.Count} invoices"
-            : $"[ksef-api] search done — {allInvoices.Count} invoices");
+            ? $"[ksef-api] cyclic-search done — {allInvoices.Count} invoices{(wasTruncated ? " (TRUNCATED — KSeF 10K limit)" : "")}"
+            : $"[ksef-api] search done — {allInvoices.Count} invoices{(wasTruncated ? " (TRUNCATED — KSeF 10K limit)" : "")}");
         _cachedInvoices = allInvoices;
         // Cyclic searches keep the last manual params intact — only the invoice list is refreshed.
         if (!isCyclic)
@@ -1004,7 +1020,11 @@ public class GuiCommand : IWithConfigCommand
             Log.LogWarning($"Failed to save invoice cache: {ex.Message}");
         }
 
-        return MapInvoicesToJson(allInvoices, _scope?.ServiceProvider.GetService<IVerificationLinkService>());
+        return new
+        {
+            invoices = MapInvoicesToJson(allInvoices, _scope?.ServiceProvider.GetService<IVerificationLinkService>()),
+            truncated = wasTruncated,
+        };
     }
 
     private string GetProfileCacheKey()
@@ -1108,9 +1128,10 @@ public class GuiCommand : IWithConfigCommand
 
         IKSeFClient client = scope.ServiceProvider.GetRequiredService<IKSeFClient>();
         List<InvoiceSummary> invoices;
+        bool wasTruncated;
         try
         {
-            invoices = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
+            (invoices, wasTruncated) = await FetchAllPagesAsync(client, filters, accessToken, ct, abortOn429: true).ConfigureAwait(false);
             // Suggestion 1: invalidate the stored access token after every successful fetch.
             // KSeF revokes access tokens as soon as the search session completes, so ValidUntil
             // (~2 h) is misleading. Expiring it here ensures the next cycle does a TokenRefresh
@@ -1124,8 +1145,13 @@ public class GuiCommand : IWithConfigCommand
             ExpireStoredAccessToken(name, profile);
             // GetAccessTokenForProfile sees the expired access token and performs TokenRefresh.
             string freshToken = await GetAccessTokenForProfile(name, profile, scope, ct).ConfigureAwait(false);
-            invoices = await FetchAllPagesAsync(client, filters, freshToken, ct, abortOn429: true).ConfigureAwait(false);
+            (invoices, wasTruncated) = await FetchAllPagesAsync(client, filters, freshToken, ct, abortOn429: true).ConfigureAwait(false);
             ExpireStoredAccessToken(name, profile);
+        }
+
+        if (wasTruncated)
+        {
+            Log.LogWarning($"[bg-refresh] Profile '{name}': results truncated at KSeF 10K limit — narrowing the date range may help");
         }
 
         if (prev == null)
@@ -1141,7 +1167,7 @@ public class GuiCommand : IWithConfigCommand
         }
 
         int newCount = invoices.Count(i => !prevKeys.Contains(i.KsefNumber));
-        Log.LogInformation($"[bg-refresh] Profile '{name}': {invoices.Count} invoices, {newCount} new");
+        Log.LogInformation($"[bg-refresh] Profile '{name}': {invoices.Count} invoices, {newCount} new{(wasTruncated ? " (TRUNCATED)" : "")}");
 
         // For the active profile, update the in-memory cache so the browser sees fresh data
         // via /cached-invoices without needing a separate /search round-trip.
@@ -1158,6 +1184,7 @@ public class GuiCommand : IWithConfigCommand
                 profileName = name,
                 count = invoices.Count,
                 newCount,
+                truncated = wasTruncated,
             }).ConfigureAwait(false);
         }
 

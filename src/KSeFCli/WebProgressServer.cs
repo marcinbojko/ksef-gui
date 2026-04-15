@@ -2027,11 +2027,14 @@ function connectSSE() {
         break;
       }
       case 'background_refresh':
-        // d = { profileName, count, newCount }
+        // d = { profileName, count, newCount, truncated }
         if (d.profileName === currentSessionProfile) {
           // Active profile: C# bg-refresh already updated _cachedInvoices in-memory.
           // Reload the table so the screen matches the logs without a manual search.
           loadCachedInvoices();
+          if (d.truncated) {
+            setStatus('\u26A0\uFE0F Wyniki obci\u0119te \u2014 KSeF zwraca maks. 10\u00A0000 faktur. Zaw\u0119\u017C zakres dat.', 'error');
+          }
         }
         if (d.newCount > 0) {
           markProfileBadge(d.profileName, d.newCount);
@@ -2164,11 +2167,16 @@ async function doSearch() {
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Search failed'); }
     if (profileSwitchGen !== myGen) { searchRunning = false; return; } // profile switched — discard
-    invoices = await res.json();
+    const searchResult = await res.json();
+    invoices = searchResult.invoices;
     for (let i = 0; i < invoices.length; i++) invoices[i]._idx = i;
     total = invoices.length;
     countLabel.textContent = total + ' faktur';
-    setStatus('Znaleziono ' + total + ' faktur.', total > 0 ? 'info' : 'idle');
+    if (searchResult.truncated) {
+      setStatus('\u26A0\uFE0F Wyniki obci\u0119te \u2014 KSeF zwraca maks. 10\u00A0000 faktur. Zaw\u0119\u017A zakres dat.', 'error');
+    } else {
+      setStatus('Znaleziono ' + total + ' faktur.', total > 0 ? 'info' : 'idle');
+    }
     buildCurrencyFilter();
     displayAll = false;
     currentPage = 0;
@@ -2228,14 +2236,18 @@ async function silentRefresh() {
     };
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
     if (!res.ok) { await fetchTokenStatus(); return; }
-    const fresh = await res.json();
+    const searchResult = await res.json();
     if (profileSwitchGen !== myGen) return; // profile switched while request was in-flight — discard
+    const fresh = searchResult.invoices;
     fresh.forEach((inv, i) => inv._idx = i);
-    console.info('[auto-refresh] Cyclic search complete —', fresh.length, 'invoices');
+    console.info('[auto-refresh] Cyclic search complete —', fresh.length, 'invoices', searchResult.truncated ? '(TRUNCATED)' : '');
     detectNewInvoices(fresh);
     invoices = fresh;
     total = invoices.length;
     countLabel.textContent = total + ' faktur';
+    if (searchResult.truncated) {
+      setStatus('\u26A0\uFE0F Wyniki obci\u0119te \u2014 KSeF zwraca maks. 10\u00A0000 faktur. Zaw\u0119\u017C zakres dat.', 'error');
+    }
     buildCurrencyFilter();
     renderTable();
     checkExisting();
