@@ -2028,6 +2028,11 @@ function connectSSE() {
       }
       case 'background_refresh':
         // d = { profileName, count, newCount }
+        if (d.profileName === currentSessionProfile) {
+          // Active profile: C# bg-refresh already updated _cachedInvoices in-memory.
+          // Reload the table so the screen matches the logs without a manual search.
+          loadCachedInvoices();
+        }
         if (d.newCount > 0) {
           markProfileBadge(d.profileName, d.newCount);
           notifyNewInvoices(d.profileName, d.newCount);
@@ -2473,6 +2478,8 @@ document.addEventListener('keydown', (e) => {
 
 async function showDetails(idx, event) {
   closeDetails();
+  const inv = invoices.find(i => i._idx === idx) || {};
+  const cacheKey = inv.ksefNumber || ('idx-' + idx);
 
   const overlay = document.createElement('div');
   overlay.className = 'detail-overlay';
@@ -2486,12 +2493,12 @@ async function showDetails(idx, event) {
   detailOverlay = overlay;
 
   try {
-    let data = detailCache[idx];
+    let data = detailCache[cacheKey];
     if (!data) {
       const res = await fetch('/invoice-details?idx=' + idx);
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed'); }
       data = await res.json();
-      detailCache[idx] = data;
+      detailCache[cacheKey] = data;
     }
     if (detailOverlay !== overlay) return; // closed while fetching
     renderDetails(pop, data);
@@ -2571,13 +2578,14 @@ async function showPreview(idx) {
   document.body.appendChild(overlay);
   detailOverlay = overlay;
 
+  const cacheKey = inv.ksefNumber || ('idx-' + idx);
   try {
-    let data = detailCache[idx];
+    let data = detailCache[cacheKey];
     if (!data) {
       const res = await fetch('/invoice-details?idx=' + idx);
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed'); }
       data = await res.json();
-      detailCache[idx] = data;
+      detailCache[cacheKey] = data;
     }
     if (detailOverlay !== overlay) return;
     renderPreview(pop, data, inv);
