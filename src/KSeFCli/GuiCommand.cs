@@ -1143,9 +1143,15 @@ public class GuiCommand : IWithConfigCommand
         int newCount = invoices.Count(i => !prevKeys.Contains(i.KsefNumber));
         Log.LogInformation($"[bg-refresh] Profile '{name}': {invoices.Count} invoices, {newCount} new");
 
-        // Do not send SSE for the active profile: JS silentRefresh() handles the UI update.
-        // Sending it would cause double browser notifications (SSE + silentRefresh detection).
-        if (_server != null && !isActiveProfile)
+        // For the active profile, update the in-memory cache so the browser sees fresh data
+        // via /cached-invoices without needing a separate /search round-trip.
+        if (isActiveProfile)
+        {
+            _cachedInvoices = invoices;
+            _lastSearchParams = sp;
+        }
+
+        if (_server != null)
         {
             await _server.SendEventAsync("background_refresh", new
             {
