@@ -87,6 +87,7 @@ public class GuiCommand : IWithConfigCommand
         string? SmtpUser = null,
         string? SmtpPassword = null,
         string? SmtpFrom = null,
+        bool? ShowIncomeChart = null,
         Dictionary<string, ProfilePrefs>? ProfilePrefs = null);
 
     private record ProfileEditorData(
@@ -391,6 +392,7 @@ public class GuiCommand : IWithConfigCommand
                 smtpUser = prefs.SmtpUser,
                 hasSmtpPassword = !string.IsNullOrEmpty(prefs.SmtpPassword),
                 smtpFrom = prefs.SmtpFrom,
+                showIncomeChart = prefs.ShowIncomeChart ?? true,
                 setupRequired = _setupRequired,
             });
         };
@@ -436,6 +438,7 @@ public class GuiCommand : IWithConfigCommand
                 SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr)
                     ? smfr.GetString()
                     : null,
+                ShowIncomeChart: root.TryGetProperty("showIncomeChart", out JsonElement sic) ? sic.GetBoolean() : true,
                 // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
                 // so this prevents webhook URLs from being wiped on every prefs save.
                 ProfilePrefs: existingPrefs.ProfilePrefs);
