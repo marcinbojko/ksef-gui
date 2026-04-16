@@ -1153,7 +1153,7 @@ body.dark .pref-label{color:#aaa}
         </div>
         <div class="pref-row">
           <span class="pref-label">Wykres przychodów netto</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="showIncomeChart" onchange="buildCurrencyFilter()"> Włącz</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="showIncomeChart" onchange="showIncomeChart=this.checked;buildCurrencyFilter()"> Włącz</label>
         </div>
       </div>
     </div>
@@ -1262,6 +1262,7 @@ let showIncomeChart = true;         // opt-out pref — read from /prefs on load
   $('fromDate').value = cur;
   $('toDate').value = cur;
   $('fromDate').max = cur;
+  $('toDate').min = cur;   // initialise min to match the default fromDate
   $('toDate').max = cur;
 
   // When Od changes: if Do is now before Od, advance Do to match Od
@@ -1290,7 +1291,10 @@ async function loadCachedInvoices() {
       if (data.params.subjectType) $('subjectType').value = data.params.subjectType;
       if (data.params.dateType) $('dateType').value = data.params.dateType;
       const fromISO = data.params.from;
-      if (fromISO && fromISO !== 'thismonth') $('fromDate').value = fromISO.substring(0, 7);
+      if (fromISO && fromISO !== 'thismonth') {
+        $('fromDate').value = fromISO.substring(0, 7);
+        $('toDate').min = fromISO.substring(0, 7); // keep min in sync — change event not fired on programmatic set
+      }
       if (data.params.to) $('toDate').value = data.params.to.substring(0, 7);
       lastSearchParams = {
         subjectType: data.params.subjectType,
@@ -1827,13 +1831,26 @@ function toggleDarkMode() {
 }
 
 const toastContainer = document.getElementById('toast-container');
-let _activeErrorToast = null; // keep ref to replace/clear persistent error toasts
+let _activeErrorToast = null;     // persistent — stays until dismissed or replaced
+let _activeTransientToast = null; // transient — reused so rapid updates don't stack
+let _activeTransientTimeout = null;
 function setStatus(text, cls) {
   if (!text) { return; }
-  // For errors: replace any existing error toast rather than stacking them
-  if (cls === 'error' && _activeErrorToast) {
-    _activeErrorToast.querySelector('.toast-msg').textContent = text;
-    return;
+  if (cls === 'error') {
+    // Replace existing error toast in-place rather than stacking
+    if (_activeErrorToast) {
+      _activeErrorToast.querySelector('.toast-msg').textContent = text;
+      return;
+    }
+  } else {
+    // Reuse the single transient toast — update text and reset the auto-dismiss timer
+    if (_activeTransientToast) {
+      _activeTransientToast.querySelector('.toast-msg').textContent = text;
+      _activeTransientToast.className = 'toast ' + cls;
+      clearTimeout(_activeTransientTimeout);
+      _activeTransientTimeout = setTimeout(() => dismissToast(_activeTransientToast), 3500);
+      return;
+    }
   }
   const t = document.createElement('div');
   t.className = 'toast ' + cls;
@@ -1844,13 +1861,18 @@ function setStatus(text, cls) {
   if (cls === 'error') {
     _activeErrorToast = t;
   } else {
-    // Auto-dismiss transient toasts after 3.5 s
-    setTimeout(() => dismissToast(t), 3500);
+    _activeTransientToast = t;
+    _activeTransientTimeout = setTimeout(() => dismissToast(t), 3500);
   }
 }
 function dismissToast(t) {
   if (!t || !t.parentNode) { return; }
   if (t === _activeErrorToast) { _activeErrorToast = null; }
+  if (t === _activeTransientToast) {
+    clearTimeout(_activeTransientTimeout);
+    _activeTransientTimeout = null;
+    _activeTransientToast = null;
+  }
   t.classList.add('hiding');
   setTimeout(() => { if (t.parentNode) { t.parentNode.removeChild(t); } }, 380);
 }
@@ -1873,6 +1895,12 @@ function buildCurrencyFilter() {
     if (inv.netAmount != null) { totals[c] = (totals[c] || 0) + inv.netAmount; }
   }
   const currencies = Object.keys(counts).sort();
+  // Drop any previously-selected currencies that no longer exist in this invoice set
+  // so getFilteredInvoices() doesn't silently return zero rows after a refresh.
+  if (activeCurrencies.size > 0) {
+    const validSet = new Set(currencies);
+    for (const c of activeCurrencies) { if (!validSet.has(c)) { activeCurrencies.delete(c); } }
+  }
   const hasChart = showIncomeChart && Object.keys(totals).length > 0;
   const hasChips = currencies.length > 1;
 

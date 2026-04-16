@@ -438,7 +438,7 @@ public class GuiCommand : IWithConfigCommand
                 SmtpFrom: root.TryGetProperty("smtpFrom", out JsonElement smfr)
                     ? smfr.GetString()
                     : null,
-                ShowIncomeChart: root.TryGetProperty("showIncomeChart", out JsonElement sic) ? sic.GetBoolean() : true,
+                ShowIncomeChart: !root.TryGetProperty("showIncomeChart", out JsonElement sic) || sic.GetBoolean(),
                 // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
                 // so this prevents webhook URLs from being wiped on every prefs save.
                 ProfilePrefs: existingPrefs.ProfilePrefs);
