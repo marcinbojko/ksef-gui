@@ -9,7 +9,7 @@
 #
 # Output: dist/ksefcli-<target>  (or dist/ksefcli-<target>.exe on Windows)
 # Requires: .NET SDK 10+
-
+#
 set -euo pipefail
 
 TARGETS=(linux-x64 linux-arm64 win-x64 osx-x64 osx-arm64)
