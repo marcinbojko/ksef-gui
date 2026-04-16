@@ -1,3 +1,56 @@
+# Financial and Tax Disclaimer / Zastrzeżenie dotyczące finansów i podatków
+
+## English
+
+This software is a technical tool for interfacing with the Polish National e-Invoice System
+(Krajowy System e-Faktur, KSeF). It is provided for informational and operational purposes only
+and does **not** constitute financial, accounting, tax, or legal advice.
+
+The authors, contributors, and maintainers of this software:
+
+- make no representations or warranties regarding the accuracy, completeness, or suitability of
+  any data retrieved from or submitted to the KSeF API;
+- accept **no liability** for any financial loss, tax penalty, interest charge, fine, audit
+  finding, or any other financial or legal consequence arising from the use, misuse, or inability
+  to use this software;
+- are **not responsible** for errors caused by incorrect configuration, network failures, API
+  changes made by the Polish Ministry of Finance, or any other circumstance beyond their control;
+- do **not guarantee** that invoices retrieved, displayed, or exported by this software are
+  complete, current, or compliant with applicable tax regulations.
+
+**You are solely responsible for ensuring compliance with all applicable tax, accounting, and
+legal obligations in your jurisdiction. Always verify critical financial data independently and
+consult a qualified accountant, tax advisor, or legal professional before making financial or
+tax-related decisions.**
+
+---
+
+## Polski
+
+Niniejsze oprogramowanie jest narzędziem technicznym służącym do komunikacji z Krajowym Systemem
+e-Faktur (KSeF). Jest udostępniane wyłącznie w celach informacyjnych i operacyjnych i **nie**
+stanowi porady finansowej, księgowej, podatkowej ani prawnej.
+
+Autorzy, współtwórcy i opiekunowie tego oprogramowania:
+
+- nie składają żadnych oświadczeń ani gwarancji co do dokładności, kompletności ani przydatności
+  danych pobieranych z API KSeF lub do niego przesyłanych;
+- **nie ponoszą żadnej odpowiedzialności** za jakiekolwiek straty finansowe, kary podatkowe,
+  odsetki, mandaty, wyniki kontroli podatkowej ani inne konsekwencje finansowe lub prawne
+  wynikające z używania, niewłaściwego użycia lub niemożności korzystania z tego oprogramowania;
+- **nie odpowiadają** za błędy spowodowane nieprawidłową konfiguracją, awariami sieci, zmianami
+  w API dokonanymi przez Ministerstwo Finansów ani żadnymi innymi okolicznościami pozostającymi
+  poza ich kontrolą;
+- **nie gwarantują**, że faktury pobrane, wyświetlone lub wyeksportowane przez to oprogramowanie
+  są kompletne, aktualne lub zgodne z obowiązującymi przepisami podatkowymi.
+
+**Wyłącznie użytkownik ponosi odpowiedzialność za zapewnienie zgodności z wszelkimi
+obowiązującymi przepisami podatkowymi, rachunkowymi i prawnymi. Przed podjęciem decyzji
+finansowych lub podatkowych należy zawsze samodzielnie zweryfikować kluczowe dane finansowe
+oraz skonsultować się z uprawnionym księgowym, doradcą podatkowym lub radcą prawnym.**
+
+---
+
 # GNU GENERAL PUBLIC LICENSE
 
 Version 3, 29 June 2007

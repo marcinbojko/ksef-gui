@@ -1224,12 +1224,12 @@ body.dark .pref-label{color:#aaa}
   </div>
 </div>
 <div class="modal-overlay" id="aboutModal" onclick="this.classList.remove('visible')">
-  <div class="modal" style="width:380px;max-height:70vh" onclick="event.stopPropagation()">
+  <div class="modal" style="width:520px;max-height:80vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9432; O programie</h2>
       <button class="modal-close" onclick="$('aboutModal').classList.remove('visible')">&times;</button>
     </div>
-    <div style="padding:1.2rem 1.4rem;font-size:.88rem;line-height:1.7">
+    <div style="padding:1.2rem 1.4rem;font-size:.88rem;line-height:1.7;overflow-y:auto;flex:1">
       <div id="aboutBody" style="color:#555">Wczytywanie...</div>
     </div>
   </div>
@@ -1582,6 +1582,24 @@ async function openAbout() {
     const gh = d.github
       ? '<a href="' + d.github + '" target="_blank" rel="noopener noreferrer" style="color:#1976d2;word-break:break-all">' + escHtml(d.github) + '</a>'
       : '—';
+    const disclaimer =
+      '<div style="margin-top:1.1rem;border-top:1px solid #e0e0e0;padding-top:.9rem">' +
+        '<p style="font-weight:700;margin:0 0 .4rem">⚠ Zastrzeżenie / Disclaimer</p>' +
+        '<p style="margin:0 0 .5rem;font-size:.8rem;color:#555">' +
+          'Oprogramowanie stanowi narzędzie techniczne do komunikacji z KSeF i nie&nbsp;stanowi porady ' +
+          'finansowej, księgowej ani&nbsp;podatkowej. Autorzy <strong>nie ponoszą odpowiedzialności</strong> za ' +
+          'straty finansowe, kary podatkowe, odsetki ani&nbsp;inne konsekwencje prawne wynikające z&nbsp;użytkowania ' +
+          'programu. Użytkownik samodzielnie odpowiada za&nbsp;zgodność z&nbsp;przepisami podatkowymi ' +
+          'i&nbsp;powinien konsultować się z&nbsp;uprawnionym księgowym lub doradcą podatkowym.' +
+        '</p>' +
+        '<p style="margin:0;font-size:.8rem;color:#555">' +
+          'This software is a technical tool for interfacing with KSeF and does not constitute ' +
+          'financial, accounting, or tax advice. The authors accept <strong>no liability</strong> for ' +
+          'financial losses, tax penalties, fines, or any other legal consequences arising from use of ' +
+          'this software. You are solely responsible for compliance with applicable tax regulations ' +
+          'and should consult a qualified accountant or tax advisor.' +
+        '</p>' +
+      '</div>';
     $('aboutBody').innerHTML =
       '<table style="border-collapse:collapse;width:100%;table-layout:fixed">' +
       '<col style="width:7rem"><col>' +
@@ -1593,7 +1611,7 @@ async function openAbout() {
         '<td style="padding:.25rem 0">' + escHtml(d.author || '—') + '</td></tr>' +
       '<tr><td style="padding:.25rem .5rem .25rem 0;color:#888;white-space:nowrap">GitHub</td>' +
         '<td style="padding:.25rem 0">' + gh + '</td></tr>' +
-      '</table>';
+      '</table>' + disclaimer;
   } catch(e) {
     $('aboutBody').innerHTML = '<span style="color:#c62828">Błąd: ' + escHtml(e.message) + '</span>';
   }
