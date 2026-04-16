@@ -954,6 +954,14 @@ public class GuiCommand : IWithConfigCommand
                         cancellationToken: ct).ConfigureAwait(false);
                     break;
                 }
+                catch (KsefApiException ex) when (
+                    (ex.ErrorResponse?.Exception?.ExceptionDetailList != null &&
+                     ex.ErrorResponse.Exception.ExceptionDetailList.Any(d => d.ExceptionCode == 21405)) ||
+                    ex.Message.Contains("21405", StringComparison.Ordinal))
+                {
+                    Log.LogWarning($"KSeF API rejected offset limit (21405) at offset {currentOffset}. Returning {all.Count} partial results.");
+                    return (all, true);
+                }
                 catch (KsefRateLimitException ex) when (attempt < maxRetries && !abortOn429)
                 {
                     TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
