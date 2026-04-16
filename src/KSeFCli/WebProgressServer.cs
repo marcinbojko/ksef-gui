@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 
 using KSeF.Client.Api.Services;
+using KSeF.Client.Core.Exceptions;
 
 namespace KSeFCli;
 
@@ -585,11 +586,12 @@ internal sealed class WebProgressServer : IDisposable
             Console.Error.WriteLine($"[HandleAction] Unhandled exception: {ex}");
             (int statusCode, string errorMessage) = ex switch
             {
-                ArgumentException or FormatException or JsonException => (400, "Bad Request"),
+                KsefApiException kex => ((int)kex.StatusCode, kex.Message),
+                ArgumentException or FormatException or JsonException => (400, ex.Message),
                 UnauthorizedAccessException => (401, "Unauthorized"),
-                FileNotFoundException or DirectoryNotFoundException => (404, "Not Found"),
-                HttpRequestException => (502, "Bad Gateway"),
-                _ => (500, "Internal Server Error"),
+                FileNotFoundException or DirectoryNotFoundException => (404, "Not found"),
+                HttpRequestException => (502, "Upstream service error"),
+                _ => (500, "Internal server error"),
             };
             string errJson = JsonSerializer.Serialize(new { error = errorMessage });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
@@ -2335,7 +2337,7 @@ async function doSearch() {
     knownInvoiceKsefNumbers = new Set(invoices.map(i => i.ksefNumber));
   } catch (err) {
     searchRunning = false;
-    setStatus('Blad: ' + err.message, 'error');
+    setStatus('Błąd wyszukiwania: ' + err.message, 'error');
     updateAuthButton();
   }
 }
@@ -2380,7 +2382,7 @@ async function silentRefresh() {
       source: 'auto'
     };
     const res = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
-    if (!res.ok) { await fetchTokenStatus(); return; }
+    if (!res.ok) { try { const e = await res.json(); setStatus('Auto-odświeżanie: błąd — ' + (e.error || 'HTTP ' + res.status), 'error'); } catch(_) { setStatus('Auto-odświeżanie: błąd HTTP ' + res.status, 'error'); } await fetchTokenStatus(); return; }
     const searchResult = await res.json();
     if (profileSwitchGen !== myGen) return; // profile switched while request was in-flight — discard
     const fresh = searchResult.invoices;
@@ -2399,8 +2401,10 @@ async function silentRefresh() {
     renderTable();
     checkExisting();
     await fetchTokenStatus();
-  } catch(e) { /* silent — do not disrupt user */ }
-  finally { refreshRunning = false; }
+  } catch(e) {
+    setStatus('Auto-odświeżanie: błąd sieci — ' + e.message, 'error');
+    await fetchTokenStatus();
+  } finally { refreshRunning = false; }
 }
 
 function detectNewInvoices(fresh) {
