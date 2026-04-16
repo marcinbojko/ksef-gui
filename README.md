@@ -34,6 +34,7 @@
 | 🌐 **GUI w przeglądarce** | Interfejs lokalny dostępny bez instalacji                                                 |
 | 📄 **Eksport PDF**        | Natywny renderer (QuestPDF) — bez Node.js, git ani zewnętrznych narzędzi                  |
 | 📊 **Podsumowanie CSV**   | Zestawienie faktur za wybrany miesiąc — gotowy plik CSV (UTF-8 BOM, separator `;`)        |
+| 📈 **Wykres przychodów**  | Poziomy wykres słupkowy sum netto per waluta — widoczny przy liście faktur (opt-out)      |
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
 | 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
@@ -185,6 +186,20 @@ Na końcu pliku dodawane są sumy brutto pogrupowane według waluty.
 **Nazwa pliku:** `summary-RRRR-MM.csv` w wybranym katalogu wyjściowym. Jeśli opcja **Oddziel katalogi po NIPie** jest włączona, plik trafia do podkatalogu z NIP-em — tak samo jak pobrane faktury.
 
 > Podsumowanie generowane jest z danych w lokalnym cache — nie wymaga dodatkowego połączenia z KSeF.
+
+### 📈 Wykres przychodów
+
+Po wyszukaniu faktur panel filtrowania walut wyświetla poziomy wykres słupkowy z sumami netto per waluta. Wykres jest widoczny automatycznie gdy lista faktur zawiera dane; można go wyłączyć w **Preferencjach** (checkbox **Pokaż wykres przychodów**).
+
+Kwoty wyświetlane są w formacie polskim (np. `1 234 567,89`). Słupki posortowane są malejąco według wartości.
+
+> Wykres generowany jest z danych w lokalnym cache — nie wymaga połączenia z KSeF.
+
+### ⚠️ Limit 10 000 wyników API KSeF
+
+KSeF API ogranicza wyniki zapytania do **10 000 faktur** w jednym zakresie dat. Jeśli ten limit zostanie osiągnięty, aplikacja wyświetla ostrzeżenie i zwraca dotychczas pobrane faktury — bez przerywania działania.
+
+Aby pobrać pełne dane w przypadku dużej liczby faktur, **zawęź zakres dat** (np. wyszukuj miesiąc po miesiącu).
 
 ### 🔔 Powiadomienia
 
@@ -389,6 +404,7 @@ Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowa
 | 🌐 **Browser GUI**         | Local interface, no installation needed                                                     |
 | 📄 **PDF export**          | Native renderer (QuestPDF) — no Node.js, git, or external tools                             |
 | 📊 **Monthly CSV summary** | One-click invoice summary for a selected month — Excel-ready CSV (UTF-8 BOM, `;` separator) |
+| 📈 **Income chart**        | Horizontal bar chart of net totals by currency, shown alongside the invoice list (opt-out)  |
 | 🔄 **Auto-refresh**        | Background search every N minutes; OS notifications for new invoices                        |
 | 🔔 **Notifications**       | OS desktop notifications, Slack / Teams webhooks, and e-mail (SMTP) per profile             |
 | 💾 **SQLite cache**        | Search results stored locally; profile switching without re-fetching                        |
@@ -540,6 +556,20 @@ A per-currency gross total is appended at the end of the file.
 **File name:** `summary-YYYY-MM.csv` in the configured output directory. If the **Separate directories by NIP** option is enabled, the file is placed in the NIP subdirectory — the same path as downloaded invoices.
 
 > The summary is generated from the local cache — no additional KSeF connection is required.
+
+### 📈 Income chart
+
+After searching, the currency filter panel displays a horizontal bar chart of net totals per currency. The chart appears automatically when invoice data is available; it can be disabled in **Preferences** (the **Show income chart** checkbox).
+
+Amounts are formatted using Polish locale conventions (e.g. `1 234 567,89`). Bars are sorted descending by value.
+
+> The chart is generated from the local cache — no KSeF connection required.
+
+### ⚠️ KSeF API 10,000-result limit
+
+The KSeF API limits query results to **10,000 invoices** per date range. If this limit is reached, the app displays a warning and returns the invoices fetched so far — without interrupting operation.
+
+To retrieve complete data when dealing with a large invoice volume, **narrow the date range** (e.g. search month by month).
 
 ### 🔔 Notifications
 
