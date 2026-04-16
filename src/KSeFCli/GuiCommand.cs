@@ -927,21 +927,22 @@ public class GuiCommand : IWithConfigCommand
     {
         List<InvoiceSummary> all = new();
         PagedInvoiceResponse pagedResponse;
-        int currentOffset = 0;
+        int currentPage = 0;        // page number (0-based) — pageOffset in the API is a page number, not a record offset
         const int pageSize = 100;
         const int maxRetries = 5;
         const int interPageDelayMs = 200;
-        const int maxApiOffset = 10_000;
+        const int maxApiOffset = 10_000;  // KSeF hard limit: pageOffset * pageSize must be < 10 000
 
         do
         {
-            if (currentOffset >= maxApiOffset)
+            // Guard: page 100 × pageSize 100 = 10 000 records — the API rejects this with 21405.
+            if (currentPage * pageSize >= maxApiOffset)
             {
-                Log.LogWarning($"Reached KSeF API offset limit ({maxApiOffset}). Returning {all.Count} partial results.");
+                Log.LogWarning($"Reached KSeF API offset limit (page {currentPage}, record {currentPage * pageSize}). Returning {all.Count} partial results.");
                 return (all, true);
             }
 
-            Log.LogInformation($"Fetching page with offset {currentOffset} and size {pageSize}");
+            Log.LogInformation($"Fetching page {currentPage} (records {currentPage * pageSize}–{currentPage * pageSize + pageSize - 1}) of size {pageSize}");
             for (int attempt = 0; ; attempt++)
             {
                 try
@@ -949,7 +950,7 @@ public class GuiCommand : IWithConfigCommand
                     pagedResponse = await client.QueryInvoiceMetadataAsync(
                         filters,
                         accessToken,
-                        pageOffset: currentOffset,
+                        pageOffset: currentPage,
                         pageSize: pageSize,
                         cancellationToken: ct).ConfigureAwait(false);
                     break;
@@ -959,7 +960,7 @@ public class GuiCommand : IWithConfigCommand
                      ex.ErrorResponse.Exception.ExceptionDetailList.Any(d => d.ExceptionCode == 21405)) ||
                     ex.Message.Contains("21405", StringComparison.Ordinal))
                 {
-                    Log.LogWarning($"KSeF API rejected offset limit (21405) at offset {currentOffset}. Returning {all.Count} partial results.");
+                    Log.LogWarning($"KSeF API rejected page offset (21405) at page {currentPage}. Returning {all.Count} partial results.");
                     return (all, true);
                 }
                 catch (KsefRateLimitException ex) when (attempt < maxRetries && !abortOn429)
@@ -977,11 +978,11 @@ public class GuiCommand : IWithConfigCommand
 
             if (pagedResponse.IsTruncated)
             {
-                Log.LogWarning($"KSeF API returned IsTruncated=true at offset {currentOffset}. Total results exceed 10 000. Returning {all.Count} partial results.");
+                Log.LogWarning($"KSeF API returned IsTruncated=true at page {currentPage}. Total results exceed 10 000. Returning {all.Count} partial results.");
                 return (all, true);
             }
 
-            currentOffset += pageSize;
+            currentPage++;  // advance to next page number
 
             if (pagedResponse.HasMore == true)
             {
