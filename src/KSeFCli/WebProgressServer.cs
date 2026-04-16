@@ -672,11 +672,16 @@ button:disabled{opacity:.4;cursor:default}
 .pref-row{display:flex;align-items:flex-start;gap:1rem;padding:.55rem 0;border-bottom:1px solid #f0f0f0}
 .pref-row:last-child{border-bottom:none}
 .pref-label{font-size:.82rem;font-weight:600;color:#555;min-width:175px;flex-shrink:0;padding-top:.15rem}
-.status{padding:.6rem .8rem;border-radius:8px;margin-bottom:.75rem;font-weight:500;font-size:.9rem}
-.status.info{background:#e3f2fd;color:#1565c0}
-.status.done{background:#e8f5e9;color:#2e7d32}
-.status.error{background:#fbe9e7;color:#c62828}
-.status.idle{background:#f5f5f5;color:#666}
+#toast-container{position:fixed;top:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;pointer-events:none;max-width:380px}
+.toast{display:flex;align-items:flex-start;gap:.6rem;padding:.65rem .9rem;border-radius:8px;font-size:.85rem;font-weight:500;box-shadow:0 3px 10px rgba(0,0,0,.15);pointer-events:all;opacity:1;transition:opacity .35s,transform .35s;transform:translateX(0)}
+.toast.hiding{opacity:0;transform:translateX(calc(100% + 1rem))}
+.toast.info{background:#e3f2fd;color:#1565c0;border-left:3px solid #1976d2}
+.toast.done{background:#e8f5e9;color:#2e7d32;border-left:3px solid #388e3c}
+.toast.error{background:#fbe9e7;color:#c62828;border-left:3px solid #d32f2f}
+.toast.idle{background:#f5f5f5;color:#555;border-left:3px solid #bdbdbd}
+.toast-msg{flex:1;line-height:1.35}
+.toast-close{background:none;border:none;cursor:pointer;color:inherit;opacity:.6;font-size:1rem;padding:0 0 0 .3rem;line-height:1;flex-shrink:0}
+.toast-close:hover{opacity:1}
 .progress-wrap{background:#ddd;border-radius:8px;overflow:hidden;height:22px;margin-bottom:.75rem;display:none}
 .progress-wrap.visible{display:block}
 .progress-bar{height:100%;background:#1976d2;transition:width .3s;width:0%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.75rem;font-weight:600;min-width:2rem}
@@ -705,9 +710,16 @@ tr.error td{background:#fbe9e7}
 .btn-outline:hover{background:#e3f2fd}
 .sel-count{font-size:.82rem;color:#555;margin-left:auto}
 td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
-.filter-bar{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem;padding:.5rem .8rem;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1);display:none}
+.filter-bar{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.6rem;padding:.5rem .8rem;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1);display:none}
 .filter-bar.visible{display:flex}
+.filter-chips-row{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .filter-label{font-size:.78rem;font-weight:600;color:#555;margin-right:.2rem}
+.filter-chart{display:flex;flex-direction:column;gap:5px;border-top:1px solid #eee;padding-top:.45rem;margin-top:.1rem}
+.hbar-row{display:flex;align-items:center;gap:.5rem}
+.hbar-cur{font-size:.88rem;font-weight:700;width:2.8rem;text-align:right;flex-shrink:0}
+.hbar-track{flex:1;background:#e8e8e8;border-radius:3px;height:10px;overflow:hidden}
+.hbar-fill{height:100%;border-radius:3px;transition:width .35s}
+.hbar-amt{font-size:.88rem;color:#555;white-space:nowrap;min-width:10rem;text-align:right;flex-shrink:0}
 .chip{display:inline-flex;align-items:center;padding:.25rem .7rem;border-radius:16px;font-size:.78rem;cursor:pointer;border:1.5px solid #bbb;background:#fff;color:#555;transition:all .15s;user-select:none}
 .chip:hover{border-color:#888}
 .chip.active{background:#1976d2;color:#fff;border-color:#1976d2}
@@ -784,10 +796,10 @@ body.dark .action-row{border-top-color:#333}
 body.dark .field label{color:#aaa}
 body.dark .field select,body.dark .field input{background:#2a2a2a;border-color:#444;color:#e0e0e0}
 body.dark .prefs-panel{border-left-color:#78909c}
-body.dark .status.info{background:#0d2137;color:#64b5f6}
-body.dark .status.done{background:#1b3a1b;color:#81c784}
-body.dark .status.error{background:#3e1212;color:#ef9a9a}
-body.dark .status.idle{background:#1e1e1e;color:#888}
+body.dark .toast.info{background:#0d2137;color:#64b5f6;border-left-color:#1976d2}
+body.dark .toast.done{background:#1b3a1b;color:#81c784;border-left-color:#388e3c}
+body.dark .toast.error{background:#3e1212;color:#ef9a9a;border-left-color:#d32f2f}
+body.dark .toast.idle{background:#1e1e1e;color:#888;border-left-color:#444}
 body.dark .progress-wrap{background:#333}
 body.dark table{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 body.dark th{background:#252525;border-bottom-color:#444;color:#aaa}
@@ -805,6 +817,9 @@ body.dark .btn-outline{background:#1e1e1e;color:#64b5f6;border-color:#64b5f6}
 body.dark .btn-outline:hover{background:#0d2137}
 body.dark .filter-bar{background:#1e1e1e;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 body.dark .filter-label{color:#aaa}
+body.dark .filter-chart{border-top-color:#2a2a2a}
+body.dark .hbar-track{background:#333}
+body.dark .hbar-amt{color:#aaa}
 body.dark .chip{background:#2a2a2a;border-color:#555;color:#ccc}
 body.dark .chip:hover{border-color:#888}
 body.dark .chip.active{background:#1565c0;color:#fff;border-color:#1565c0}
@@ -1136,6 +1151,10 @@ body.dark .pref-label{color:#aaa}
           <span class="pref-label">Format logów konsoli</span>
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog"> JSON</label>
         </div>
+        <div class="pref-row">
+          <span class="pref-label">Wykres przychodów netto</span>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="showIncomeChart" onchange="showIncomeChart=this.checked;buildCurrencyFilter()"> Włącz</label>
+        </div>
       </div>
     </div>
     <div class="modal-footer" style="justify-content:flex-end;gap:.5rem">
@@ -1150,9 +1169,9 @@ body.dark .pref-label{color:#aaa}
   <span>Brak konfiguracji. Skonfiguruj profil w edytorze, aby korzystac z aplikacji.</span>
   <button class="btn-config" onclick="openConfigEditor()" style="margin-left:auto;padding:.3rem .8rem;font-size:.82rem">&#9998; Otwórz edytor</button>
 </div>
-<div class="status idle" id="status">Wprowadz kryteria i kliknij "Szukaj".</div>
+<div id="toast-container"></div>
 <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="bar"></div></div>
-<div class="filter-bar" id="filterBar"><span class="filter-label">Waluta:</span></div>
+<div class="filter-bar" id="filterBar"></div>
 <div class="sel-toolbar" id="selToolbar">
   <button class="btn-sm btn-outline" onclick="selectAll()">Zaznacz wszystkie</button>
   <button class="btn-sm btn-outline" onclick="clearSelection()">Odznacz wszystkie</button>
@@ -1205,19 +1224,19 @@ body.dark .pref-label{color:#aaa}
   </div>
 </div>
 <div class="modal-overlay" id="aboutModal" onclick="this.classList.remove('visible')">
-  <div class="modal" style="width:380px;max-height:70vh" onclick="event.stopPropagation()">
+  <div class="modal" style="width:520px;max-height:80vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h2>&#9432; O programie</h2>
       <button class="modal-close" onclick="$('aboutModal').classList.remove('visible')">&times;</button>
     </div>
-    <div style="padding:1.2rem 1.4rem;font-size:.88rem;line-height:1.7">
+    <div style="padding:1.2rem 1.4rem;font-size:.88rem;line-height:1.7;overflow-y:auto;flex:1">
       <div id="aboutBody" style="color:#555">Wczytywanie...</div>
     </div>
   </div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
-const status = $('status'), bar = $('bar'), progressWrap = $('progressWrap'),
+const bar = $('bar'), progressWrap = $('progressWrap'),
       tableWrap = $('tableWrap'), downloadBar = $('downloadBar'), filterBar = $('filterBar'),
       selToolbar = $('selToolbar'), selCount = $('selCount'),
       btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'),
@@ -1234,16 +1253,26 @@ let refreshRunning = false; // guard against concurrent silentRefresh() calls
 const profileBadges = {}; // profileName → unread new-invoice count for dropdown badge
 let knownInvoiceKsefNumbers = null; // null = not yet baselined; Set after first search
 let lastSearchParams = null;        // params of last successful search; null = no search yet
+let showIncomeChart = true;         // opt-out pref — read from /prefs on load
 
-// Set default month to current month
+// Set default month to current month and keep Od/Do consistent
 (function initDates() {
   const now = new Date();
   const cur = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   $('fromDate').value = cur;
   $('toDate').value = cur;
-  const maxMonth = cur;
-  $('fromDate').max = maxMonth;
-  $('toDate').max = maxMonth;
+  $('fromDate').max = cur;
+  $('toDate').min = cur;   // initialise min to match the default fromDate
+  $('toDate').max = cur;
+
+  // When Od changes: if Do is now before Od, advance Do to match Od
+  $('fromDate').addEventListener('change', () => {
+    const from = $('fromDate').value;
+    $('toDate').min = from || '2026-02';
+    if ($('toDate').value && $('toDate').value < from) {
+      $('toDate').value = from;
+    }
+  });
 })();
 
 async function loadCachedInvoices() {
@@ -1262,7 +1291,10 @@ async function loadCachedInvoices() {
       if (data.params.subjectType) $('subjectType').value = data.params.subjectType;
       if (data.params.dateType) $('dateType').value = data.params.dateType;
       const fromISO = data.params.from;
-      if (fromISO && fromISO !== 'thismonth') $('fromDate').value = fromISO.substring(0, 7);
+      if (fromISO && fromISO !== 'thismonth') {
+        $('fromDate').value = fromISO.substring(0, 7);
+        $('toDate').min = fromISO.substring(0, 7); // keep min in sync — change event not fired on programmatic set
+      }
       if (data.params.to) $('toDate').value = data.params.to.substring(0, 7);
       lastSearchParams = {
         subjectType: data.params.subjectType,
@@ -1306,6 +1338,8 @@ async function loadPrefs() {
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
       if (p.displayLimit) $('displayLimit').value = p.displayLimit;
+      showIncomeChart = p.showIncomeChart !== false; // default true (opt-out)
+      $('showIncomeChart').checked = showIncomeChart;
       $('smtpHost').value = p.smtpHost || '';
       $('smtpPort').value = p.smtpPort || 587;
       $('smtpSecurity').value = p.smtpSecurity || 'StartTls';
@@ -1425,6 +1459,7 @@ async function savePrefs() {
     autoRefreshMinutes: parseInt($('autoRefreshMinutes').value) || 0,
     jsonConsoleLog: $('jsonConsoleLog').checked,
     displayLimit: parseInt($('displayLimit').value) || 50,
+    showIncomeChart: $('showIncomeChart').checked,
     smtpHost: $('smtpHost').value || null,
     smtpPort: parseInt($('smtpPort').value) || null,
     smtpSecurity: $('smtpSecurity').value || 'StartTls',
@@ -1444,6 +1479,8 @@ async function savePrefs() {
   // Only mutate runtime state after the save is confirmed on disk
   startAutoRefresh(effectiveMins);
   if (effectiveMins > 0) requestNotificationPermission();
+  showIncomeChart = prefs.showIncomeChart;
+  buildCurrencyFilter();
 }
 
 async function onProfileChange() {
@@ -1545,6 +1582,24 @@ async function openAbout() {
     const gh = d.github
       ? '<a href="' + d.github + '" target="_blank" rel="noopener noreferrer" style="color:#1976d2;word-break:break-all">' + escHtml(d.github) + '</a>'
       : '—';
+    const disclaimer =
+      '<div style="margin-top:1.1rem;border-top:1px solid #e0e0e0;padding-top:.9rem">' +
+        '<p style="font-weight:700;margin:0 0 .4rem">⚠ Zastrzeżenie / Disclaimer</p>' +
+        '<p style="margin:0 0 .5rem;font-size:.8rem;color:#555">' +
+          'Oprogramowanie stanowi narzędzie techniczne do komunikacji z KSeF i nie&nbsp;stanowi porady ' +
+          'finansowej, księgowej ani&nbsp;podatkowej. Autorzy <strong>nie ponoszą odpowiedzialności</strong> za ' +
+          'straty finansowe, kary podatkowe, odsetki ani&nbsp;inne konsekwencje prawne wynikające z&nbsp;użytkowania ' +
+          'programu. Użytkownik samodzielnie odpowiada za&nbsp;zgodność z&nbsp;przepisami podatkowymi ' +
+          'i&nbsp;powinien konsultować się z&nbsp;uprawnionym księgowym lub doradcą podatkowym.' +
+        '</p>' +
+        '<p style="margin:0;font-size:.8rem;color:#555">' +
+          'This software is a technical tool for interfacing with KSeF and does not constitute ' +
+          'financial, accounting, or tax advice. The authors accept <strong>no liability</strong> for ' +
+          'financial losses, tax penalties, fines, or any other legal consequences arising from use of ' +
+          'this software. You are solely responsible for compliance with applicable tax regulations ' +
+          'and should consult a qualified accountant or tax advisor.' +
+        '</p>' +
+      '</div>';
     $('aboutBody').innerHTML =
       '<table style="border-collapse:collapse;width:100%;table-layout:fixed">' +
       '<col style="width:7rem"><col>' +
@@ -1556,7 +1611,7 @@ async function openAbout() {
         '<td style="padding:.25rem 0">' + escHtml(d.author || '—') + '</td></tr>' +
       '<tr><td style="padding:.25rem .5rem .25rem 0;color:#888;white-space:nowrap">GitHub</td>' +
         '<td style="padding:.25rem 0">' + gh + '</td></tr>' +
-      '</table>';
+      '</table>' + disclaimer;
   } catch(e) {
     $('aboutBody').innerHTML = '<span style="color:#c62828">Błąd: ' + escHtml(e.message) + '</span>';
   }
@@ -1793,26 +1848,114 @@ function toggleDarkMode() {
   document.body.classList.toggle('dark', $('darkMode').checked);
 }
 
-function setStatus(text, cls) { status.textContent = text; status.className = 'status ' + cls; }
+const toastContainer = document.getElementById('toast-container');
+let _activeErrorToast = null;     // persistent — stays until dismissed or replaced
+let _activeTransientToast = null; // transient — reused so rapid updates don't stack
+let _activeTransientTimeout = null;
+function setStatus(text, cls) {
+  if (!text) { return; }
+  if (cls === 'error') {
+    // Replace existing error toast in-place rather than stacking
+    if (_activeErrorToast) {
+      _activeErrorToast.querySelector('.toast-msg').textContent = text;
+      return;
+    }
+  } else {
+    // Reuse the single transient toast — update text and reset the auto-dismiss timer
+    if (_activeTransientToast) {
+      _activeTransientToast.querySelector('.toast-msg').textContent = text;
+      _activeTransientToast.className = 'toast ' + cls;
+      clearTimeout(_activeTransientTimeout);
+      _activeTransientTimeout = setTimeout(() => dismissToast(_activeTransientToast), 3500);
+      return;
+    }
+  }
+  const t = document.createElement('div');
+  t.className = 'toast ' + cls;
+  t.innerHTML = '<span class="toast-msg"></span><button class="toast-close" aria-label="Zamknij">\xd7</button>';
+  t.querySelector('.toast-msg').textContent = text;
+  t.querySelector('.toast-close').addEventListener('click', () => dismissToast(t));
+  toastContainer.appendChild(t);
+  if (cls === 'error') {
+    _activeErrorToast = t;
+  } else {
+    _activeTransientToast = t;
+    _activeTransientTimeout = setTimeout(() => dismissToast(t), 3500);
+  }
+}
+function dismissToast(t) {
+  if (!t || !t.parentNode) { return; }
+  if (t === _activeErrorToast) { _activeErrorToast = null; }
+  if (t === _activeTransientToast) {
+    clearTimeout(_activeTransientTimeout);
+    _activeTransientTimeout = null;
+    _activeTransientToast = null;
+  }
+  t.classList.add('hiding');
+  setTimeout(() => { if (t.parentNode) { t.parentNode.removeChild(t); } }, 380);
+}
 
 function getFilteredInvoices() {
   if (activeCurrencies.size === 0) return invoices;
   return invoices.filter(i => activeCurrencies.has(i.currency || ''));
 }
 
+const CHART_PALETTE = ['#1976d2','#388e3c','#f57c00','#8e24aa','#0097a7','#e53935','#546e7a'];
+function fmtAmt(v) {
+  return v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function buildCurrencyFilter() {
-  const counts = {};
+  const counts = {}, totals = {};
   for (const inv of invoices) {
     const c = inv.currency || '(brak)';
     counts[c] = (counts[c] || 0) + 1;
+    if (inv.netAmount != null) { totals[c] = (totals[c] || 0) + inv.netAmount; }
   }
   const currencies = Object.keys(counts).sort();
-  if (currencies.length <= 1) { filterBar.classList.remove('visible'); return; }
-  let html = '<span class="filter-label">Waluta:</span>';
-  for (const c of currencies) {
-    const active = activeCurrencies.has(c) ? ' active' : '';
-    html += '<span class="chip' + active + '" onclick="toggleCurrency(\'' + c + '\')">' + c + '<span class="chip-count">(' + counts[c] + ')</span></span>';
+  // Drop any previously-selected currencies that no longer exist in this invoice set
+  // so getFilteredInvoices() doesn't silently return zero rows after a refresh.
+  if (activeCurrencies.size > 0) {
+    const validSet = new Set(currencies);
+    for (const c of activeCurrencies) { if (!validSet.has(c)) { activeCurrencies.delete(c); } }
   }
+  const hasChart = showIncomeChart && Object.keys(totals).length > 0;
+  const hasChips = currencies.length > 1;
+
+  if (!hasChips && !hasChart) { filterBar.classList.remove('visible'); return; }
+
+  let html = '';
+
+  // Currency chips row (only when multiple currencies)
+  if (hasChips) {
+    html += '<div class="filter-chips-row"><span class="filter-label">Waluta:</span>';
+    for (const c of currencies) {
+      const active = activeCurrencies.has(c) ? ' active' : '';
+      html += '<span class="chip' + active + '" onclick="toggleCurrency(\'' + c + '\')">' + c + '<span class="chip-count">(' + counts[c] + ')</span></span>';
+    }
+    html += '</div>';
+  }
+
+  // Horizontal bar chart (sorted largest first)
+  if (hasChart) {
+    const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    const maxVal = Math.max(...entries.map(([, v]) => v), 1);
+    // Assign consistent colors by alphabetical currency order so chips and bars share a color
+    const colorMap = {};
+    [...currencies].forEach((c, i) => { colorMap[c] = CHART_PALETTE[i % CHART_PALETTE.length]; });
+    let barsHtml = '';
+    entries.forEach(([cur, val]) => {
+      const pct = Math.max(2, Math.round((val / maxVal) * 100));
+      const color = colorMap[cur] || CHART_PALETTE[0];
+      barsHtml += '<div class="hbar-row">' +
+        '<span class="hbar-cur" style="color:' + color + '">' + cur + '</span>' +
+        '<div class="hbar-track"><div class="hbar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+        '<span class="hbar-amt">' + fmtAmt(val) + '</span>' +
+        '</div>';
+    });
+    html += '<div class="filter-chart">' + barsHtml + '</div>';
+  }
+
   filterBar.innerHTML = html;
   filterBar.classList.add('visible');
 }
