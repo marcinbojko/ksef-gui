@@ -931,14 +931,14 @@ public class GuiCommand : IWithConfigCommand
         const int pageSize = 100;
         const int maxRetries = 5;
         const int interPageDelayMs = 200;
-        const int maxApiOffset = 10_000;  // KSeF hard limit: pageOffset * pageSize must be < 10 000
+        const int maxRecordCount = 10_000;  // KSeF hard limit: total accessible records (page * pageSize) must be < 10 000
 
         do
         {
             // Guard: page 100 × pageSize 100 = 10 000 records — the API rejects this with 21405.
-            if (currentPage * pageSize >= maxApiOffset)
+            if (currentPage * pageSize >= maxRecordCount)
             {
-                Log.LogWarning($"Reached KSeF API offset limit (page {currentPage}, record {currentPage * pageSize}). Returning {all.Count} partial results.");
+                Log.LogWarning($"Reached KSeF API record count limit (page {currentPage}, record {currentPage * pageSize}). Returning {all.Count} partial results.");
                 return (all, true);
             }
 
