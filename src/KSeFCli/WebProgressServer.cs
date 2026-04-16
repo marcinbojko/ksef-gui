@@ -588,10 +588,10 @@ internal sealed class WebProgressServer : IDisposable
             {
                 KsefApiException kex => ((int)kex.StatusCode, kex.Message),
                 ArgumentException or FormatException or JsonException => (400, ex.Message),
-                UnauthorizedAccessException => (401, ex.Message),
-                FileNotFoundException or DirectoryNotFoundException => (404, ex.Message),
-                HttpRequestException => (502, ex.Message),
-                _ => (500, ex.Message),
+                UnauthorizedAccessException => (401, "Unauthorized"),
+                FileNotFoundException or DirectoryNotFoundException => (404, "Not found"),
+                HttpRequestException => (502, "Upstream service error"),
+                _ => (500, "Internal server error"),
             };
             string errJson = JsonSerializer.Serialize(new { error = errorMessage });
             byte[] body = Encoding.UTF8.GetBytes(errJson);
@@ -2401,8 +2401,10 @@ async function silentRefresh() {
     renderTable();
     checkExisting();
     await fetchTokenStatus();
-  } catch(e) { /* silent — do not disrupt user */ }
-  finally { refreshRunning = false; }
+  } catch(e) {
+    setStatus('Auto-odświeżanie: błąd sieci — ' + e.message, 'error');
+    await fetchTokenStatus();
+  } finally { refreshRunning = false; }
 }
 
 function detectNewInvoices(fresh) {

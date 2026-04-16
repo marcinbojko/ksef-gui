@@ -413,7 +413,8 @@ public class WebProgressServerTests : IDisposable
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         string json = await response.Content.ReadAsStringAsync();
         Assert.Contains("error", json);
-        Assert.Contains("Test error", json); // error message is included to aid user bug reports
+        Assert.Contains("Internal server error", json); // generic fallback — raw message is not exposed
+        Assert.DoesNotContain("Test error", json); // internal detail must not leak for non-KSeF exceptions
         cts.Cancel();
     }
 
