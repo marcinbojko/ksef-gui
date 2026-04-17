@@ -1916,9 +1916,9 @@ function buildCurrencyFilter() {
     const c = inv.currency || '(brak)';
     counts[c] = (counts[c] || 0) + 1;
     if (inv.netAmount != null) { netTotals[c] = (netTotals[c] || 0) + inv.netAmount; }
-    // grossAmount − netAmount = P_15 − Σ(P_13_*) = Σ(P_14_*W) = VAT in the invoice's own currency.
-    // vatAmount from the API is PLN-recalculated (Σ P_14_*) — wrong for foreign-currency bars.
-    if (inv.grossAmount != null && inv.netAmount != null && inv.grossAmount > inv.netAmount) {
+    // grossAmount − netAmount = Σ(P_14_*W) = VAT in the invoice's own currency (vatAmount from API is PLN only).
+    // No sign guard: correction invoices have negative gross/net, so gross−net is negative and correctly reduces vatTotals.
+    if (inv.grossAmount != null && inv.netAmount != null) {
       vatTotals[c] = (vatTotals[c] || 0) + (inv.grossAmount - inv.netAmount);
     }
   }
@@ -1949,21 +1949,22 @@ function buildCurrencyFilter() {
   // Horizontal bar chart (sorted largest first by net)
   if (hasChart) {
     const subj = $('subjectType') ? $('subjectType').value : '';
-    const chartTitle = subj === 'Subject1' ? 'Przychody netto + VAT' : 'Koszty netto + VAT';
+    const chartTitles = { Subject1: 'Przychody netto + VAT', Subject2: 'Koszty netto + VAT', Subject3: 'Kwoty netto + VAT', SubjectAuthorized: 'Kwoty netto + VAT' };
+    const chartTitle = chartTitles[subj] || 'Kwoty netto + VAT';
     const entries = Object.entries(netTotals).sort((a, b) => b[1] - a[1]);
     // Scale against the largest gross (net+vat) so the widest bar fills 100% without clipping its own VAT segment
     const maxVal = Math.max(...entries.map(([c, v]) => v + (vatTotals[c] || 0)), 1);
     // Assign consistent colors by alphabetical currency order so chips and bars share a color
     const colorMap = {};
-    [...currencies].forEach((c, i) => { colorMap[c] = CHART_PALETTE[i % CHART_PALETTE.length]; });
+    currencies.forEach((c, i) => { colorMap[c] = CHART_PALETTE[i % CHART_PALETTE.length]; });
     let barsHtml = '';
     entries.forEach(([cur, net]) => {
       const vat = vatTotals[cur] || 0;
       const gross = net + vat;
       const netPct = Math.max(2, (net / maxVal) * 100);
-      // Compute VAT % relative to the rendered net bar (not maxVal) so the vat/net pixel ratio is always correct.
-      // When netPct is clamped up by Math.max(2,...), vatPct scales up proportionally — otherwise tiny bars show wrong ratios.
-      const vatPct = net > 0 ? (vat / net) * netPct : 0;
+      // Compute VAT relative to rendered netPct (not maxVal) so the ratio is preserved when netPct is clamped.
+      // Clamp combined width to 100% as a defensive guard against extreme VAT ratios.
+      const vatPct = net > 0 ? Math.min((vat / net) * netPct, 100 - netPct) : 0;
       const color = colorMap[cur] || CHART_PALETTE[0];
       const tooltip = cur + ': netto ' + fmtAmt(net) + ', VAT ' + fmtAmt(vat) + ', brutto ' + fmtAmt(gross);
       const vatStyle = 'width:' + vatPct + '%;flex-shrink:0;background:' + VAT_COLOR;
