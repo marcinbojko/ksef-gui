@@ -719,9 +719,10 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 .filter-chart{display:flex;flex-direction:column;gap:5px;border-top:1px solid #eee;padding-top:.45rem;margin-top:.1rem}
 .hbar-row{display:flex;align-items:center;gap:.5rem}
 .hbar-cur{font-size:.88rem;font-weight:700;width:2.8rem;text-align:right;flex-shrink:0}
-.hbar-track{flex:1;background:#e8e8e8;border-radius:3px;height:10px;overflow:hidden}
-.hbar-fill{height:100%;border-radius:3px;transition:width .35s}
+.hbar-track{flex:1;background:#e8e8e8;border-radius:3px;height:10px;overflow:hidden;display:flex;align-items:stretch}
+.hbar-fill{transition:width .35s}
 .hbar-amt{font-size:.88rem;color:#555;white-space:nowrap;min-width:10rem;text-align:right;flex-shrink:0}
+.hbar-chart-title{font-size:.75rem;color:#888;font-weight:600;margin-bottom:.1rem}
 .chip{display:inline-flex;align-items:center;padding:.25rem .7rem;border-radius:16px;font-size:.78rem;cursor:pointer;border:1.5px solid #bbb;background:#fff;color:#555;transition:all .15s;user-select:none}
 .chip:hover{border-color:#888}
 .chip.active{background:#1976d2;color:#fff;border-color:#1976d2}
@@ -822,6 +823,7 @@ body.dark .filter-label{color:#aaa}
 body.dark .filter-chart{border-top-color:#2a2a2a}
 body.dark .hbar-track{background:#333}
 body.dark .hbar-amt{color:#aaa}
+body.dark .hbar-chart-title{color:#666}
 body.dark .chip{background:#2a2a2a;border-color:#555;color:#ccc}
 body.dark .chip:hover{border-color:#888}
 body.dark .chip.active{background:#1565c0;color:#fff;border-color:#1565c0}
@@ -1154,7 +1156,7 @@ body.dark .pref-label{color:#aaa}
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="jsonConsoleLog"> JSON</label>
         </div>
         <div class="pref-row">
-          <span class="pref-label">Wykres przychodów netto</span>
+          <span class="pref-label">Wykres netto + VAT</span>
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="showIncomeChart" onchange="showIncomeChart=this.checked;buildCurrencyFilter()"> Włącz</label>
         </div>
       </div>
@@ -1903,16 +1905,22 @@ function getFilteredInvoices() {
 }
 
 const CHART_PALETTE = ['#1976d2','#388e3c','#f57c00','#8e24aa','#0097a7','#e53935','#546e7a'];
+const VAT_COLOR = '#b0bec5'; // blue-grey 200 — intentionally outside CHART_PALETTE so it never matches a currency bar
 function fmtAmt(v) {
   return v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function buildCurrencyFilter() {
-  const counts = {}, totals = {};
+  const counts = {}, netTotals = {}, vatTotals = {};
   for (const inv of invoices) {
     const c = inv.currency || '(brak)';
     counts[c] = (counts[c] || 0) + 1;
-    if (inv.netAmount != null) { totals[c] = (totals[c] || 0) + inv.netAmount; }
+    if (inv.netAmount != null) { netTotals[c] = (netTotals[c] || 0) + inv.netAmount; }
+    // grossAmount − netAmount = P_15 − Σ(P_13_*) = Σ(P_14_*W) = VAT in the invoice's own currency.
+    // vatAmount from the API is PLN-recalculated (Σ P_14_*) — wrong for foreign-currency bars.
+    if (inv.grossAmount != null && inv.netAmount != null && inv.grossAmount > inv.netAmount) {
+      vatTotals[c] = (vatTotals[c] || 0) + (inv.grossAmount - inv.netAmount);
+    }
   }
   const currencies = Object.keys(counts).sort();
   // Drop any previously-selected currencies that no longer exist in this invoice set
@@ -1921,7 +1929,7 @@ function buildCurrencyFilter() {
     const validSet = new Set(currencies);
     for (const c of activeCurrencies) { if (!validSet.has(c)) { activeCurrencies.delete(c); } }
   }
-  const hasChart = showIncomeChart && Object.keys(totals).length > 0;
+  const hasChart = showIncomeChart && Object.keys(netTotals).length > 0;
   const hasChips = currencies.length > 1;
 
   if (!hasChips && !hasChart) { filterBar.classList.remove('visible'); return; }
@@ -1938,24 +1946,37 @@ function buildCurrencyFilter() {
     html += '</div>';
   }
 
-  // Horizontal bar chart (sorted largest first)
+  // Horizontal bar chart (sorted largest first by net)
   if (hasChart) {
-    const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-    const maxVal = Math.max(...entries.map(([, v]) => v), 1);
+    const subj = $('subjectType') ? $('subjectType').value : '';
+    const chartTitle = subj === 'Subject1' ? 'Przychody netto + VAT' : 'Koszty netto + VAT';
+    const entries = Object.entries(netTotals).sort((a, b) => b[1] - a[1]);
+    // Scale against the largest gross (net+vat) so the widest bar fills 100% without clipping its own VAT segment
+    const maxVal = Math.max(...entries.map(([c, v]) => v + (vatTotals[c] || 0)), 1);
     // Assign consistent colors by alphabetical currency order so chips and bars share a color
     const colorMap = {};
     [...currencies].forEach((c, i) => { colorMap[c] = CHART_PALETTE[i % CHART_PALETTE.length]; });
     let barsHtml = '';
-    entries.forEach(([cur, val]) => {
-      const pct = Math.max(2, Math.round((val / maxVal) * 100));
+    entries.forEach(([cur, net]) => {
+      const vat = vatTotals[cur] || 0;
+      const gross = net + vat;
+      const netPct = Math.max(2, (net / maxVal) * 100);
+      // Compute VAT % relative to the rendered net bar (not maxVal) so the vat/net pixel ratio is always correct.
+      // When netPct is clamped up by Math.max(2,...), vatPct scales up proportionally — otherwise tiny bars show wrong ratios.
+      const vatPct = net > 0 ? (vat / net) * netPct : 0;
       const color = colorMap[cur] || CHART_PALETTE[0];
-      barsHtml += '<div class="hbar-row">' +
+      const tooltip = cur + ': netto ' + fmtAmt(net) + ', VAT ' + fmtAmt(vat) + ', brutto ' + fmtAmt(gross);
+      const vatStyle = 'width:' + vatPct + '%;flex-shrink:0;background:' + VAT_COLOR;
+      barsHtml += '<div class="hbar-row" title="' + tooltip + '">' +
         '<span class="hbar-cur" style="color:' + color + '">' + cur + '</span>' +
-        '<div class="hbar-track"><div class="hbar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
-        '<span class="hbar-amt">' + fmtAmt(val) + '</span>' +
+        '<div class="hbar-track">' +
+          '<div class="hbar-fill" style="width:' + netPct + '%;flex-shrink:0;background:' + color + '"></div>' +
+          (vat > 0 ? '<div class="hbar-fill" style="' + vatStyle + '"></div>' : '') +
+        '</div>' +
+        '<span class="hbar-amt">' + fmtAmt(net) + ' + ' + fmtAmt(vat) + ' VAT</span>' +
         '</div>';
     });
-    html += '<div class="filter-chart">' + barsHtml + '</div>';
+    html += '<div class="filter-chart"><div class="hbar-chart-title">' + chartTitle + '</div>' + barsHtml + '</div>';
   }
 
   filterBar.innerHTML = html;
