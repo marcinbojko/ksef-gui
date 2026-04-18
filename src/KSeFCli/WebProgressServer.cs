@@ -9,7 +9,7 @@ using KSeF.Client.Core.Exceptions;
 namespace KSeFCli;
 
 internal record SearchParams(string SubjectType, string From, string? To, string DateType, string? Source = null);
-internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null);
+internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null, string DownloadDestination = "local");
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip);
 internal record DownloadSummaryParams(string OutputDir, string Month, bool SeparateByNip = false);
 
@@ -19,6 +19,9 @@ internal sealed class WebProgressServer : IDisposable
     private readonly List<StreamWriter> _sseClients = new();
     private readonly Lock _clientsLock = new();
     private CancellationTokenSource? _cts;
+    // PKCE state — single-user local app, one pending auth at a time
+    private static string? _pkceVerifier;
+    private static string? _pkceAppKey;
     public int Port { get; }
 
     /// <summary>Called when the user clicks "Szukaj". Receives search params, returns JSON-serializable result.</summary>
@@ -76,6 +79,18 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called to fetch notification delivery status per profile.
     /// Returns an object keyed by profile name with last-sent, pending-retry, and error state.</summary>
     public Func<Task<object>>? OnNotificationStatus { get; set; }
+
+    /// <summary>Called after successful Dropbox OAuth. Receives appKey, refreshToken, email — saves to prefs.</summary>
+    public Func<string, string, string, Task>? OnDropboxConnected { get; set; }
+
+    /// <summary>Called when the user disconnects Dropbox. Should clear stored refresh token.</summary>
+    public Func<Task>? OnDropboxDisconnect { get; set; }
+
+    /// <summary>Called to get current Dropbox connection status. Returns {connected, email, folder, appKey, destination}.</summary>
+    public Func<Task<object>>? OnDropboxStatus { get; set; }
+
+    /// <summary>Called to list Dropbox folders at the given path. Receives path, returns {current, parent, folders}.</summary>
+    public Func<string, CancellationToken, Task<object>>? OnDropboxFolders { get; set; }
 
     public bool Lan { get; }
 
@@ -541,6 +556,125 @@ internal sealed class WebProgressServer : IDisposable
                 ctx.Response.Close();
             }
         }
+        else if (path == "/dropbox-path" && method == "GET")
+        {
+            await HandleAction(ctx, ct, () =>
+            {
+                string? dropboxPath = DetectDropboxPath();
+                return Task.FromResult(JsonSerializer.Serialize(new { path = dropboxPath }));
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/dropbox-auth" && method == "GET")
+        {
+            await HandleAction(ctx, ct, () =>
+            {
+                string appKey = ctx.Request.QueryString["appKey"] ?? "";
+                if (string.IsNullOrWhiteSpace(appKey))
+                {
+                    throw new ArgumentException("Missing appKey");
+                }
+                string verifier = DropboxService.GenerateCodeVerifier();
+                string challenge = DropboxService.ComputeCodeChallenge(verifier);
+                _pkceVerifier = verifier;
+                _pkceAppKey = appKey;
+                string redirectUri = $"http://localhost:{Port}/dropbox-callback";
+                string authUrl = "https://www.dropbox.com/oauth2/authorize"
+                    + $"?client_id={Uri.EscapeDataString(appKey)}"
+                    + "&response_type=code"
+                    + $"&code_challenge={Uri.EscapeDataString(challenge)}"
+                    + "&code_challenge_method=S256"
+                    + $"&redirect_uri={Uri.EscapeDataString(redirectUri)}"
+                    + "&token_access_type=offline"
+                    + "&scope=files.content.write+files.content.read+account_info.read";
+                return Task.FromResult(JsonSerializer.Serialize(new { authUrl }));
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/dropbox-callback" && method == "GET")
+        {
+            string code = ctx.Request.QueryString["code"] ?? "";
+            string callbackHtml;
+            if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(_pkceVerifier) || string.IsNullOrEmpty(_pkceAppKey))
+            {
+                callbackHtml = "<html><body><p>Błąd autoryzacji — brak kodu lub stanu PKCE.</p><script>window.close();</script></body></html>";
+            }
+            else
+            {
+                string savedVerifier = _pkceVerifier!;
+                string savedAppKey = _pkceAppKey!;
+                _pkceVerifier = null;
+                _pkceAppKey = null;
+                try
+                {
+                    string redirectUri = $"http://localhost:{Port}/dropbox-callback";
+                    (string accessToken, string refreshToken) = await DropboxService.ExchangeCodeAsync(savedAppKey, code, savedVerifier, redirectUri, ct).ConfigureAwait(false);
+                    string email = await DropboxService.GetAccountEmailAsync(accessToken, ct).ConfigureAwait(false);
+                    if (OnDropboxConnected != null)
+                    {
+                        await OnDropboxConnected(savedAppKey, refreshToken, email).ConfigureAwait(false);
+                    }
+                    string emailJson = JsonSerializer.Serialize(email);
+                    string postMsg = $"if(window.opener){{window.opener.postMessage({{dropboxConnected:true,email:{emailJson}}},location.origin);}}setTimeout(()=>window.close(),1500);";
+                    callbackHtml = $"""
+                        <html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:2rem;text-align:center">
+                        <h2>&#9989; Po&#322;&#261;czono z Dropbox</h2>
+                        <p>Zalogowano jako: <strong>{System.Net.WebUtility.HtmlEncode(email)}</strong></p>
+                        <p>Mo&#380;esz zamkn&#261;&#263; to okno.</p>
+                        <script>{postMsg}</script>
+                        </body></html>
+                        """;
+                }
+                catch (Exception ex)
+                {
+                    callbackHtml = $"""
+                        <html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:2rem;text-align:center">
+                        <h2>&#10060; Błąd autoryzacji</h2>
+                        <p>{System.Net.WebUtility.HtmlEncode(ex.Message)}</p>
+                        <script>setTimeout(()=>window.close(),3000);</script>
+                        </body></html>
+                        """;
+                }
+            }
+            byte[] cbBody = Encoding.UTF8.GetBytes(callbackHtml);
+            ctx.Response.ContentType = "text/html; charset=utf-8";
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentLength64 = cbBody.Length;
+            await ctx.Response.OutputStream.WriteAsync(cbBody, ct).ConfigureAwait(false);
+            ctx.Response.Close();
+        }
+        else if (path == "/dropbox-status" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                object data = OnDropboxStatus != null
+                    ? await OnDropboxStatus().ConfigureAwait(false)
+                    : new { connected = false };
+                return JsonSerializer.Serialize(data);
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/dropbox-folders" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                if (OnDropboxFolders == null)
+                {
+                    throw new InvalidOperationException("Dropbox not configured");
+                }
+                string folderPath = ctx.Request.QueryString["path"] ?? "";
+                object result = await OnDropboxFolders(folderPath, ct).ConfigureAwait(false);
+                return JsonSerializer.Serialize(result);
+            }).ConfigureAwait(false);
+        }
+        else if (path == "/dropbox-disconnect" && method == "POST")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                if (OnDropboxDisconnect != null)
+                {
+                    await OnDropboxDisconnect().ConfigureAwait(false);
+                }
+                return JsonSerializer.Serialize(new { ok = true });
+            }).ConfigureAwait(false);
+        }
         else if (path == "/quit" && method == "POST")
         {
             ctx.Response.StatusCode = 200;
@@ -604,6 +738,37 @@ internal sealed class WebProgressServer : IDisposable
         {
             ctx.Response.Close();
         }
+    }
+
+    private static string? DetectDropboxPath()
+    {
+        string infoPath = OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dropbox", "info.json")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dropbox", "info.json");
+
+        if (!File.Exists(infoPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(infoPath));
+            foreach (string key in new[] { "personal", "business" })
+            {
+                if (doc.RootElement.TryGetProperty(key, out JsonElement account)
+                    && account.TryGetProperty("path", out JsonElement pathEl))
+                {
+                    string? p = pathEl.GetString();
+                    if (!string.IsNullOrEmpty(p) && Directory.Exists(p))
+                    {
+                        return p;
+                    }
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static int GetRandomPort()
@@ -1012,6 +1177,7 @@ body.dark .pref-label{color:#aaa}
       <button class="prefs-tab" id="ptab-network" onclick="switchPrefsTab('network',this)">Sieć</button>
       <button class="prefs-tab" id="ptab-email" onclick="switchPrefsTab('email',this)">Email</button>
       <button class="prefs-tab" id="ptab-appearance" onclick="switchPrefsTab('appearance',this)">Wygląd</button>
+      <button class="prefs-tab" id="ptab-dropbox" onclick="switchPrefsTab('dropbox',this)">Dropbox</button>
     </div>
     <div style="overflow-y:auto;flex:1;padding:.6rem 1rem">
       <div class="prefs-pane" id="pane-general">
@@ -1020,6 +1186,15 @@ body.dark .pref-label{color:#aaa}
           <div style="display:flex;gap:.3rem">
             <input id="outputDir" type="text" value="." placeholder="/tmp/faktury" style="width:220px">
             <button class="btn-primary" type="button" onclick="openBrowser()" style="padding:.4rem .6rem;font-size:.8rem" title="Wybierz folder">&#128193;</button>
+            <button class="btn-primary" type="button" onclick="setDropboxPath()" style="padding:.4rem .6rem;font-size:.8rem" title="Ustaw folder Dropbox">&#9729;</button>
+          </div>
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Cel zapisu</span>
+          <div style="display:flex;flex-direction:column;gap:.25rem;font-size:.85rem">
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="radio" name="downloadDest" value="local" id="destLocal" checked> Tylko lokalny katalog</label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="radio" name="downloadDest" value="dropbox" id="destDropbox"> Tylko Dropbox</label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="radio" name="downloadDest" value="both" id="destBoth"> Oba (lokalny + Dropbox)</label>
           </div>
         </div>
         <div class="pref-row">
@@ -1160,6 +1335,35 @@ body.dark .pref-label{color:#aaa}
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="showIncomeChart" onchange="showIncomeChart=this.checked;buildCurrencyFilter()"> Włącz</label>
         </div>
       </div>
+      <div class="prefs-pane" id="pane-dropbox" style="display:none">
+        <div class="pref-row">
+          <span class="pref-label">App Key</span>
+          <input type="text" id="dropboxAppKey" placeholder="xxxxxxxxxxxx" autocomplete="off" style="flex:1;font-family:monospace">
+        </div>
+        <div class="pref-row">
+          <span class="pref-label">Status</span>
+          <span id="dropboxStatus" style="font-size:.85rem;color:#666">Nie połączono</span>
+        </div>
+        <div class="pref-row" id="dropboxConnectRow">
+          <span class="pref-label"></span>
+          <button class="btn-primary" onclick="connectDropbox()" style="font-size:.85rem">&#9729; Połącz z Dropbox</button>
+        </div>
+        <div class="pref-row" id="dropboxFolderRow" style="display:none">
+          <span class="pref-label">Folder Dropbox</span>
+          <div style="display:flex;gap:.3rem;flex:1">
+            <input type="text" id="dropboxFolder" placeholder="/Faktury" style="flex:1;font-family:monospace">
+            <button class="btn-primary" type="button" onclick="openDropboxBrowser()" style="padding:.4rem .6rem;font-size:.8rem" title="Przeglądaj foldery Dropbox">&#128193;</button>
+          </div>
+        </div>
+        <div class="pref-row" id="dropboxDisconnectRow" style="display:none">
+          <span class="pref-label"></span>
+          <button class="btn-danger btn-sm" onclick="disconnectDropbox()" style="font-size:.82rem">&#10006; Rozłącz Dropbox</button>
+        </div>
+        <div style="margin-top:.5rem;font-size:.75rem;color:#888;line-height:1.5;padding:0 .25rem">
+          Aby uzyskać App Key: utwórz aplikację na <strong>dropbox.com/developers/apps</strong> (Scoped access → Full Dropbox).<br>
+          W sekcji <em>OAuth 2 → Redirect URIs</em> dodaj: <code>http://localhost</code>
+        </div>
+      </div>
     </div>
     <div class="modal-footer" style="justify-content:flex-end;gap:.5rem">
       <span id="prefsSaveErr" style="display:none;font-size:.8rem;color:#c62828"></span>
@@ -1205,6 +1409,22 @@ body.dark .pref-label{color:#aaa}
         <button class="btn-primary" onclick="createDir()" style="padding:.3rem .6rem;font-size:.8rem">Utworz</button>
       </div>
       <button class="btn-success" onclick="selectCurrentDir()" style="padding:.4rem 1rem">Wybierz</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="dropboxFolderModal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>&#9729; Wybierz folder Dropbox</h2>
+      <button class="modal-close" onclick="closeDropboxBrowser()">&times;</button>
+    </div>
+    <div class="modal-path">
+      <span class="modal-path-text" id="dbxBrowsePath">/</span>
+    </div>
+    <div class="dir-list" id="dbxDirList"></div>
+    <div class="modal-footer">
+      <div></div>
+      <button class="btn-success" onclick="selectDropboxFolder()" style="padding:.4rem 1rem">Wybierz ten folder</button>
     </div>
   </div>
 </div>
@@ -1352,6 +1572,12 @@ async function loadPrefs() {
       $('smtpPassword').placeholder = p.hasSmtpPassword ? '(hasło jest ustawione)' : '';
       $('smtpFrom').value = p.smtpFrom || '';
       startAutoRefresh(parseInt($('autoRefreshMinutes').value) || 0);
+      if (p.dropboxAppKey) $('dropboxAppKey').value = p.dropboxAppKey;
+      if (p.dropboxFolder) $('dropboxFolder').value = p.dropboxFolder;
+      if (p.downloadDestination) {
+        const r = document.querySelector('input[name="downloadDest"][value="' + p.downloadDestination + '"]');
+        if (r) r.checked = true;
+      }
       if (p.profileName) $('profileNameLabel').textContent = '(' + p.profileName + ')';
       // Populate profile dropdown
       if (p.allProfiles) {
@@ -1372,7 +1598,7 @@ async function loadPrefs() {
     }
   } catch {}
 }
-loadPrefs().then(() => loadCachedInvoices());
+loadPrefs().then(() => { loadCachedInvoices(); refreshDropboxStatus(); });
 
 function applySetupMode(required) {
   const banner = $('setupBanner');
@@ -1469,7 +1695,10 @@ async function savePrefs() {
     smtpSecurity: $('smtpSecurity').value || 'StartTls',
     smtpUser: $('smtpUser').value || null,
     smtpPassword: $('smtpPassword').value || null,
-    smtpFrom: $('smtpFrom').value || null
+    smtpFrom: $('smtpFrom').value || null,
+    dropboxAppKey: $('dropboxAppKey').value || null,
+    dropboxFolder: $('dropboxFolder').value || null,
+    downloadDestination: (document.querySelector('input[name="downloadDest"]:checked') || {value:'local'}).value
   };
   const mins = prefs.autoRefreshMinutes;
   // Values 1–9 are below the server minimum of 10 — normalise to 0 (disabled) so the timer,
@@ -2552,7 +2781,8 @@ async function doDownload(selOnly) {
       exportJson: $('expJson').checked,
       exportPdf: $('expPdf').checked,
       separateByNip: $('separateByNip').checked,
-      pdfColorScheme: $('pdfColorScheme').value
+      pdfColorScheme: $('pdfColorScheme').value,
+      downloadDestination: (document.querySelector('input[name="downloadDest"]:checked') || {value:'local'}).value
     };
     const res = await fetch('/download', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Download failed'); }
@@ -2588,6 +2818,121 @@ async function openBrowser() {
   const startPath = $('outputDir').value || '.';
   await browseTo(startPath);
   folderModal.classList.add('visible');
+}
+
+async function setDropboxPath() {
+  try {
+    const res = await fetch('/dropbox-path');
+    const data = await res.json();
+    if (data.path) {
+      $('outputDir').value = data.path;
+      savePrefs();
+    } else {
+      alert('Nie znaleziono folderu Dropbox.\nSprawdź, czy aplikacja Dropbox jest zainstalowana.');
+    }
+  } catch(e) {
+    alert('Błąd wykrywania Dropbox: ' + e.message);
+  }
+}
+
+// --- Dropbox OAuth & folder browser ---
+let dbxBrowseCurrent = '';
+const dropboxFolderModal = $('dropboxFolderModal');
+
+async function connectDropbox() {
+  const appKey = $('dropboxAppKey').value.trim();
+  if (!appKey) { alert('Podaj App Key Dropbox.'); return; }
+  try {
+    await savePrefs();
+    const res = await fetch('/dropbox-auth?appKey=' + encodeURIComponent(appKey));
+    const data = await res.json();
+    if (!data.authUrl) throw new Error('Brak authUrl');
+    const popup = window.open(data.authUrl, 'dropbox_auth', 'width=620,height=720,menubar=no,toolbar=no,location=no');
+    if (!popup) alert('Nie można otworzyć okna autoryzacji. Zezwól na wyskakujące okna dla tej strony.');
+  } catch(e) {
+    alert('Błąd uruchamiania autoryzacji Dropbox: ' + e.message);
+  }
+}
+
+window.addEventListener('message', async (e) => {
+  if (e.data && e.data.dropboxConnected) await refreshDropboxStatus();
+});
+
+async function refreshDropboxStatus() {
+  try {
+    const res = await fetch('/dropbox-status');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.connected) {
+      $('dropboxStatus').textContent = 'Połączono jako: ' + (data.email || '?');
+      $('dropboxStatus').style.color = '#2e7d32';
+      $('dropboxFolderRow').style.display = '';
+      $('dropboxDisconnectRow').style.display = '';
+      $('dropboxConnectRow').style.display = 'none';
+      if (data.folder) $('dropboxFolder').value = data.folder;
+      if (data.appKey) $('dropboxAppKey').value = data.appKey;
+    } else {
+      $('dropboxStatus').textContent = 'Nie połączono';
+      $('dropboxStatus').style.color = '#666';
+      $('dropboxFolderRow').style.display = 'none';
+      $('dropboxDisconnectRow').style.display = 'none';
+      $('dropboxConnectRow').style.display = '';
+      if (data.appKey) $('dropboxAppKey').value = data.appKey;
+    }
+    if (data.destination) {
+      const r = document.querySelector('input[name="downloadDest"][value="' + data.destination + '"]');
+      if (r) r.checked = true;
+    }
+  } catch(e) { /* silent */ }
+}
+
+async function disconnectDropbox() {
+  if (!confirm('Czy na pewno chcesz rozłączyć Dropbox?')) return;
+  await fetch('/dropbox-disconnect', { method: 'POST' });
+  await refreshDropboxStatus();
+}
+
+async function openDropboxBrowser() {
+  await browseDropboxTo('');
+  dropboxFolderModal.classList.add('visible');
+}
+
+function closeDropboxBrowser() {
+  dropboxFolderModal.classList.remove('visible');
+}
+
+dropboxFolderModal.addEventListener('click', (e) => { if (e.target === dropboxFolderModal) closeDropboxBrowser(); });
+
+async function browseDropboxTo(path) {
+  $('dbxDirList').innerHTML = '<div style="padding:1rem;text-align:center;color:#999">Ładowanie...</div>';
+  try {
+    const res = await fetch('/dropbox-folders?path=' + encodeURIComponent(path));
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Błąd'); }
+    const data = await res.json();
+    dbxBrowseCurrent = data.current ?? path;
+    $('dbxBrowsePath').textContent = dbxBrowseCurrent || '/';
+    let html = '';
+    if (data.parent !== null && data.parent !== undefined) {
+      html += '<div class="dir-item parent" onclick="browseDropboxTo(\'' + escAttr(data.parent) + '\')"><span class="dir-icon">&#128194;</span> ..</div>';
+    }
+    if (data.folders && data.folders.length > 0) {
+      for (const f of data.folders) {
+        const name = f.split('/').filter(Boolean).pop() || f;
+        html += '<div class="dir-item" onclick="browseDropboxTo(\'' + escAttr(f) + '\')"><span class="dir-icon">&#128193;</span> ' + escHtml(name) + '</div>';
+      }
+    } else {
+      html = '<div style="padding:1rem;color:#999;text-align:center">Brak podfolderów.</div>';
+    }
+    $('dbxDirList').innerHTML = html;
+  } catch(e) {
+    $('dbxDirList').innerHTML = '<div style="padding:1rem;color:#c62828">Błąd: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function selectDropboxFolder() {
+  $('dropboxFolder').value = dbxBrowseCurrent || '/';
+  closeDropboxBrowser();
+  savePrefs();
 }
 
 function closeBrowser() {

@@ -88,7 +88,12 @@ public class GuiCommand : IWithConfigCommand
         string? SmtpPassword = null,
         string? SmtpFrom = null,
         bool? ShowIncomeChart = null,
-        Dictionary<string, ProfilePrefs>? ProfilePrefs = null);
+        Dictionary<string, ProfilePrefs>? ProfilePrefs = null,
+        string? DropboxAppKey = null,
+        string? DropboxRefreshToken = null,
+        string? DropboxEmail = null,
+        string? DropboxFolder = null,
+        string? DownloadDestination = null);
 
     private record ProfileEditorData(
         string Name,
@@ -393,6 +398,11 @@ public class GuiCommand : IWithConfigCommand
                 hasSmtpPassword = !string.IsNullOrEmpty(prefs.SmtpPassword),
                 smtpFrom = prefs.SmtpFrom,
                 showIncomeChart = prefs.ShowIncomeChart ?? true,
+                dropboxAppKey = prefs.DropboxAppKey,
+                dropboxConnected = !string.IsNullOrEmpty(prefs.DropboxRefreshToken),
+                dropboxEmail = prefs.DropboxEmail,
+                dropboxFolder = prefs.DropboxFolder,
+                downloadDestination = prefs.DownloadDestination ?? "local",
                 setupRequired = _setupRequired,
             });
         };
@@ -441,7 +451,16 @@ public class GuiCommand : IWithConfigCommand
                 ShowIncomeChart: !root.TryGetProperty("showIncomeChart", out JsonElement sic) || sic.GetBoolean(),
                 // Preserve ProfilePrefs from disk — JS savePrefs() never sends it,
                 // so this prevents webhook URLs from being wiped on every prefs save.
-                ProfilePrefs: existingPrefs.ProfilePrefs);
+                ProfilePrefs: existingPrefs.ProfilePrefs,
+                DropboxAppKey: root.TryGetProperty("dropboxAppKey", out JsonElement dak) && dak.ValueKind != JsonValueKind.Null
+                    ? dak.GetString() : existingPrefs.DropboxAppKey,
+                // RefreshToken and Email are never sent by JS — preserve from disk
+                DropboxRefreshToken: existingPrefs.DropboxRefreshToken,
+                DropboxEmail: existingPrefs.DropboxEmail,
+                DropboxFolder: root.TryGetProperty("dropboxFolder", out JsonElement df) && df.ValueKind != JsonValueKind.Null
+                    ? df.GetString() : existingPrefs.DropboxFolder,
+                DownloadDestination: root.TryGetProperty("downloadDestination", out JsonElement dd) && dd.ValueKind != JsonValueKind.Null
+                    ? dd.GetString() : existingPrefs.DownloadDestination);
             SavePrefs(newPrefs);
             Log.LogInformation($"[prefs] Saved — autoRefresh={newPrefs.AutoRefreshMinutes ?? 0}min, darkMode={newPrefs.DarkMode ?? false}, smtpHost={newPrefs.SmtpHost ?? "(none)"}");
             Log.ConfigureLogging(Verbose, Quiet, jsonConsoleLog);
@@ -839,6 +858,50 @@ public class GuiCommand : IWithConfigCommand
                 };
             }
             return Task.FromResult<object>(result);
+        };
+
+        server.OnDropboxConnected = (appKey, refreshToken, email) =>
+        {
+            GuiPrefs existing = LoadPrefs();
+            SavePrefs(existing with { DropboxAppKey = appKey, DropboxRefreshToken = refreshToken, DropboxEmail = email });
+            Log.LogInformation($"[dropbox] Connected as {email}");
+            return Task.CompletedTask;
+        };
+
+        server.OnDropboxDisconnect = () =>
+        {
+            GuiPrefs existing = LoadPrefs();
+            SavePrefs(existing with { DropboxRefreshToken = null, DropboxEmail = null });
+            Log.LogInformation("[dropbox] Disconnected");
+            return Task.CompletedTask;
+        };
+
+        server.OnDropboxStatus = () =>
+        {
+            GuiPrefs prefs = LoadPrefs();
+            bool connected = !string.IsNullOrEmpty(prefs.DropboxRefreshToken);
+            return Task.FromResult<object>(new
+            {
+                connected,
+                email = prefs.DropboxEmail,
+                folder = prefs.DropboxFolder,
+                appKey = prefs.DropboxAppKey,
+                destination = prefs.DownloadDestination ?? "local",
+            });
+        };
+
+        server.OnDropboxFolders = async (folderPath, ct) =>
+        {
+            GuiPrefs prefs = LoadPrefs();
+            if (string.IsNullOrEmpty(prefs.DropboxRefreshToken) || string.IsNullOrEmpty(prefs.DropboxAppKey))
+            {
+                throw new InvalidOperationException("Dropbox nie jest połączony");
+            }
+            string token = await DropboxService.RefreshAccessTokenAsync(prefs.DropboxAppKey, prefs.DropboxRefreshToken, ct).ConfigureAwait(false);
+            List<string> folders = await DropboxService.ListFoldersAsync(token, folderPath, ct).ConfigureAwait(false);
+            string? parent = string.IsNullOrEmpty(folderPath) ? null
+                : folderPath.Contains('/') ? folderPath[..folderPath.LastIndexOf('/')] : "";
+            return (object)new { current = folderPath, parent, folders };
         };
 
         server.Start(cancellationToken);
@@ -1945,15 +2008,42 @@ public class GuiCommand : IWithConfigCommand
         }
 
         string outputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
-        if (dlParams.SeparateByNip)
+        string profileNip = Config().Nip;
+        if (dlParams.SeparateByNip && !string.IsNullOrEmpty(profileNip))
         {
-            string nip = Config().Nip;
-            if (!string.IsNullOrEmpty(nip))
+            outputDir = Path.Combine(outputDir, profileNip);
+        }
+
+        string downloadDest = dlParams.DownloadDestination is "dropbox" or "both" ? dlParams.DownloadDestination : "local";
+        bool useLocal = downloadDest is "local" or "both";
+        bool useDropbox = downloadDest is "dropbox" or "both";
+        string? dbxAccessToken = null;
+        string dbxBasePath = "/Faktury";
+
+        if (useDropbox)
+        {
+            GuiPrefs dbxPrefs = LoadPrefs();
+            if (!string.IsNullOrEmpty(dbxPrefs.DropboxAppKey) && !string.IsNullOrEmpty(dbxPrefs.DropboxRefreshToken))
             {
-                outputDir = Path.Combine(outputDir, nip);
+                dbxBasePath = string.IsNullOrWhiteSpace(dbxPrefs.DropboxFolder) ? "/Faktury" : dbxPrefs.DropboxFolder;
+                if (dlParams.SeparateByNip && !string.IsNullOrEmpty(profileNip))
+                {
+                    dbxBasePath = $"{dbxBasePath}/{profileNip}";
+                }
+                dbxAccessToken = await DropboxService.RefreshAccessTokenAsync(dbxPrefs.DropboxAppKey, dbxPrefs.DropboxRefreshToken, ct).ConfigureAwait(false);
+                await DropboxService.EnsureFolderAsync(dbxAccessToken, dbxBasePath, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                Log.LogWarning("[dropbox] Upload requested but Dropbox is not configured — skipping Dropbox upload.");
+                useDropbox = false;
             }
         }
-        Directory.CreateDirectory(outputDir);
+
+        if (useLocal)
+        {
+            Directory.CreateDirectory(outputDir);
+        }
 
         // Use a temp workdir for intermediate files; only copy desired output to final dir
         string workDir = Path.Combine(Path.GetTempPath(), $"ksefcli-{Guid.NewGuid():N}");
@@ -2007,20 +2097,35 @@ public class GuiCommand : IWithConfigCommand
                     }
                 }
 
-                // Write desired formats to workdir, then move to output
+                // Write desired formats to workdir, then move to output and/or upload to Dropbox
                 if (dlParams.ExportJson)
                 {
-                    string tmpJson = Path.Combine(workDir, $"{fileName}.json");
-                    await File.WriteAllTextAsync(tmpJson, JsonSerializer.Serialize(inv), ct).ConfigureAwait(false);
-                    File.Move(tmpJson, Path.Combine(outputDir, $"{fileName}.json"), overwrite: true);
+                    string jsonContent = JsonSerializer.Serialize(inv);
+                    if (useLocal)
+                    {
+                        string tmpJson = Path.Combine(workDir, $"{fileName}.json");
+                        await File.WriteAllTextAsync(tmpJson, jsonContent, ct).ConfigureAwait(false);
+                        File.Move(tmpJson, Path.Combine(outputDir, $"{fileName}.json"), overwrite: true);
+                    }
+                    if (useDropbox && dbxAccessToken != null)
+                    {
+                        await DropboxService.UploadFileAsync(dbxAccessToken, $"{dbxBasePath}/{fileName}.json", System.Text.Encoding.UTF8.GetBytes(jsonContent), ct).ConfigureAwait(false);
+                    }
                 }
 
                 if (dlParams.ExportXml)
                 {
-                    string tmpXml = Path.Combine(workDir, $"{fileName}.xml");
-                    await File.WriteAllTextAsync(tmpXml, invoiceXml, ct).ConfigureAwait(false);
-                    File.Move(tmpXml, Path.Combine(outputDir, $"{fileName}.xml"), overwrite: true);
-                    Log.LogInformation($"Saved invoice {inv.KsefNumber} to {Path.Combine(outputDir, $"{fileName}.xml")}");
+                    if (useLocal)
+                    {
+                        string tmpXml = Path.Combine(workDir, $"{fileName}.xml");
+                        await File.WriteAllTextAsync(tmpXml, invoiceXml, ct).ConfigureAwait(false);
+                        File.Move(tmpXml, Path.Combine(outputDir, $"{fileName}.xml"), overwrite: true);
+                        Log.LogInformation($"Saved invoice {inv.KsefNumber} to {Path.Combine(outputDir, $"{fileName}.xml")}");
+                    }
+                    if (useDropbox && dbxAccessToken != null)
+                    {
+                        await DropboxService.UploadFileAsync(dbxAccessToken, $"{dbxBasePath}/{fileName}.xml", System.Text.Encoding.UTF8.GetBytes(invoiceXml), ct).ConfigureAwait(false);
+                    }
                 }
 
                 if (wantPdf)
@@ -2034,11 +2139,18 @@ public class GuiCommand : IWithConfigCommand
                     string? ksefVerificationUrl = TryBuildVerificationUrl(pdfLinkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
 
                     byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl).ConfigureAwait(false);
-                    string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
-                    await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
                     string finalPdf = Path.Combine(outputDir, $"{fileName}.pdf");
-                    File.Move(tmpPdf, finalPdf, overwrite: true);
-                    Log.LogInformation($"Saved PDF for {inv.KsefNumber} to {finalPdf}");
+                    if (useLocal)
+                    {
+                        string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
+                        await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
+                        File.Move(tmpPdf, finalPdf, overwrite: true);
+                        Log.LogInformation($"Saved PDF for {inv.KsefNumber} to {finalPdf}");
+                    }
+                    if (useDropbox && dbxAccessToken != null)
+                    {
+                        await DropboxService.UploadFileAsync(dbxAccessToken, $"{dbxBasePath}/{fileName}.pdf", pdfContent, ct).ConfigureAwait(false);
+                    }
 
                     if (_server != null)
                     {
@@ -2059,15 +2171,31 @@ public class GuiCommand : IWithConfigCommand
             try { Directory.Delete(workDir, recursive: true); } catch { }
         }
 
-        SavePrefs(LoadPrefs() with
+        if (useLocal)
         {
-            OutputDir = dlParams.SeparateByNip ? Path.GetDirectoryName(outputDir) ?? outputDir : outputDir,
-            ExportXml = dlParams.ExportXml,
-            ExportJson = dlParams.ExportJson,
-            ExportPdf = wantPdf,
-            CustomFilenames = dlParams.CustomFilenames,
-            SeparateByNip = dlParams.SeparateByNip,
-        });
+            SavePrefs(LoadPrefs() with
+            {
+                OutputDir = dlParams.SeparateByNip ? Path.GetDirectoryName(outputDir) ?? outputDir : outputDir,
+                ExportXml = dlParams.ExportXml,
+                ExportJson = dlParams.ExportJson,
+                ExportPdf = wantPdf,
+                CustomFilenames = dlParams.CustomFilenames,
+                SeparateByNip = dlParams.SeparateByNip,
+                DownloadDestination = downloadDest,
+            });
+        }
+        else
+        {
+            SavePrefs(LoadPrefs() with
+            {
+                ExportXml = dlParams.ExportXml,
+                ExportJson = dlParams.ExportJson,
+                ExportPdf = wantPdf,
+                CustomFilenames = dlParams.CustomFilenames,
+                SeparateByNip = dlParams.SeparateByNip,
+                DownloadDestination = downloadDest,
+            });
+        }
 
         if (_server != null)
         {
