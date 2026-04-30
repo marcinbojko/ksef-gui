@@ -189,9 +189,10 @@ public class PdfGenerationTests
         Assert.Equal("3900.00", vat23.Net);
         Assert.Equal("897.00", vat23.Vat);
 
-        VatRow vatZw = Assert.Single(d.VatRows, v => v.Rate == "zw");
-        Assert.Equal("1000.00", vatZw.Net);
-        Assert.Null(vatZw.Vat);
+        // P_13_7 = "niepodlegający opodatkowaniu" (np), not "zwolniony" (zw=P_13_6)
+        VatRow vatNp = Assert.Single(d.VatRows, v => v.Rate == "np");
+        Assert.Equal("1000.00", vatNp.Net);
+        Assert.Null(vatNp.Vat);
     }
 
     [Fact]
