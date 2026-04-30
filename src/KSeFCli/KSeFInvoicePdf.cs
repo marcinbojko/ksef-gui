@@ -103,6 +103,27 @@ internal static class KSeFInvoiceParser
     // 10 MB ceiling — a real KSeF invoice is well under 1 MB
     private const long MaxXmlBytes = 10 * 1024 * 1024;
 
+    // Mapping from P_13_* suffix to human-readable VAT rate label per FA(3) schema.
+    // Unknown suffixes fall back to the raw suffix string.
+    private static readonly IReadOnlyDictionary<string, string> VatSuffixLabels =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["1"] = "23%",
+            ["2"] = "8%",
+            ["3"] = "5%",
+            ["4"] = "3%",
+            ["5"] = "0% (WDT)",
+            ["6"] = "zw",
+            ["7"] = "np",
+            ["8"] = "oo",
+            ["9"] = "0% (eksport)",
+            ["10"] = "0% (transport)",
+            ["11"] = "zw (inne)",
+        };
+
+    private static string SuffixToRate(string suffix) =>
+        VatSuffixLabels.TryGetValue(suffix, out string? label) ? label : suffix;
+
     public static InvoiceData Parse(string xmlContent)
     {
         if (System.Text.Encoding.UTF8.GetByteCount(xmlContent) > MaxXmlBytes)
@@ -144,18 +165,6 @@ internal static class KSeFInvoiceParser
         XElement? podmiotUpowazniony = El(root, "PodmiotUpowazniony");
         XElement fa = El(root, "Fa")!;
 
-        static string SuffixToRate(string suffix) => suffix switch
-        {
-            "1" => "23%",
-            "2" => "8%",
-            "3" => "5%",
-            "4" => "3%",
-            "5" => "0% (WDT)",
-            "6" => "zw",
-            "7" => "np",
-            "8" => "oo",
-            _ => suffix
-        };
         XElement? stopka = El(root, "Stopka");
 
         InvoiceParty ParseParty(XElement p)
@@ -1526,8 +1535,9 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 {
                     string bg = i % 2 == 0 ? Colors.White : LightGray;
                     decimal net = Parse(row.Net);
-                    decimal vat = Parse(row.Vat);
-                    string brutto = (net + vat).ToString("F2", CultureInfo.InvariantCulture);
+                    // Use VatW (invoice currency) when present; fall back to Vat (PLN) for PLN invoices
+                    decimal vatForBrutto = !string.IsNullOrEmpty(row.VatW) ? Parse(row.VatW) : Parse(row.Vat);
+                    string brutto = (net + vatForBrutto).ToString("F2", CultureInfo.InvariantCulture);
 
                     table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(BorderGray).Padding(3)
                         .Text((i + 1).ToString()).FontSize(7.5f).AlignCenter();

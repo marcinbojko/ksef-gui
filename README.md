@@ -35,7 +35,7 @@
 | 🌐 **GUI w przeglądarce** | Interfejs lokalny dostępny bez instalacji                                                 |
 | 📄 **Eksport PDF**        | Natywny renderer (QuestPDF) — bez Node.js, git ani zewnętrznych narzędzi                  |
 | 📊 **Podsumowanie CSV**   | Zestawienie faktur za wybrany miesiąc — gotowy plik CSV (UTF-8 BOM, separator `;`)        |
-| 📈 **Wykres przychodów**  | Słupki netto + VAT per waluta z przeliczeniem na PLN (kursy NBP) — widoczny przy liście faktur (opt-out) |
+| 📈 **Wykres przychodów / kosztów** | Słupki netto + VAT per waluta z przeliczeniem na PLN (kursy NBP) — widoczny przy liście faktur (opt-out) |
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
 | 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |

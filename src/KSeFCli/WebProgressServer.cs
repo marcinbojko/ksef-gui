@@ -1986,27 +1986,31 @@ function buildCurrencyFilter() {
     const chartTitles = { Subject1: 'Przychody netto + VAT', Subject2: 'Koszty netto + VAT', Subject3: 'Kwoty netto + VAT', SubjectAuthorized: 'Kwoty netto + VAT' };
     const chartTitle = chartTitles[subj] || 'Kwoty netto + VAT';
     const entries = Object.entries(netTotals).sort((a, b) => b[1] - a[1]);
-    // Scale against the largest gross (net+vat) so the widest bar fills 100% without clipping its own VAT segment
-    const maxVal = Math.max(...entries.map(([c, v]) => v + (vatTotals[c] || 0)), 1);
+    // Scale against the largest absolute gross so positive and negative bars share the same axis
+    const maxVal = Math.max(...entries.map(([c, v]) => Math.abs(v + (vatTotals[c] || 0))), 1);
     // Assign consistent colors by alphabetical currency order so chips and bars share a color
     const colorMap = {};
     currencies.forEach((c, i) => { colorMap[c] = CHART_PALETTE[i % CHART_PALETTE.length]; });
+    const MIN_PCT = 2; // minimum bar width so tiny values are always visible
     let barsHtml = '';
     entries.forEach(([cur, net]) => {
       const vat = vatTotals[cur] || 0;
       const gross = net + vat;
-      const netPct = Math.max(2, (net / maxVal) * 100);
-      // Compute VAT relative to rendered netPct (not maxVal) so the ratio is preserved when netPct is clamped.
-      // Clamp combined width to 100% as a defensive guard against extreme VAT ratios.
-      const vatPct = net > 0 ? Math.min((vat / net) * netPct, 100 - netPct) : 0;
+      const isNeg = net < 0;
+      const absNet = Math.abs(net);
+      const absVat = Math.abs(vat);
       const color = colorMap[cur] || CHART_PALETTE[0];
+      // Negative net (corrections dominate): render muted bar, label shows sign
+      const barColor = isNeg ? '#ef9a9a' : color; // red-200 for net-negative currencies
+      const netPct = Math.max(MIN_PCT, (absNet / maxVal) * 100);
+      const vatPct = absNet > 0 ? Math.min((absVat / absNet) * netPct, 100 - netPct) : 0;
       const tooltip = cur + ': netto ' + fmtAmt(net) + ', VAT ' + fmtAmt(vat) + ', brutto ' + fmtAmt(gross);
       const vatStyle = 'width:' + vatPct + '%;flex-shrink:0;background:' + VAT_COLOR;
       barsHtml += '<div class="hbar-row" title="' + tooltip + '">' +
         '<span class="hbar-cur" style="color:' + color + '">' + cur + '</span>' +
         '<div class="hbar-track">' +
-          '<div class="hbar-fill" style="width:' + netPct + '%;flex-shrink:0;background:' + color + '"></div>' +
-          (vat > 0 ? '<div class="hbar-fill" style="' + vatStyle + '"></div>' : '') +
+          '<div class="hbar-fill" style="width:' + netPct + '%;flex-shrink:0;background:' + barColor + '"></div>' +
+          (absVat > 0 ? '<div class="hbar-fill" style="' + vatStyle + '"></div>' : '') +
         '</div>' +
         '<span class="hbar-amt">' + fmtAmt(net) + ' + ' + fmtAmt(vat) + ' VAT' +
           (cur !== 'PLN' && fxRates[cur] ? ' <span class="hbar-pln">≈ netto: ' + fmtAmt(net * fxRates[cur]) + ' / brutto: ' + fmtAmt(gross * fxRates[cur]) + ' PLN</span>' : '') +
