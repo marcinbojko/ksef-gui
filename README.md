@@ -203,8 +203,8 @@ Tytuł wykresu zmienia się w zależności od wybranego typu podmiotu: _Przychod
 - Tooltip (po najechaniu myszą): wartości netto, VAT i brutto danej waluty
 
 **Filtry walut** (chipsy nad wykresem):
-- Kliknięcie chipu filtruje listę faktur do wybranej waluty
-- Każdy chip wyświetla aktualny kurs NBP (np. `EUR (12) 4,2567`)
+- Kliknięcie chipu przełącza widoczność danej waluty w liście faktur (multi-select — można zaznaczyć kilka walut jednocześnie)
+- Każdy chip wyświetla liczbę faktur i aktualny kurs NBP (np. `EUR (12) 4,2567`)
 
 **Podsumowanie w PLN** (pod słupkami):
 - Reaguje na aktywny filtr walut — sumuje tylko zaznaczone waluty (lub wszystkie gdy brak filtru)
@@ -370,44 +370,56 @@ PDF generowany **natywnie** przez [QuestPDF](https://www.questpdf.com/) — czys
 
 Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowanym pliku PDF:
 
-| Sekcja XML                            | Pole / element                       | Opis                                                      |
-| ------------------------------------- | ------------------------------------ | --------------------------------------------------------- |
-| `Naglowek`                            | `SystemInfo`                         | System wystawiający fakturę (stopka)                      |
-| _(metadane API)_                      | `KsefReferenceNumber`                | **Numer KSeF** (przekazywany z odpowiedzi API, nie z XML) |
-| `Fa`                                  | `P_2`                                | Numer faktury wystawcy                                    |
-| `Fa`                                  | `RodzajFaktury`                      | Typ dokumentu (VAT, KOR, ZAL…)                            |
-| `Fa`                                  | `P_1`                                | Data wystawienia                                          |
-| `Fa`                                  | `P_1M`                               | Miejsce wystawienia                                       |
-| `Fa`                                  | `P_6`                                | Data dostawy / wykonania usługi                           |
-| `Fa` › `OkresFa`                      | `P_6_Od`, `P_6_Do`                   | Okres rozliczeniowy (od–do)                               |
-| `Fa` › `FakturaZaliczkowa`            | `NrFaZaliczkowej`                    | Numer faktury zaliczkowej                                 |
-| `Fa`                                  | `KodWaluty`                          | Waluta                                                    |
-| `Podmiot1`                            | `NIP`, `Nazwa`                       | NIP i nazwa sprzedawcy                                    |
-| `Podmiot1` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Adres sprzedawcy                                          |
-| `Podmiot1` › `DaneKontaktowe`         | `Email`, `Telefon`                   | Kontakt sprzedawcy                                        |
-| `Podmiot1`                            | `NrEORI`                             | Numer EORI sprzedawcy                                     |
-| `Podmiot2`                            | `NIP`, `Nazwa`                       | NIP i nazwa nabywcy                                       |
-| `Podmiot2` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Adres nabywcy                                             |
-| `Podmiot2` › `DaneKontaktowe`         | `Email`                              | E-mail nabywcy                                            |
-| `Podmiot2`                            | `NrKlienta`                          | Numer klienta nabywcy                                     |
-| `Fa` › `FaWiersz`                     | `NrWierszaFa`                        | Numer wiersza                                             |
-| `Fa` › `FaWiersz`                     | `P_7`                                | Nazwa towaru/usługi                                       |
-| `Fa` › `FaWiersz`                     | `P_8A`, `P_8B`                       | Jednostka miary, ilość                                    |
-| `Fa` › `FaWiersz`                     | `P_9A`, `P_9B`                       | Cena jednostkowa netto / brutto                           |
-| `Fa` › `FaWiersz`                     | `P_11`, `P_11A`                      | Wartość netto / brutto                                    |
-| `Fa` › `FaWiersz`                     | `P_12`                               | Stawka VAT                                                |
-| `Fa` › `FaWiersz`                     | `KursWaluty`                         | Kurs waluty pozycji                                       |
-| `Fa` › `FaWiersz`                     | `Indeks`, `GTIN`, `UU_ID`            | Identyfikatory towaru                                     |
-| `Fa`                                  | `P_13_x`, `P_14_x`                   | Sumy netto i VAT per stawka                               |
-| `Fa`                                  | `P_15`                               | Kwota należności ogółem (brutto)                          |
-| `Fa` › `Platnosc`                     | `FormaPlatnosci`                     | Forma płatności                                           |
-| `Fa` › `Platnosc`                     | `TerminPlatnosci` / `Termin`         | Termin(y) płatności                                       |
-| `Fa` › `Platnosc`                     | `Zaplacono`, `DataZaplaty`           | Znacznik zapłacono / data                                 |
-| `Fa` › `Platnosc` › `RachunekBankowy` | `NrRB`, `NazwaBanku`, `OpisRachunku` | Dane rachunku bankowego                                   |
-| `Fa`                                  | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Dodatkowe opisy (pary klucz–wartość)                      |
-| `Fa`                                  | `WZ`                                 | Numer dokumentu WZ                                        |
-| `Fa` › `WarunkiTransakcji` › `Umowy`  | `NrUmowy`                            | Numery umów                                               |
-| `Stopka` › `Rejestry`                 | `PelnaNazwa`, `REGON`, `BDO`         | Dane rejestrowe sprzedawcy                                |
+| Sekcja XML                                    | Pole / element                       | Opis                                                                    |
+| --------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------- |
+| `Naglowek`                                    | `SystemInfo`                         | System wystawiający fakturę (stopka)                                    |
+| _(metadane API)_                              | `KsefReferenceNumber`                | **Numer KSeF** (przekazywany z odpowiedzi API, nie z XML)               |
+| `Fa`                                          | `P_2`                                | Numer faktury wystawcy                                                  |
+| `Fa`                                          | `RodzajFaktury`                      | Typ dokumentu (VAT, KOR, ZAL…)                                          |
+| `Fa`                                          | `P_1`                                | Data wystawienia                                                        |
+| `Fa`                                          | `P_1M`                               | Miejsce wystawienia                                                     |
+| `Fa`                                          | `P_6`                                | Data dostawy / wykonania usługi                                         |
+| `Fa` › `OkresFa`                              | `P_6_Od`, `P_6_Do`                   | Okres rozliczeniowy (od–do)                                             |
+| `Fa` › `FakturaZaliczkowa`                    | `NrFaZaliczkowej`                    | Numer faktury zaliczkowej                                               |
+| `Fa`                                          | `KodWaluty`                          | Waluta                                                                  |
+| `Fa`                                          | `P_KursWaluty`                       | Kurs waluty całej faktury                                               |
+| `Fa`                                          | `P_16`                               | Odwrotne obciążenie — wyróżnione w sekcji Szczegóły                     |
+| `Fa`                                          | `P_17`                               | Samofakturowanie — wyróżnione w sekcji Szczegóły                        |
+| `Fa`                                          | `P_18`                               | Procedura marży (wartość kodu) — wyróżnione w sekcji Szczegóły          |
+| `Fa`                                          | `P_18A`                              | Nowe środki transportu — wyróżnione w sekcji Szczegóły                  |
+| `Fa`                                          | `P_19`, `P_19A`, `P_19B`             | Podstawa zwolnienia z VAT (przepis, opis)                               |
+| `Podmiot1`                                    | `NIP`, `Nazwa`                       | NIP i nazwa sprzedawcy                                                  |
+| `Podmiot1` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Adres sprzedawcy                                                        |
+| `Podmiot1` › `DaneKontaktowe`                 | `Email`, `Telefon`                   | Kontakt sprzedawcy                                                      |
+| `Podmiot1`                                    | `NrEORI`                             | Numer EORI sprzedawcy                                                   |
+| `Podmiot2`                                    | `NIP`, `Nazwa`                       | NIP i nazwa nabywcy                                                     |
+| `Podmiot2` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Adres nabywcy                                                           |
+| `Podmiot2` › `DaneKontaktowe`                 | `Email`                              | E-mail nabywcy                                                          |
+| `Podmiot2`                                    | `NrKlienta`                          | Numer klienta nabywcy                                                   |
+| `Podmiot3`                                    | `NIP`, `Nazwa`, `Adres`, kontakt     | Podmiot trzeci (opcjonalny) — osobny blok pod Sprzedawcą/Nabywcą        |
+| `PodmiotUpowazniony`                          | `NIP`, `Nazwa`, `Adres`, kontakt     | Podmiot upoważniony (opcjonalny) — osobny blok                          |
+| `Fa` › `FaWiersz`                             | `NrWierszaFa`                        | Numer wiersza                                                           |
+| `Fa` › `FaWiersz`                             | `P_7`                                | Nazwa towaru/usługi                                                     |
+| `Fa` › `FaWiersz`                             | `P_8A`, `P_8B`                       | Jednostka miary, ilość                                                  |
+| `Fa` › `FaWiersz`                             | `P_9A`, `P_9B`                       | Cena jednostkowa netto / brutto                                         |
+| `Fa` › `FaWiersz`                             | `P_11`, `P_11A`                      | Wartość netto / brutto                                                  |
+| `Fa` › `FaWiersz`                             | `P_12`                               | Stawka VAT                                                              |
+| `Fa` › `FaWiersz`                             | `KursWaluty`                         | Kurs waluty pozycji                                                     |
+| `Fa` › `FaWiersz`                             | `Indeks`, `GTIN`, `UU_ID`            | Identyfikatory towaru                                                   |
+| `Fa`                                          | `P_13_*`, `P_14_*`                   | Sumy netto i VAT per stawka — **wykrywane dynamicznie**, wszystkie stawki |
+| `Fa`                                          | `P_14_*W`                            | VAT w walucie obcej per stawka — dodatkowa kolumna gdy obecne           |
+| `Fa`                                          | `P_15`                               | Kwota należności ogółem (brutto)                                        |
+| `Fa` › `Platnosc`                             | `FormaPlatnosci`                     | Forma płatności                                                         |
+| `Fa` › `Platnosc`                             | `TerminPlatnosci` / `Termin`         | Termin(y) płatności                                                     |
+| `Fa` › `Platnosc`                             | `Zaplacono`, `DataZaplaty`           | Znacznik zapłacono / data                                               |
+| `Fa` › `Platnosc` › `RachunekBankowy`         | `NrRB`, `NazwaBanku`, `OpisRachunku` | Dane rachunku bankowego                                                 |
+| `Fa`                                          | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Dodatkowe opisy (pary klucz–wartość)                                    |
+| `Fa`                                          | `WZ`                                 | Numer dokumentu WZ                                                      |
+| `Fa` › `WarunkiTransakcji` › `Umowy`          | `NrUmowy`                            | Numery umów                                                             |
+| `Fa` › `WarunkiTransakcji` › `Zamowienia`     | `NrZamowienia`                       | Numery zamówień                                                         |
+| `Fa` › `WarunkiTransakcji`                    | `NrPartiiDostawy`                    | Numer partii dostawy                                                    |
+| `Fa` › `WarunkiTransakcji`                    | `Incoterms`                          | Warunki dostawy (EXW, CIF, DAP…)                                        |
+| `Stopka` › `Rejestry`                         | `PelnaNazwa`, `REGON`, `BDO`         | Dane rejestrowe sprzedawcy                                              |
 
 ---
 
@@ -592,8 +604,8 @@ The chart title adapts to the subject type: _Przychody netto + VAT_ (income) for
 - Tooltip on hover: net, VAT and gross values for that currency
 
 **Currency chips** (above the chart):
-- Click to filter the invoice list to a single currency
-- Each chip shows the current NBP exchange rate (e.g. `EUR (12) 4.2567`)
+- Click to toggle currencies shown in the invoice list (multi-select — multiple chips can be active simultaneously)
+- Each chip shows the invoice count and current NBP exchange rate (e.g. `EUR (12) 4.2567`)
 
 **PLN summary** (below the bars):
 - Reacts to active currency filter — sums only selected currencies (or all if no filter)
@@ -759,44 +771,56 @@ PDFs are rendered by a **native built-in engine** using [QuestPDF](https://www.q
 
 Fields extracted from KSeF invoice XML (FA(3) schema) and included in the generated PDF:
 
-| XML section                           | Field / element                      | Description                                                |
-| ------------------------------------- | ------------------------------------ | ---------------------------------------------------------- |
-| `Naglowek`                            | `SystemInfo`                         | Issuing system name (footer)                               |
-| _(API metadata)_                      | `KsefReferenceNumber`                | **KSeF number** (injected from API response, not from XML) |
-| `Fa`                                  | `P_2`                                | Issuer's invoice number                                    |
-| `Fa`                                  | `RodzajFaktury`                      | Document type (VAT, KOR, ZAL…)                             |
-| `Fa`                                  | `P_1`                                | Issue date                                                 |
-| `Fa`                                  | `P_1M`                               | Place of issue                                             |
-| `Fa`                                  | `P_6`                                | Delivery / service completion date                         |
-| `Fa` › `OkresFa`                      | `P_6_Od`, `P_6_Do`                   | Settlement period (from–to)                                |
-| `Fa` › `FakturaZaliczkowa`            | `NrFaZaliczkowej`                    | Advance invoice number                                     |
-| `Fa`                                  | `KodWaluty`                          | Currency code                                              |
-| `Podmiot1`                            | `NIP`, `Nazwa`                       | Seller tax ID and name                                     |
-| `Podmiot1` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Seller address                                             |
-| `Podmiot1` › `DaneKontaktowe`         | `Email`, `Telefon`                   | Seller contact                                             |
-| `Podmiot1`                            | `NrEORI`                             | Seller EORI number                                         |
-| `Podmiot2`                            | `NIP`, `Nazwa`                       | Buyer tax ID and name                                      |
-| `Podmiot2` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Buyer address                                              |
-| `Podmiot2` › `DaneKontaktowe`         | `Email`                              | Buyer e-mail                                               |
-| `Podmiot2`                            | `NrKlienta`                          | Buyer customer number                                      |
-| `Fa` › `FaWiersz`                     | `NrWierszaFa`                        | Line number                                                |
-| `Fa` › `FaWiersz`                     | `P_7`                                | Item / service name                                        |
-| `Fa` › `FaWiersz`                     | `P_8A`, `P_8B`                       | Unit of measure, quantity                                  |
-| `Fa` › `FaWiersz`                     | `P_9A`, `P_9B`                       | Unit net / gross price                                     |
-| `Fa` › `FaWiersz`                     | `P_11`, `P_11A`                      | Net / gross line total                                     |
-| `Fa` › `FaWiersz`                     | `P_12`                               | VAT rate                                                   |
-| `Fa` › `FaWiersz`                     | `KursWaluty`                         | Line exchange rate                                         |
-| `Fa` › `FaWiersz`                     | `Indeks`, `GTIN`, `UU_ID`            | Item identifiers                                           |
-| `Fa`                                  | `P_13_x`, `P_14_x`                   | Net and VAT subtotals per rate                             |
-| `Fa`                                  | `P_15`                               | Total gross amount                                         |
-| `Fa` › `Platnosc`                     | `FormaPlatnosci`                     | Payment method                                             |
-| `Fa` › `Platnosc`                     | `TerminPlatnosci` / `Termin`         | Payment due date(s)                                        |
-| `Fa` › `Platnosc`                     | `Zaplacono`, `DataZaplaty`           | Paid flag / payment date                                   |
-| `Fa` › `Platnosc` › `RachunekBankowy` | `NrRB`, `NazwaBanku`, `OpisRachunku` | Bank account details                                       |
-| `Fa`                                  | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Additional notes (key–value pairs)                         |
-| `Fa`                                  | `WZ`                                 | WZ document reference                                      |
-| `Fa` › `WarunkiTransakcji` › `Umowy`  | `NrUmowy`                            | Contract number(s)                                         |
-| `Stopka` › `Rejestry`                 | `PelnaNazwa`, `REGON`, `BDO`         | Seller registry data                                       |
+| XML section                                   | Field / element                      | Description                                                              |
+| --------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| `Naglowek`                                    | `SystemInfo`                         | Issuing system name (footer)                                             |
+| _(API metadata)_                              | `KsefReferenceNumber`                | **KSeF number** (injected from API response, not from XML)               |
+| `Fa`                                          | `P_2`                                | Issuer's invoice number                                                  |
+| `Fa`                                          | `RodzajFaktury`                      | Document type (VAT, KOR, ZAL…)                                           |
+| `Fa`                                          | `P_1`                                | Issue date                                                               |
+| `Fa`                                          | `P_1M`                               | Place of issue                                                           |
+| `Fa`                                          | `P_6`                                | Delivery / service completion date                                       |
+| `Fa` › `OkresFa`                              | `P_6_Od`, `P_6_Do`                   | Settlement period (from–to)                                              |
+| `Fa` › `FakturaZaliczkowa`                    | `NrFaZaliczkowej`                    | Advance invoice number                                                   |
+| `Fa`                                          | `KodWaluty`                          | Currency code                                                            |
+| `Fa`                                          | `P_KursWaluty`                       | Invoice-level exchange rate                                              |
+| `Fa`                                          | `P_16`                               | Reverse charge — highlighted in Details                                  |
+| `Fa`                                          | `P_17`                               | Self-billing — highlighted in Details                                    |
+| `Fa`                                          | `P_18`                               | Margin scheme (code value) — highlighted in Details                      |
+| `Fa`                                          | `P_18A`                              | New means of transport — highlighted in Details                          |
+| `Fa`                                          | `P_19`, `P_19A`, `P_19B`             | VAT exemption basis, legal reference, description                        |
+| `Podmiot1`                                    | `NIP`, `Nazwa`                       | Seller tax ID and name                                                   |
+| `Podmiot1` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Seller address                                                           |
+| `Podmiot1` › `DaneKontaktowe`                 | `Email`, `Telefon`                   | Seller contact                                                           |
+| `Podmiot1`                                    | `NrEORI`                             | Seller EORI number                                                       |
+| `Podmiot2`                                    | `NIP`, `Nazwa`                       | Buyer tax ID and name                                                    |
+| `Podmiot2` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Buyer address                                                            |
+| `Podmiot2` › `DaneKontaktowe`                 | `Email`                              | Buyer e-mail                                                             |
+| `Podmiot2`                                    | `NrKlienta`                          | Buyer customer number                                                    |
+| `Podmiot3`                                    | `NIP`, `Nazwa`, `Adres`, contact     | Third party (optional) — separate block below Seller/Buyer               |
+| `PodmiotUpowazniony`                          | `NIP`, `Nazwa`, `Adres`, contact     | Authorised entity (optional) — separate block                            |
+| `Fa` › `FaWiersz`                             | `NrWierszaFa`                        | Line number                                                              |
+| `Fa` › `FaWiersz`                             | `P_7`                                | Item / service name                                                      |
+| `Fa` › `FaWiersz`                             | `P_8A`, `P_8B`                       | Unit of measure, quantity                                                |
+| `Fa` › `FaWiersz`                             | `P_9A`, `P_9B`                       | Unit net / gross price                                                   |
+| `Fa` › `FaWiersz`                             | `P_11`, `P_11A`                      | Net / gross line total                                                   |
+| `Fa` › `FaWiersz`                             | `P_12`                               | VAT rate                                                                 |
+| `Fa` › `FaWiersz`                             | `KursWaluty`                         | Line exchange rate                                                       |
+| `Fa` › `FaWiersz`                             | `Indeks`, `GTIN`, `UU_ID`            | Item identifiers                                                         |
+| `Fa`                                          | `P_13_*`, `P_14_*`                   | Net and VAT subtotals per rate — **dynamically discovered**, all rates   |
+| `Fa`                                          | `P_14_*W`                            | Foreign-currency VAT per rate — extra column when present                |
+| `Fa`                                          | `P_15`                               | Total gross amount                                                       |
+| `Fa` › `Platnosc`                             | `FormaPlatnosci`                     | Payment method                                                           |
+| `Fa` › `Platnosc`                             | `TerminPlatnosci` / `Termin`         | Payment due date(s)                                                      |
+| `Fa` › `Platnosc`                             | `Zaplacono`, `DataZaplaty`           | Paid flag / payment date                                                 |
+| `Fa` › `Platnosc` › `RachunekBankowy`         | `NrRB`, `NazwaBanku`, `OpisRachunku` | Bank account details                                                     |
+| `Fa`                                          | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Additional notes (key–value pairs)                                       |
+| `Fa`                                          | `WZ`                                 | WZ document reference                                                    |
+| `Fa` › `WarunkiTransakcji` › `Umowy`          | `NrUmowy`                            | Contract number(s)                                                       |
+| `Fa` › `WarunkiTransakcji` › `Zamowienia`     | `NrZamowienia`                       | Purchase order number(s)                                                 |
+| `Fa` › `WarunkiTransakcji`                    | `NrPartiiDostawy`                    | Delivery batch number                                                    |
+| `Fa` › `WarunkiTransakcji`                    | `Incoterms`                          | Delivery terms (EXW, CIF, DAP…)                                          |
+| `Stopka` › `Rejestry`                         | `PelnaNazwa`, `REGON`, `BDO`         | Seller registry data                                                     |
 
 ---
 
@@ -819,6 +843,16 @@ Fields extracted from KSeF invoice XML (FA(3) schema) and included in the genera
 
 **Poprawki API / API fixes**
 - Naprawiono błąd 21405: `pageOffset` to numer strony (0-based), nie offset rekordu — `currentPage++` zamiast `currentOffset += pageSize`
+
+**PDF — nowe pola FA(3)**
+- `Podmiot3` (podmiot trzeci) — osobny blok pod Sprzedawcą/Nabywcą
+- `PodmiotUpowazniony` — podmiot upoważniony do wystawiania faktur
+- Dynamiczne wykrywanie stawek VAT: skan wszystkich `P_13_*` / `P_14_*` zamiast hardcodowanej listy — obsługuje wszystkie stawki (23%, 8%, 5%, 3%, 0%, zw, np, oo i inne)
+- `P_14_*W` — VAT w walucie obcej jako dodatkowa kolumna w tabeli stawek
+- `P_KursWaluty` — kurs waluty całej faktury w sekcji Szczegóły
+- `P_16` (odwrotne obciążenie), `P_17` (samofakturowanie), `P_18` (procedura marży), `P_18A` (nowe środki transportu) — wyróżnione adnotacje
+- `P_19` / `P_19A` / `P_19B` — podstawa i przepis zwolnienia z VAT
+- `WarunkiTransakcji`: `NrZamowienia`, `NrPartiiDostawy`, `Incoterms`
 
 ---
 

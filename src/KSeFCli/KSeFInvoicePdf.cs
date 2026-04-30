@@ -42,7 +42,8 @@ internal record InvoiceLine(
     string? ExchangeRate
 );
 
-internal record VatRow(string Rate, string? Net, string? Vat);
+// VatW = VAT in the invoice's own currency (P_14_*W); null for PLN invoices
+internal record VatRow(string Rate, string? Net, string? Vat, string? VatW = null);
 
 internal record BankAccount(string? NrRB, string? NazwaBanku, string? OpisRachunku);
 
@@ -53,10 +54,13 @@ internal record InvoiceData(
     string? MiejsceWystawienia,
     string? DataDostawy,      // P_6
     string? Waluta,
+    string? KursWalutyFaktury, // P_KursWaluty in Fa — invoice-level exchange rate
     string? OkresOd,
     string? OkresDo,
     InvoiceParty Sprzedawca,
     InvoiceParty Nabywca,
+    InvoiceParty? PodmiotTrzeci,
+    InvoiceParty? PodmiotUpowazniony,
     List<InvoiceLine> Wiersze,
     List<VatRow> VatRows,
     string? RazemBrutto,
@@ -69,6 +73,16 @@ internal record InvoiceData(
     string? WZ,
     List<string> NrUmowy,
     string? NrFaZaliczkowej,
+    bool OdwrotneObciazenie,
+    bool Samofakturowanie,
+    string? ProceduraMarzy,
+    bool NoweŚrodkiTransportu,
+    string? PodstawaZwolnienia,
+    string? PodstawaZwolnieniaA,
+    string? PodstawaZwolnieniaB,
+    List<string> NrZamowienia,
+    string? NrPartiiDostawy,
+    string? Incoterms,
     string? PelnaNazwa,
     string? Regon,
     string? Bdo,
@@ -126,7 +140,22 @@ internal static class KSeFInvoiceParser
         XElement naglowek = El(root, "Naglowek")!;
         XElement podmiot1 = El(root, "Podmiot1")!;
         XElement podmiot2 = El(root, "Podmiot2")!;
+        XElement? podmiot3 = El(root, "Podmiot3");
+        XElement? podmiotUpowazniony = El(root, "PodmiotUpowazniony");
         XElement fa = El(root, "Fa")!;
+
+        static string SuffixToRate(string suffix) => suffix switch
+        {
+            "1" => "23%",
+            "2" => "8%",
+            "3" => "5%",
+            "4" => "3%",
+            "5" => "0% (WDT)",
+            "6" => "zw",
+            "7" => "np",
+            "8" => "oo",
+            _ => suffix
+        };
         XElement? stopka = El(root, "Stopka");
 
         InvoiceParty ParseParty(XElement p)
@@ -166,25 +195,22 @@ internal static class KSeFInvoiceParser
             .OrderBy(w => w.Nr)
             .ToList();
 
-        // VAT summary
-        List<VatRow> vatRows = new List<VatRow>();
-        (string Rate, string NetField, string? VatField)[] vatMap = new (string Rate, string NetField, string? VatField)[]
-        {
-            ("23%", "P_13_1", "P_14_1"),
-            ("8%",  "P_13_2", "P_14_2"),
-            ("5%",  "P_13_3", "P_14_3"),
-            ("0%",  "P_13_6", null),
-            ("zw",  "P_13_7", null),
-            ("np",  "P_13_8", null),
-        };
-        foreach ((string? rate, string? netF, string? vatF) in vatMap)
-        {
-            string? net = Val(fa, netF);
-            if (!string.IsNullOrEmpty(net))
+        // VAT summary — dynamic scan of all P_13_* present in Fa (schema-driven, no hardcoded rate list)
+        List<VatRow> vatRows = fa.Elements()
+            .Where(e => e.Name.LocalName.StartsWith("P_13_", StringComparison.Ordinal))
+            .OrderBy(e => e.Name.LocalName, StringComparer.Ordinal)
+            .Select(e =>
             {
-                vatRows.Add(new VatRow(rate, net, vatF is null ? null : Val(fa, vatF)));
-            }
-        }
+                string suffix = e.Name.LocalName["P_13_".Length..];
+                return new VatRow(
+                    Rate: SuffixToRate(suffix),
+                    Net: e.Value.Trim(),
+                    Vat: Val(fa, "P_14_" + suffix),
+                    VatW: Val(fa, "P_14_" + suffix + "W")
+                );
+            })
+            .Where(r => !string.IsNullOrEmpty(r.Net))
+            .ToList();
 
         List<(string Klucz, string Wartosc)> dodOpis = Els(fa, "DodatkowyOpis")
             .Select(d => (Klucz: Val(d, "Klucz") ?? "", Wartosc: Val(d, "Wartosc") ?? ""))
@@ -226,6 +252,9 @@ internal static class KSeFInvoiceParser
 
         XElement? warunki = El(fa, "WarunkiTransakcji");
         List<string> umowy = new List<string>();
+        List<string> zamowienia = new List<string>();
+        string? nrPartiiDostawy = null;
+        string? incoterms = null;
         if (warunki is not null)
         {
             XElement? umowyEl = El(warunki, "Umowy");
@@ -233,6 +262,13 @@ internal static class KSeFInvoiceParser
             {
                 umowy.AddRange(Els(umowyEl, "NrUmowy").Select(u => u.Value.Trim()));
             }
+            XElement? zamEl = El(warunki, "Zamowienia");
+            if (zamEl is not null)
+            {
+                zamowienia.AddRange(Els(zamEl, "NrZamowienia").Select(z => z.Value.Trim()));
+            }
+            nrPartiiDostawy = Val(warunki, "NrPartiiDostawy");
+            incoterms = Val(warunki, "Incoterms");
         }
 
         XElement? faZal = El(fa, "FakturaZaliczkowa");
@@ -248,10 +284,13 @@ internal static class KSeFInvoiceParser
             MiejsceWystawienia: Val(fa, "P_1M"),
             DataDostawy: Val(fa, "P_6"),
             Waluta: Val(fa, "KodWaluty") ?? "PLN",
+            KursWalutyFaktury: Val(fa, "P_KursWaluty") ?? Val(fa, "KursWaluty"),
             OkresOd: okresEl is null ? null : Val(okresEl, "P_6_Od"),
             OkresDo: okresEl is null ? null : Val(okresEl, "P_6_Do"),
             Sprzedawca: ParseParty(podmiot1),
             Nabywca: ParseParty(podmiot2),
+            PodmiotTrzeci: podmiot3 is null ? null : ParseParty(podmiot3),
+            PodmiotUpowazniony: podmiotUpowazniony is null ? null : ParseParty(podmiotUpowazniony),
             Wiersze: wiersze,
             VatRows: vatRows,
             RazemBrutto: Val(fa, "P_15"),
@@ -264,6 +303,16 @@ internal static class KSeFInvoiceParser
             WZ: Val(fa, "WZ"),
             NrUmowy: umowy,
             NrFaZaliczkowej: nrFaZal,
+            OdwrotneObciazenie: Val(fa, "P_16") == "1",
+            Samofakturowanie: Val(fa, "P_17") == "1",
+            ProceduraMarzy: Val(fa, "P_18"),
+            NoweŚrodkiTransportu: Val(fa, "P_18A") == "1",
+            PodstawaZwolnienia: Val(fa, "P_19"),
+            PodstawaZwolnieniaA: Val(fa, "P_19A"),
+            PodstawaZwolnieniaB: Val(fa, "P_19B"),
+            NrZamowienia: zamowienia,
+            NrPartiiDostawy: nrPartiiDostawy,
+            Incoterms: incoterms,
             PelnaNazwa: rejestry is null ? null : Val(rejestry, "PelnaNazwa"),
             Regon: rejestry is null ? null : Val(rejestry, "REGON"),
             Bdo: rejestry is null ? null : Val(rejestry, "BDO"),
@@ -529,6 +578,9 @@ internal static class KSeFInvoiceSanitizer
         OkresDo = SanitizeDate(d.OkresDo),
         Sprzedawca = SanitizeParty(d.Sprzedawca),
         Nabywca = SanitizeParty(d.Nabywca),
+        PodmiotTrzeci = d.PodmiotTrzeci is null ? null : SanitizeParty(d.PodmiotTrzeci),
+        PodmiotUpowazniony = d.PodmiotUpowazniony is null ? null : SanitizeParty(d.PodmiotUpowazniony),
+        KursWalutyFaktury = SanitizeKwotowy2(d.KursWalutyFaktury),
         Wiersze = d.Wiersze.Select(SanitizeLine).ToList(),
         VatRows = d.VatRows.Select(SanitizeVatRow).ToList(),
         RazemBrutto = SanitizeKwotowy(d.RazemBrutto),
@@ -543,6 +595,12 @@ internal static class KSeFInvoiceSanitizer
         WZ = Text(d.WZ),
         NrUmowy = d.NrUmowy.Select(u => Text(u) ?? "").ToList(),
         NrFaZaliczkowej = Text(d.NrFaZaliczkowej),
+        PodstawaZwolnienia = Text(d.PodstawaZwolnienia),
+        PodstawaZwolnieniaA = Text(d.PodstawaZwolnieniaA),
+        PodstawaZwolnieniaB = Text(d.PodstawaZwolnieniaB),
+        NrZamowienia = d.NrZamowienia.Select(z => Text(z) ?? "").ToList(),
+        NrPartiiDostawy = Text(d.NrPartiiDostawy),
+        Incoterms = Text(d.Incoterms),
         PelnaNazwa = Name(d.PelnaNazwa),
         Regon = SanitizeRegon(d.Regon),
         Bdo = Text(d.Bdo),
@@ -582,6 +640,7 @@ internal static class KSeFInvoiceSanitizer
     {
         Net = SanitizeKwotowy(r.Net),
         Vat = SanitizeKwotowy(r.Vat),
+        VatW = SanitizeKwotowy(r.VatW),
     };
 
     private static BankAccount SanitizeBank(BankAccount b) => b with
@@ -966,6 +1025,24 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 row.ConstantItem(10);
                 row.RelativeItem().Element(c2 => PartyBox(c2, "Nabywca", d.Nabywca));
             });
+            if (d.PodmiotTrzeci is not null)
+            {
+                col.Item().PaddingTop(6).Row(row =>
+                {
+                    row.RelativeItem().Element(c2 => PartyBox(c2, "Podmiot trzeci", d.PodmiotTrzeci));
+                    row.ConstantItem(10);
+                    row.RelativeItem();
+                });
+            }
+            if (d.PodmiotUpowazniony is not null)
+            {
+                col.Item().PaddingTop(6).Row(row =>
+                {
+                    row.RelativeItem().Element(c2 => PartyBox(c2, "Podmiot upoważniony", d.PodmiotUpowazniony));
+                    row.ConstantItem(10);
+                    row.RelativeItem();
+                });
+            }
 
             // Details bar
             col.Item().PaddingTop(8).BorderTop(0.5f).BorderColor(BorderGray)
@@ -1014,6 +1091,77 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                         {
                             t.Span("Faktura zaliczkowa: ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.NrFaZaliczkowej).FontSize(7.5f);
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(d.KursWalutyFaktury))
+                    {
+                        det.Item().PaddingTop(2).Text(t =>
+                        {
+                            t.Span("Kurs waluty: ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.KursWalutyFaktury).FontSize(7.5f).Bold();
+                        });
+                    }
+                    // Special procedure flags
+                    List<string> flags = new List<string>();
+                    if (d.OdwrotneObciazenie) { flags.Add("Odwrotne obciążenie (P_16)"); }
+                    if (d.Samofakturowanie) { flags.Add("Samofakturowanie (P_17)"); }
+                    if (!string.IsNullOrEmpty(d.ProceduraMarzy)) { flags.Add("Procedura marży: " + d.ProceduraMarzy); }
+                    if (d.NoweŚrodkiTransportu) { flags.Add("Nowe środki transportu (P_18A)"); }
+                    foreach (string flag in flags)
+                    {
+                        det.Item().PaddingTop(2).Text(t =>
+                        {
+                            t.Span(flag).FontSize(7.5f).Bold().FontColor(RedAccent);
+                        });
+                    }
+                    // VAT exemption basis
+                    if (!string.IsNullOrEmpty(d.PodstawaZwolnienia))
+                    {
+                        det.Item().PaddingTop(2).Text(t =>
+                        {
+                            t.Span("Podstawa zwolnienia (P_19): ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.PodstawaZwolnienia).FontSize(7.5f);
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(d.PodstawaZwolnieniaA))
+                    {
+                        det.Item().PaddingTop(1).Text(t =>
+                        {
+                            t.Span("Przepis (P_19A): ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.PodstawaZwolnieniaA).FontSize(7.5f);
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(d.PodstawaZwolnieniaB))
+                    {
+                        det.Item().PaddingTop(1).Text(t =>
+                        {
+                            t.Span("Opis zwolnienia (P_19B): ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.PodstawaZwolnieniaB).FontSize(7.5f);
+                        });
+                    }
+                    // Transaction conditions
+                    if (d.NrZamowienia.Count > 0)
+                    {
+                        det.Item().PaddingTop(2).Text(t =>
+                        {
+                            t.Span("Nr zamówienia: ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(string.Join(", ", d.NrZamowienia)).FontSize(7.5f);
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(d.NrPartiiDostawy))
+                    {
+                        det.Item().PaddingTop(2).Text(t =>
+                        {
+                            t.Span("Nr partii dostawy: ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.NrPartiiDostawy).FontSize(7.5f);
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(d.Incoterms))
+                    {
+                        det.Item().PaddingTop(2).Text(t =>
+                        {
+                            t.Span("Incoterms: ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.Incoterms).FontSize(7.5f).Bold();
                         });
                     }
                 });
@@ -1348,6 +1496,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
 
     private void VatTable(IContainer c, InvoiceData d)
     {
+        bool hasVatW = d.VatRows.Any(r => !string.IsNullOrEmpty(r.VatW));
         c.Column(col =>
         {
             col.Item().Text("Podsumowanie stawek podatku").FontSize(9).Bold().FontColor(Colors.Black);
@@ -1358,7 +1507,8 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     cols.ConstantColumn(18);  // Lp
                     cols.ConstantColumn(55);  // Stawka
                     cols.ConstantColumn(70);  // Netto
-                    cols.ConstantColumn(60);  // VAT
+                    cols.ConstantColumn(60);  // VAT (PLN)
+                    if (hasVatW) { cols.ConstantColumn(60); } // VAT walutowy
                     cols.ConstantColumn(70);  // Brutto
                 });
                 table.Header(h =>
@@ -1366,7 +1516,10 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     void Th(string t) =>
                         h.Cell().Background(Blue).Padding(3)
                             .Text(t).FontSize(6.5f).Bold().FontColor(Colors.White);
-                    Th("Lp."); Th("Stawka podatku"); Th("Kwota netto"); Th("Kwota podatku"); Th("Kwota brutto");
+                    Th("Lp."); Th("Stawka podatku"); Th("Kwota netto");
+                    Th("Kwota podatku");
+                    if (hasVatW) { Th($"VAT ({d.Waluta})"); }
+                    Th("Kwota brutto");
                 });
 
                 foreach ((VatRow? row, int i) in d.VatRows.Select((r, i) => (r, i)))
@@ -1384,6 +1537,11 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                         .Text(row.Net ?? "0.00").FontSize(7.5f).AlignRight();
                     table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(BorderGray).Padding(3)
                         .Text(row.Vat ?? "0.00").FontSize(7.5f).AlignRight();
+                    if (hasVatW)
+                    {
+                        table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(BorderGray).Padding(3)
+                            .Text(row.VatW ?? "—").FontSize(7.5f).AlignRight();
+                    }
                     table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(BorderGray).Padding(3)
                         .Text(brutto).FontSize(7.5f).AlignRight();
                 }

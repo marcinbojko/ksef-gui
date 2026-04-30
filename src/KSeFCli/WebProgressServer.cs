@@ -2072,8 +2072,11 @@ function renderTable() {
   let sorted = [...getFilteredInvoices()];
   if (sortCol !== null) {
     sorted.sort((a,b) => {
-      let va = sortCol === '_vat' ? ((a.grossAmount ?? 0) - (a.netAmount ?? 0)) : (a[sortCol] ?? '');
-      let vb = sortCol === '_vat' ? ((b.grossAmount ?? 0) - (b.netAmount ?? 0)) : (b[sortCol] ?? '');
+      let va = sortCol === '_vat' ? (a.grossAmount != null && a.netAmount != null ? a.grossAmount - a.netAmount : null) : (a[sortCol] ?? '');
+      let vb = sortCol === '_vat' ? (b.grossAmount != null && b.netAmount != null ? b.grossAmount - b.netAmount : null) : (b[sortCol] ?? '');
+      if (va == null && vb == null) { return 0; }
+      if (va == null) { return sortAsc ? 1 : -1; }
+      if (vb == null) { return sortAsc ? -1 : 1; }
       if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
       va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
@@ -2484,6 +2487,7 @@ async function silentRefresh() {
       setStatus('Auto-od\u015Bwie\u017Canie: ' + total + ' faktur.', 'idle');
     }
     buildCurrencyFilter();
+    refreshExchangeRates(); // async — keeps PLN conversions fresh during background refreshes
     renderTable();
     checkExisting();
     await fetchTokenStatus();
