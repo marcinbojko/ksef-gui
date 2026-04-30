@@ -2,7 +2,7 @@
 
 <img src="src/KSeFCli/app.png" width="96" alt="ksefcli logo" />
 
-# ksefcli
+# ksef-gui
 
 **Klient KSeF ze wbudowanym interfejsem przeglądarkowym**<br/>
 **KSeF client with a built-in browser GUI**
@@ -26,7 +26,7 @@
 
 > **Fork** projektu [kamilcuk/ksefcli](https://github.com/kamilcuk/ksefcli) autorstwa [Kamila Cukrowskiego](https://github.com/kamilcuk). Oryginalne repozytorium zawiera wersję CLI; ten fork dodaje rozbudowany interfejs przeglądarkowy i dodatkowe funkcje.
 
-`ksefcli` to narzędzie do pobierania faktur z **Krajowego Systemu e-Faktur (KSeF)**. Oprócz CLI posiada wbudowany interfejs przeglądarkowy uruchamiany lokalnie — bez instalowania dodatkowego oprogramowania.
+`ksefcli` to narzędzie do pobierania faktur z **Krajowego Systemu e-Faktur (KSeF)**. Oprócz CLI posiada wbudowany interfejs przeglądarkowy uruchamiany lokalnie (KSEF Gui) — bez instalowania dodatkowego oprogramowania.
 
 ### ✨ Cechy
 
@@ -35,7 +35,7 @@
 | 🌐 **GUI w przeglądarce** | Interfejs lokalny dostępny bez instalacji                                                 |
 | 📄 **Eksport PDF**        | Natywny renderer (QuestPDF) — bez Node.js, git ani zewnętrznych narzędzi                  |
 | 📊 **Podsumowanie CSV**   | Zestawienie faktur za wybrany miesiąc — gotowy plik CSV (UTF-8 BOM, separator `;`)        |
-| 📈 **Wykres przychodów**  | Poziomy wykres słupkowy sum netto per waluta — widoczny przy liście faktur (opt-out)      |
+| 📈 **Wykres przychodów / kosztów** | Słupki netto + VAT per waluta z przeliczeniem na PLN (kursy NBP) — widoczny przy liście faktur (opt-out) |
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
 | 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
@@ -171,16 +171,17 @@ Po wyszukaniu faktur przycisk **Podsumowanie CSV** (widoczny na pasku narzędzi 
 
 **Kolumny w pliku:**
 
-| Kolumna          | Opis                        |
-| ---------------- | --------------------------- |
-| Data wystawienia | Data faktury (RRRR-MM-DD)   |
-| Numer faktury    | Numer nadany przez wystawcę |
-| Sprzedawca       | Nazwa sprzedawcy            |
-| NIP sprzedawcy   | NIP sprzedawcy              |
-| Nabywca          | Nazwa nabywcy               |
-| Numer KSeF       | Numer nadany przez KSeF     |
-| Waluta           | Kod waluty (ISO 4217)       |
-| Kwota brutto     | Kwota należności ogółem     |
+| Kolumna          | Opis                                      |
+| ---------------- | ----------------------------------------- |
+| Data wystawienia | Data faktury (RRRR-MM-DD)                 |
+| Numer faktury    | Numer nadany przez wystawcę               |
+| Sprzedawca       | Nazwa sprzedawcy                          |
+| NIP sprzedawcy   | NIP sprzedawcy                            |
+| Nabywca          | Nazwa nabywcy                             |
+| Numer KSeF       | Numer nadany przez KSeF                   |
+| Waluta           | Kod waluty (ISO 4217)                     |
+| Kwota netto      | Suma netto w walucie faktury              |
+| Kwota brutto     | Kwota należności ogółem w walucie faktury |
 
 Na końcu pliku dodawane są sumy brutto pogrupowane według waluty.
 
@@ -188,11 +189,29 @@ Na końcu pliku dodawane są sumy brutto pogrupowane według waluty.
 
 > Podsumowanie generowane jest z danych w lokalnym cache — nie wymaga dodatkowego połączenia z KSeF.
 
-### 📈 Wykres przychodów
+### 📈 Wykres przychodów / kosztów
 
-Po wyszukaniu faktur panel filtrowania walut wyświetla poziomy wykres słupkowy z sumami netto per waluta. Wykres jest widoczny automatycznie gdy lista faktur zawiera dane; można go wyłączyć w **Preferencjach** (checkbox **Pokaż wykres przychodów**).
+Po wyszukaniu faktur panel filtrowania walut wyświetla poziomy wykres słupkowy z sumami **netto + VAT** per waluta. Wykres jest widoczny automatycznie gdy lista faktur zawiera dane; można go wyłączyć w **Preferencjach** (checkbox **Pokaż wykres netto + VAT**).
 
-Kwoty wyświetlane są w formacie polskim (np. `1 234 567,89`). Słupki posortowane są malejąco według wartości.
+Tytuł wykresu zmienia się w zależności od wybranego typu podmiotu: _Przychody netto + VAT_ dla Sprzedawcy, _Koszty netto + VAT_ dla Nabywcy, _Kwoty netto + VAT_ dla pozostałych.
+
+**Każdy słupek:**
+- Część kolorowa = suma netto w walucie faktury
+- Część szara = suma VAT (`brutto − netto`) w tej samej walucie
+- Długości słupków proporcjonalne do największej wartości brutto — słupki małych walut wyświetlane z minimalną widoczną szerokością z zachowaniem proporcji netto/VAT
+- Etykieta: `netto + VAT ≈ netto: X PLN / brutto: Y PLN` (przeliczenie kursami NBP)
+- Tooltip (po najechaniu myszą): wartości netto, VAT i brutto danej waluty
+
+**Filtry walut** (chipsy nad wykresem):
+- Kliknięcie chipu przełącza widoczność danej waluty w liście faktur (multi-select — można zaznaczyć kilka walut jednocześnie)
+- Każdy chip wyświetla liczbę faktur i aktualny kurs NBP (np. `EUR (12) 4,2567`)
+
+**Podsumowanie w PLN** (pod słupkami):
+- Reaguje na aktywny filtr walut — sumuje tylko zaznaczone waluty (lub wszystkie gdy brak filtru)
+- Dla walut obcych: `~ łącznie netto: X PLN / brutto: Y PLN` (znak `~` oznacza wartość przybliżoną)
+- Dla wyłącznie PLN: wartość dokładna (bez `~`)
+
+**Kursy walut** pobierane są automatycznie z publicznego API NBP (Tabela A, kursy średnie), cache 1 godzina. Jeśli kursy nie są jeszcze dostępne, PLN-przeliczenia są pomijane bez wpływu na działanie wykresu.
 
 > Wykres generowany jest z danych w lokalnym cache — nie wymaga połączenia z KSeF.
 
@@ -351,44 +370,56 @@ PDF generowany **natywnie** przez [QuestPDF](https://www.questpdf.com/) — czys
 
 Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowanym pliku PDF:
 
-| Sekcja XML                            | Pole / element                       | Opis                                                      |
-| ------------------------------------- | ------------------------------------ | --------------------------------------------------------- |
-| `Naglowek`                            | `SystemInfo`                         | System wystawiający fakturę (stopka)                      |
-| _(metadane API)_                      | `KsefReferenceNumber`                | **Numer KSeF** (przekazywany z odpowiedzi API, nie z XML) |
-| `Fa`                                  | `P_2`                                | Numer faktury wystawcy                                    |
-| `Fa`                                  | `RodzajFaktury`                      | Typ dokumentu (VAT, KOR, ZAL…)                            |
-| `Fa`                                  | `P_1`                                | Data wystawienia                                          |
-| `Fa`                                  | `P_1M`                               | Miejsce wystawienia                                       |
-| `Fa`                                  | `P_6`                                | Data dostawy / wykonania usługi                           |
-| `Fa` › `OkresFa`                      | `P_6_Od`, `P_6_Do`                   | Okres rozliczeniowy (od–do)                               |
-| `Fa` › `FakturaZaliczkowa`            | `NrFaZaliczkowej`                    | Numer faktury zaliczkowej                                 |
-| `Fa`                                  | `KodWaluty`                          | Waluta                                                    |
-| `Podmiot1`                            | `NIP`, `Nazwa`                       | NIP i nazwa sprzedawcy                                    |
-| `Podmiot1` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Adres sprzedawcy                                          |
-| `Podmiot1` › `DaneKontaktowe`         | `Email`, `Telefon`                   | Kontakt sprzedawcy                                        |
-| `Podmiot1`                            | `NrEORI`                             | Numer EORI sprzedawcy                                     |
-| `Podmiot2`                            | `NIP`, `Nazwa`                       | NIP i nazwa nabywcy                                       |
-| `Podmiot2` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Adres nabywcy                                             |
-| `Podmiot2` › `DaneKontaktowe`         | `Email`                              | E-mail nabywcy                                            |
-| `Podmiot2`                            | `NrKlienta`                          | Numer klienta nabywcy                                     |
-| `Fa` › `FaWiersz`                     | `NrWierszaFa`                        | Numer wiersza                                             |
-| `Fa` › `FaWiersz`                     | `P_7`                                | Nazwa towaru/usługi                                       |
-| `Fa` › `FaWiersz`                     | `P_8A`, `P_8B`                       | Jednostka miary, ilość                                    |
-| `Fa` › `FaWiersz`                     | `P_9A`, `P_9B`                       | Cena jednostkowa netto / brutto                           |
-| `Fa` › `FaWiersz`                     | `P_11`, `P_11A`                      | Wartość netto / brutto                                    |
-| `Fa` › `FaWiersz`                     | `P_12`                               | Stawka VAT                                                |
-| `Fa` › `FaWiersz`                     | `KursWaluty`                         | Kurs waluty pozycji                                       |
-| `Fa` › `FaWiersz`                     | `Indeks`, `GTIN`, `UU_ID`            | Identyfikatory towaru                                     |
-| `Fa`                                  | `P_13_x`, `P_14_x`                   | Sumy netto i VAT per stawka                               |
-| `Fa`                                  | `P_15`                               | Kwota należności ogółem (brutto)                          |
-| `Fa` › `Platnosc`                     | `FormaPlatnosci`                     | Forma płatności                                           |
-| `Fa` › `Platnosc`                     | `TerminPlatnosci` / `Termin`         | Termin(y) płatności                                       |
-| `Fa` › `Platnosc`                     | `Zaplacono`, `DataZaplaty`           | Znacznik zapłacono / data                                 |
-| `Fa` › `Platnosc` › `RachunekBankowy` | `NrRB`, `NazwaBanku`, `OpisRachunku` | Dane rachunku bankowego                                   |
-| `Fa`                                  | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Dodatkowe opisy (pary klucz–wartość)                      |
-| `Fa`                                  | `WZ`                                 | Numer dokumentu WZ                                        |
-| `Fa` › `WarunkiTransakcji` › `Umowy`  | `NrUmowy`                            | Numery umów                                               |
-| `Stopka` › `Rejestry`                 | `PelnaNazwa`, `REGON`, `BDO`         | Dane rejestrowe sprzedawcy                                |
+| Sekcja XML                                    | Pole / element                       | Opis                                                                    |
+| --------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------- |
+| `Naglowek`                                    | `SystemInfo`                         | System wystawiający fakturę (stopka)                                    |
+| _(metadane API)_                              | `KsefReferenceNumber`                | **Numer KSeF** (przekazywany z odpowiedzi API, nie z XML)               |
+| `Fa`                                          | `P_2`                                | Numer faktury wystawcy                                                  |
+| `Fa`                                          | `RodzajFaktury`                      | Typ dokumentu (VAT, KOR, ZAL…)                                          |
+| `Fa`                                          | `P_1`                                | Data wystawienia                                                        |
+| `Fa`                                          | `P_1M`                               | Miejsce wystawienia                                                     |
+| `Fa`                                          | `P_6`                                | Data dostawy / wykonania usługi                                         |
+| `Fa` › `OkresFa`                              | `P_6_Od`, `P_6_Do`                   | Okres rozliczeniowy (od–do)                                             |
+| `Fa` › `FakturaZaliczkowa`                    | `NrFaZaliczkowej`                    | Numer faktury zaliczkowej                                               |
+| `Fa`                                          | `KodWaluty`                          | Waluta                                                                  |
+| `Fa`                                          | `P_KursWaluty`                       | Kurs waluty całej faktury                                               |
+| `Fa`                                          | `P_16`                               | Odwrotne obciążenie — wyróżnione w sekcji Szczegóły                     |
+| `Fa`                                          | `P_17`                               | Samofakturowanie — wyróżnione w sekcji Szczegóły                        |
+| `Fa`                                          | `P_18`                               | Procedura marży (wartość kodu) — wyróżnione w sekcji Szczegóły          |
+| `Fa`                                          | `P_18A`                              | Nowe środki transportu — wyróżnione w sekcji Szczegóły                  |
+| `Fa`                                          | `P_19`, `P_19A`, `P_19B`             | Podstawa zwolnienia z VAT (przepis, opis)                               |
+| `Podmiot1`                                    | `NIP`, `Nazwa`                       | NIP i nazwa sprzedawcy                                                  |
+| `Podmiot1` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Adres sprzedawcy                                                        |
+| `Podmiot1` › `DaneKontaktowe`                 | `Email`, `Telefon`                   | Kontakt sprzedawcy                                                      |
+| `Podmiot1`                                    | `NrEORI`                             | Numer EORI sprzedawcy                                                   |
+| `Podmiot2`                                    | `NIP`, `Nazwa`                       | NIP i nazwa nabywcy                                                     |
+| `Podmiot2` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Adres nabywcy                                                           |
+| `Podmiot2` › `DaneKontaktowe`                 | `Email`                              | E-mail nabywcy                                                          |
+| `Podmiot2`                                    | `NrKlienta`                          | Numer klienta nabywcy                                                   |
+| `Podmiot3`                                    | `NIP`, `Nazwa`, `Adres`, kontakt     | Podmiot trzeci (opcjonalny) — osobny blok pod Sprzedawcą/Nabywcą        |
+| `PodmiotUpowazniony`                          | `NIP`, `Nazwa`, `Adres`, kontakt     | Podmiot upoważniony (opcjonalny) — osobny blok                          |
+| `Fa` › `FaWiersz`                             | `NrWierszaFa`                        | Numer wiersza                                                           |
+| `Fa` › `FaWiersz`                             | `P_7`                                | Nazwa towaru/usługi                                                     |
+| `Fa` › `FaWiersz`                             | `P_8A`, `P_8B`                       | Jednostka miary, ilość                                                  |
+| `Fa` › `FaWiersz`                             | `P_9A`, `P_9B`                       | Cena jednostkowa netto / brutto                                         |
+| `Fa` › `FaWiersz`                             | `P_11`, `P_11A`                      | Wartość netto / brutto                                                  |
+| `Fa` › `FaWiersz`                             | `P_12`                               | Stawka VAT                                                              |
+| `Fa` › `FaWiersz`                             | `KursWaluty`                         | Kurs waluty pozycji                                                     |
+| `Fa` › `FaWiersz`                             | `Indeks`, `GTIN`, `UU_ID`            | Identyfikatory towaru                                                   |
+| `Fa`                                          | `P_13_*`, `P_14_*`                   | Sumy netto i VAT per stawka — **wykrywane dynamicznie**, wszystkie stawki |
+| `Fa`                                          | `P_14_*W`                            | VAT w walucie obcej per stawka — dodatkowa kolumna gdy obecne           |
+| `Fa`                                          | `P_15`                               | Kwota należności ogółem (brutto)                                        |
+| `Fa` › `Platnosc`                             | `FormaPlatnosci`                     | Forma płatności                                                         |
+| `Fa` › `Platnosc`                             | `TerminPlatnosci` / `Termin`         | Termin(y) płatności                                                     |
+| `Fa` › `Platnosc`                             | `Zaplacono`, `DataZaplaty`           | Znacznik zapłacono / data                                               |
+| `Fa` › `Platnosc` › `RachunekBankowy`         | `NrRB`, `NazwaBanku`, `OpisRachunku` | Dane rachunku bankowego                                                 |
+| `Fa`                                          | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Dodatkowe opisy (pary klucz–wartość)                                    |
+| `Fa`                                          | `WZ`                                 | Numer dokumentu WZ                                                      |
+| `Fa` › `WarunkiTransakcji` › `Umowy`          | `NrUmowy`                            | Numery umów                                                             |
+| `Fa` › `WarunkiTransakcji` › `Zamowienia`     | `NrZamowienia`                       | Numery zamówień                                                         |
+| `Fa` › `WarunkiTransakcji`                    | `NrPartiiDostawy`                    | Numer partii dostawy                                                    |
+| `Fa` › `WarunkiTransakcji`                    | `Incoterms`                          | Warunki dostawy (EXW, CIF, DAP…)                                        |
+| `Stopka` › `Rejestry`                         | `PelnaNazwa`, `REGON`, `BDO`         | Dane rejestrowe sprzedawcy                                              |
 
 ---
 
@@ -405,7 +436,7 @@ Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowa
 | 🌐 **Browser GUI**         | Local interface, no installation needed                                                     |
 | 📄 **PDF export**          | Native renderer (QuestPDF) — no Node.js, git, or external tools                             |
 | 📊 **Monthly CSV summary** | One-click invoice summary for a selected month — Excel-ready CSV (UTF-8 BOM, `;` separator) |
-| 📈 **Income chart**        | Horizontal bar chart of net totals by currency, shown alongside the invoice list (opt-out)  |
+| 📈 **Income/cost chart**   | Net + VAT stacked bars by currency with NBP exchange rate conversion to PLN (opt-out)       |
 | 🔄 **Auto-refresh**        | Background search every N minutes; OS notifications for new invoices                        |
 | 🔔 **Notifications**       | OS desktop notifications, Slack / Teams webhooks, and e-mail (SMTP) per profile             |
 | 💾 **SQLite cache**        | Search results stored locally; profile switching without re-fetching                        |
@@ -541,16 +572,17 @@ After searching, the **Podsumowanie CSV** button (visible in the toolbar next to
 
 **Columns:**
 
-| Column           | Description                     |
-| ---------------- | ------------------------------- |
-| Data wystawienia | Invoice issue date (YYYY-MM-DD) |
-| Numer faktury    | Issuer's invoice number         |
-| Sprzedawca       | Seller name                     |
-| NIP sprzedawcy   | Seller tax ID (NIP)             |
-| Nabywca          | Buyer name                      |
-| Numer KSeF       | KSeF-assigned reference number  |
-| Waluta           | Currency code (ISO 4217)        |
-| Kwota brutto     | Total gross amount              |
+| Column           | Description                             |
+| ---------------- | --------------------------------------- |
+| Data wystawienia | Invoice issue date (YYYY-MM-DD)         |
+| Numer faktury    | Issuer's invoice number                 |
+| Sprzedawca       | Seller name                             |
+| NIP sprzedawcy   | Seller tax ID (NIP)                     |
+| Nabywca          | Buyer name                              |
+| Numer KSeF       | KSeF-assigned reference number          |
+| Waluta           | Currency code (ISO 4217)                |
+| Kwota netto      | Net amount in the invoice's currency    |
+| Kwota brutto     | Total gross amount in invoice's currency |
 
 A per-currency gross total is appended at the end of the file.
 
@@ -558,11 +590,29 @@ A per-currency gross total is appended at the end of the file.
 
 > The summary is generated from the local cache — no additional KSeF connection is required.
 
-### 📈 Income chart
+### 📈 Income / cost chart
 
-After searching, the currency filter panel displays a horizontal bar chart of net totals per currency. The chart appears automatically when invoice data is available; it can be disabled in **Preferences** (the **Show income chart** checkbox).
+After searching, the currency filter panel displays a horizontal bar chart of **net + VAT** stacked totals per currency. The chart appears automatically when invoice data is available; it can be disabled in **Preferences** (the **Show net + VAT chart** checkbox).
 
-Amounts are formatted using Polish locale conventions (e.g. `1 234 567,89`). Bars are sorted descending by value.
+The chart title adapts to the subject type: _Przychody netto + VAT_ (income) for Seller, _Koszty netto + VAT_ (costs) for Buyer, _Kwoty netto + VAT_ (amounts) for others.
+
+**Each bar:**
+- Coloured segment = net total in the invoice's currency
+- Grey segment = VAT total (`gross − net`) in the same currency; proportional to the net segment
+- Bars scale proportionally to the largest gross value; small currencies maintain correct net/VAT ratio
+- Label: `net + VAT ≈ net: X PLN / gross: Y PLN` (converted at current NBP rates)
+- Tooltip on hover: net, VAT and gross values for that currency
+
+**Currency chips** (above the chart):
+- Click to toggle currencies shown in the invoice list (multi-select — multiple chips can be active simultaneously)
+- Each chip shows the invoice count and current NBP exchange rate (e.g. `EUR (12) 4.2567`)
+
+**PLN summary** (below the bars):
+- Reacts to active currency filter — sums only selected currencies (or all if no filter)
+- For foreign currencies: `~ łącznie netto: X PLN / brutto: Y PLN` (the `~` indicates approximation)
+- For PLN-only: exact total without `~`
+
+**Exchange rates** are fetched automatically from the public NBP API (Table A, mid rates), cached for 1 hour. If rates are unavailable, PLN conversions are silently skipped without affecting chart display.
 
 > The chart is generated from the local cache — no KSeF connection required.
 
@@ -721,44 +771,96 @@ PDFs are rendered by a **native built-in engine** using [QuestPDF](https://www.q
 
 Fields extracted from KSeF invoice XML (FA(3) schema) and included in the generated PDF:
 
-| XML section                           | Field / element                      | Description                                                |
-| ------------------------------------- | ------------------------------------ | ---------------------------------------------------------- |
-| `Naglowek`                            | `SystemInfo`                         | Issuing system name (footer)                               |
-| _(API metadata)_                      | `KsefReferenceNumber`                | **KSeF number** (injected from API response, not from XML) |
-| `Fa`                                  | `P_2`                                | Issuer's invoice number                                    |
-| `Fa`                                  | `RodzajFaktury`                      | Document type (VAT, KOR, ZAL…)                             |
-| `Fa`                                  | `P_1`                                | Issue date                                                 |
-| `Fa`                                  | `P_1M`                               | Place of issue                                             |
-| `Fa`                                  | `P_6`                                | Delivery / service completion date                         |
-| `Fa` › `OkresFa`                      | `P_6_Od`, `P_6_Do`                   | Settlement period (from–to)                                |
-| `Fa` › `FakturaZaliczkowa`            | `NrFaZaliczkowej`                    | Advance invoice number                                     |
-| `Fa`                                  | `KodWaluty`                          | Currency code                                              |
-| `Podmiot1`                            | `NIP`, `Nazwa`                       | Seller tax ID and name                                     |
-| `Podmiot1` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Seller address                                             |
-| `Podmiot1` › `DaneKontaktowe`         | `Email`, `Telefon`                   | Seller contact                                             |
-| `Podmiot1`                            | `NrEORI`                             | Seller EORI number                                         |
-| `Podmiot2`                            | `NIP`, `Nazwa`                       | Buyer tax ID and name                                      |
-| `Podmiot2` › `Adres`                  | `KodKraju`, `AdresL1`, `AdresL2`     | Buyer address                                              |
-| `Podmiot2` › `DaneKontaktowe`         | `Email`                              | Buyer e-mail                                               |
-| `Podmiot2`                            | `NrKlienta`                          | Buyer customer number                                      |
-| `Fa` › `FaWiersz`                     | `NrWierszaFa`                        | Line number                                                |
-| `Fa` › `FaWiersz`                     | `P_7`                                | Item / service name                                        |
-| `Fa` › `FaWiersz`                     | `P_8A`, `P_8B`                       | Unit of measure, quantity                                  |
-| `Fa` › `FaWiersz`                     | `P_9A`, `P_9B`                       | Unit net / gross price                                     |
-| `Fa` › `FaWiersz`                     | `P_11`, `P_11A`                      | Net / gross line total                                     |
-| `Fa` › `FaWiersz`                     | `P_12`                               | VAT rate                                                   |
-| `Fa` › `FaWiersz`                     | `KursWaluty`                         | Line exchange rate                                         |
-| `Fa` › `FaWiersz`                     | `Indeks`, `GTIN`, `UU_ID`            | Item identifiers                                           |
-| `Fa`                                  | `P_13_x`, `P_14_x`                   | Net and VAT subtotals per rate                             |
-| `Fa`                                  | `P_15`                               | Total gross amount                                         |
-| `Fa` › `Platnosc`                     | `FormaPlatnosci`                     | Payment method                                             |
-| `Fa` › `Platnosc`                     | `TerminPlatnosci` / `Termin`         | Payment due date(s)                                        |
-| `Fa` › `Platnosc`                     | `Zaplacono`, `DataZaplaty`           | Paid flag / payment date                                   |
-| `Fa` › `Platnosc` › `RachunekBankowy` | `NrRB`, `NazwaBanku`, `OpisRachunku` | Bank account details                                       |
-| `Fa`                                  | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Additional notes (key–value pairs)                         |
-| `Fa`                                  | `WZ`                                 | WZ document reference                                      |
-| `Fa` › `WarunkiTransakcji` › `Umowy`  | `NrUmowy`                            | Contract number(s)                                         |
-| `Stopka` › `Rejestry`                 | `PelnaNazwa`, `REGON`, `BDO`         | Seller registry data                                       |
+| XML section                                   | Field / element                      | Description                                                              |
+| --------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| `Naglowek`                                    | `SystemInfo`                         | Issuing system name (footer)                                             |
+| _(API metadata)_                              | `KsefReferenceNumber`                | **KSeF number** (injected from API response, not from XML)               |
+| `Fa`                                          | `P_2`                                | Issuer's invoice number                                                  |
+| `Fa`                                          | `RodzajFaktury`                      | Document type (VAT, KOR, ZAL…)                                           |
+| `Fa`                                          | `P_1`                                | Issue date                                                               |
+| `Fa`                                          | `P_1M`                               | Place of issue                                                           |
+| `Fa`                                          | `P_6`                                | Delivery / service completion date                                       |
+| `Fa` › `OkresFa`                              | `P_6_Od`, `P_6_Do`                   | Settlement period (from–to)                                              |
+| `Fa` › `FakturaZaliczkowa`                    | `NrFaZaliczkowej`                    | Advance invoice number                                                   |
+| `Fa`                                          | `KodWaluty`                          | Currency code                                                            |
+| `Fa`                                          | `P_KursWaluty`                       | Invoice-level exchange rate                                              |
+| `Fa`                                          | `P_16`                               | Reverse charge — highlighted in Details                                  |
+| `Fa`                                          | `P_17`                               | Self-billing — highlighted in Details                                    |
+| `Fa`                                          | `P_18`                               | Margin scheme (code value) — highlighted in Details                      |
+| `Fa`                                          | `P_18A`                              | New means of transport — highlighted in Details                          |
+| `Fa`                                          | `P_19`, `P_19A`, `P_19B`             | VAT exemption basis, legal reference, description                        |
+| `Podmiot1`                                    | `NIP`, `Nazwa`                       | Seller tax ID and name                                                   |
+| `Podmiot1` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Seller address                                                           |
+| `Podmiot1` › `DaneKontaktowe`                 | `Email`, `Telefon`                   | Seller contact                                                           |
+| `Podmiot1`                                    | `NrEORI`                             | Seller EORI number                                                       |
+| `Podmiot2`                                    | `NIP`, `Nazwa`                       | Buyer tax ID and name                                                    |
+| `Podmiot2` › `Adres`                          | `KodKraju`, `AdresL1`, `AdresL2`     | Buyer address                                                            |
+| `Podmiot2` › `DaneKontaktowe`                 | `Email`                              | Buyer e-mail                                                             |
+| `Podmiot2`                                    | `NrKlienta`                          | Buyer customer number                                                    |
+| `Podmiot3`                                    | `NIP`, `Nazwa`, `Adres`, contact     | Third party (optional) — separate block below Seller/Buyer               |
+| `PodmiotUpowazniony`                          | `NIP`, `Nazwa`, `Adres`, contact     | Authorised entity (optional) — separate block                            |
+| `Fa` › `FaWiersz`                             | `NrWierszaFa`                        | Line number                                                              |
+| `Fa` › `FaWiersz`                             | `P_7`                                | Item / service name                                                      |
+| `Fa` › `FaWiersz`                             | `P_8A`, `P_8B`                       | Unit of measure, quantity                                                |
+| `Fa` › `FaWiersz`                             | `P_9A`, `P_9B`                       | Unit net / gross price                                                   |
+| `Fa` › `FaWiersz`                             | `P_11`, `P_11A`                      | Net / gross line total                                                   |
+| `Fa` › `FaWiersz`                             | `P_12`                               | VAT rate                                                                 |
+| `Fa` › `FaWiersz`                             | `KursWaluty`                         | Line exchange rate                                                       |
+| `Fa` › `FaWiersz`                             | `Indeks`, `GTIN`, `UU_ID`            | Item identifiers                                                         |
+| `Fa`                                          | `P_13_*`, `P_14_*`                   | Net and VAT subtotals per rate — **dynamically discovered**, all rates   |
+| `Fa`                                          | `P_14_*W`                            | Foreign-currency VAT per rate — extra column when present                |
+| `Fa`                                          | `P_15`                               | Total gross amount                                                       |
+| `Fa` › `Platnosc`                             | `FormaPlatnosci`                     | Payment method                                                           |
+| `Fa` › `Platnosc`                             | `TerminPlatnosci` / `Termin`         | Payment due date(s)                                                      |
+| `Fa` › `Platnosc`                             | `Zaplacono`, `DataZaplaty`           | Paid flag / payment date                                                 |
+| `Fa` › `Platnosc` › `RachunekBankowy`         | `NrRB`, `NazwaBanku`, `OpisRachunku` | Bank account details                                                     |
+| `Fa`                                          | `DodatkowyOpis` (`Klucz`, `Wartosc`) | Additional notes (key–value pairs)                                       |
+| `Fa`                                          | `WZ`                                 | WZ document reference                                                    |
+| `Fa` › `WarunkiTransakcji` › `Umowy`          | `NrUmowy`                            | Contract number(s)                                                       |
+| `Fa` › `WarunkiTransakcji` › `Zamowienia`     | `NrZamowienia`                       | Purchase order number(s)                                                 |
+| `Fa` › `WarunkiTransakcji`                    | `NrPartiiDostawy`                    | Delivery batch number                                                    |
+| `Fa` › `WarunkiTransakcji`                    | `Incoterms`                          | Delivery terms (EXW, CIF, DAP…)                                          |
+| `Stopka` › `Rejestry`                         | `PelnaNazwa`, `REGON`, `BDO`         | Seller registry data                                                     |
+
+---
+
+## 📋 Changelog
+
+### 0.6.1
+
+**Wykres walut / Currency chart**
+- Słupki netto + VAT: każdy słupek składa się z części netto (kolor waluty) i VAT (szary), proporcjonalnie skalowanych
+- Poprawna kolejność kolumn w tabeli faktur: netto → VAT → brutto → waluta
+- Kurs walut NBP: chipy walutowe wyświetlają aktualny kurs (np. `EUR (12) 4,2567`), pobierany z publicznego API NBP (Tabela A, cache 1 h)
+- Przeliczenie na PLN: etykiety słupków pokazują przybliżone wartości `≈ netto: X PLN / brutto: Y PLN`
+- Podsumowanie w PLN pod wykresem, reaktywne na filtr walut; `~` dla walut obcych, wartość dokładna dla PLN
+- Dynamiczny tytuł wykresu: Przychody / Koszty / Kwoty w zależności od typu podmiotu
+- Poprawna obsługa faktur korygujących: kwota VAT prawidłowo korygowana w dół
+
+**Tabela faktur / Invoice table**
+- Nowe kolumny: Kwota netto i VAT (`brutto − netto`) obok Kwoty brutto — wszystkie sortowalne
+- Kolumna VAT obliczana w walucie faktury (nie PLN)
+
+**Poprawki API / API fixes**
+- Naprawiono błąd 21405: `pageOffset` to numer strony (0-based), nie offset rekordu — `currentPage++` zamiast `currentOffset += pageSize`
+
+**PDF — nowe pola FA(3)**
+- `Podmiot3` (podmiot trzeci) — osobny blok pod Sprzedawcą/Nabywcą
+- `PodmiotUpowazniony` — podmiot upoważniony do wystawiania faktur
+- Dynamiczne wykrywanie stawek VAT: skan wszystkich `P_13_*` / `P_14_*` zamiast hardcodowanej listy — obsługuje wszystkie stawki (23%, 8%, 5%, 3%, 0%, zw, np, oo i inne)
+- `P_14_*W` — VAT w walucie obcej jako dodatkowa kolumna w tabeli stawek
+- `P_KursWaluty` — kurs waluty całej faktury w sekcji Szczegóły
+- `P_16` (odwrotne obciążenie), `P_17` (samofakturowanie), `P_18` (procedura marży), `P_18A` (nowe środki transportu) — wyróżnione adnotacje
+- `P_19` / `P_19A` / `P_19B` — podstawa i przepis zwolnienia z VAT
+- `WarunkiTransakcji`: `NrZamowienia`, `NrPartiiDostawy`, `Incoterms`
+
+---
+
+### 0.6.0
+
+- Wykres przychodów netto per waluta (opt-out)
+- Segment VAT w wykresie walutowym
+- Powiadomienia e-mail (SMTP/STARTTLS)
 
 ---
 
