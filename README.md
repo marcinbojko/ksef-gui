@@ -35,7 +35,7 @@
 | 🌐 **GUI w przeglądarce** | Interfejs lokalny dostępny bez instalacji                                                 |
 | 📄 **Eksport PDF**        | Natywny renderer (QuestPDF) — bez Node.js, git ani zewnętrznych narzędzi                  |
 | 📊 **Podsumowanie CSV**   | Zestawienie faktur za wybrany miesiąc — gotowy plik CSV (UTF-8 BOM, separator `;`)        |
-| 📈 **Wykres przychodów**  | Poziomy wykres słupkowy sum netto per waluta — widoczny przy liście faktur (opt-out)      |
+| 📈 **Wykres przychodów**  | Słupki netto + VAT per waluta z przeliczeniem na PLN (kursy NBP) — widoczny przy liście faktur (opt-out) |
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
 | 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
@@ -171,16 +171,17 @@ Po wyszukaniu faktur przycisk **Podsumowanie CSV** (widoczny na pasku narzędzi 
 
 **Kolumny w pliku:**
 
-| Kolumna          | Opis                        |
-| ---------------- | --------------------------- |
-| Data wystawienia | Data faktury (RRRR-MM-DD)   |
-| Numer faktury    | Numer nadany przez wystawcę |
-| Sprzedawca       | Nazwa sprzedawcy            |
-| NIP sprzedawcy   | NIP sprzedawcy              |
-| Nabywca          | Nazwa nabywcy               |
-| Numer KSeF       | Numer nadany przez KSeF     |
-| Waluta           | Kod waluty (ISO 4217)       |
-| Kwota brutto     | Kwota należności ogółem     |
+| Kolumna          | Opis                                      |
+| ---------------- | ----------------------------------------- |
+| Data wystawienia | Data faktury (RRRR-MM-DD)                 |
+| Numer faktury    | Numer nadany przez wystawcę               |
+| Sprzedawca       | Nazwa sprzedawcy                          |
+| NIP sprzedawcy   | NIP sprzedawcy                            |
+| Nabywca          | Nazwa nabywcy                             |
+| Numer KSeF       | Numer nadany przez KSeF                   |
+| Waluta           | Kod waluty (ISO 4217)                     |
+| Kwota netto      | Suma netto w walucie faktury              |
+| Kwota brutto     | Kwota należności ogółem w walucie faktury |
 
 Na końcu pliku dodawane są sumy brutto pogrupowane według waluty.
 
@@ -188,11 +189,29 @@ Na końcu pliku dodawane są sumy brutto pogrupowane według waluty.
 
 > Podsumowanie generowane jest z danych w lokalnym cache — nie wymaga dodatkowego połączenia z KSeF.
 
-### 📈 Wykres przychodów
+### 📈 Wykres przychodów / kosztów
 
-Po wyszukaniu faktur panel filtrowania walut wyświetla poziomy wykres słupkowy z sumami netto per waluta. Wykres jest widoczny automatycznie gdy lista faktur zawiera dane; można go wyłączyć w **Preferencjach** (checkbox **Pokaż wykres przychodów**).
+Po wyszukaniu faktur panel filtrowania walut wyświetla poziomy wykres słupkowy z sumami **netto + VAT** per waluta. Wykres jest widoczny automatycznie gdy lista faktur zawiera dane; można go wyłączyć w **Preferencjach** (checkbox **Pokaż wykres netto + VAT**).
 
-Kwoty wyświetlane są w formacie polskim (np. `1 234 567,89`). Słupki posortowane są malejąco według wartości.
+Tytuł wykresu zmienia się w zależności od wybranego typu podmiotu: _Przychody netto + VAT_ dla Sprzedawcy, _Koszty netto + VAT_ dla Nabywcy, _Kwoty netto + VAT_ dla pozostałych.
+
+**Każdy słupek:**
+- Część kolorowa = suma netto w walucie faktury
+- Część szara = suma VAT (`brutto − netto`) w tej samej walucie
+- Długości słupków proporcjonalne do największej wartości brutto — słupki małych walut wyświetlane z minimalną widoczną szerokością z zachowaniem proporcji netto/VAT
+- Etykieta: `netto + VAT ≈ netto: X PLN / brutto: Y PLN` (przeliczenie kursami NBP)
+- Tooltip (po najechaniu myszą): wartości netto, VAT i brutto danej waluty
+
+**Filtry walut** (chipsy nad wykresem):
+- Kliknięcie chipu filtruje listę faktur do wybranej waluty
+- Każdy chip wyświetla aktualny kurs NBP (np. `EUR (12) 4,2567`)
+
+**Podsumowanie w PLN** (pod słupkami):
+- Reaguje na aktywny filtr walut — sumuje tylko zaznaczone waluty (lub wszystkie gdy brak filtru)
+- Dla walut obcych: `~ łącznie netto: X PLN / brutto: Y PLN` (znak `~` oznacza wartość przybliżoną)
+- Dla wyłącznie PLN: wartość dokładna (bez `~`)
+
+**Kursy walut** pobierane są automatycznie z publicznego API NBP (Tabela A, kursy średnie), cache 1 godzina. Jeśli kursy nie są jeszcze dostępne, PLN-przeliczenia są pomijane bez wpływu na działanie wykresu.
 
 > Wykres generowany jest z danych w lokalnym cache — nie wymaga połączenia z KSeF.
 
@@ -405,7 +424,7 @@ Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowa
 | 🌐 **Browser GUI**         | Local interface, no installation needed                                                     |
 | 📄 **PDF export**          | Native renderer (QuestPDF) — no Node.js, git, or external tools                             |
 | 📊 **Monthly CSV summary** | One-click invoice summary for a selected month — Excel-ready CSV (UTF-8 BOM, `;` separator) |
-| 📈 **Income chart**        | Horizontal bar chart of net totals by currency, shown alongside the invoice list (opt-out)  |
+| 📈 **Income/cost chart**   | Net + VAT stacked bars by currency with NBP exchange rate conversion to PLN (opt-out)       |
 | 🔄 **Auto-refresh**        | Background search every N minutes; OS notifications for new invoices                        |
 | 🔔 **Notifications**       | OS desktop notifications, Slack / Teams webhooks, and e-mail (SMTP) per profile             |
 | 💾 **SQLite cache**        | Search results stored locally; profile switching without re-fetching                        |
@@ -541,16 +560,17 @@ After searching, the **Podsumowanie CSV** button (visible in the toolbar next to
 
 **Columns:**
 
-| Column           | Description                     |
-| ---------------- | ------------------------------- |
-| Data wystawienia | Invoice issue date (YYYY-MM-DD) |
-| Numer faktury    | Issuer's invoice number         |
-| Sprzedawca       | Seller name                     |
-| NIP sprzedawcy   | Seller tax ID (NIP)             |
-| Nabywca          | Buyer name                      |
-| Numer KSeF       | KSeF-assigned reference number  |
-| Waluta           | Currency code (ISO 4217)        |
-| Kwota brutto     | Total gross amount              |
+| Column           | Description                             |
+| ---------------- | --------------------------------------- |
+| Data wystawienia | Invoice issue date (YYYY-MM-DD)         |
+| Numer faktury    | Issuer's invoice number                 |
+| Sprzedawca       | Seller name                             |
+| NIP sprzedawcy   | Seller tax ID (NIP)                     |
+| Nabywca          | Buyer name                              |
+| Numer KSeF       | KSeF-assigned reference number          |
+| Waluta           | Currency code (ISO 4217)                |
+| Kwota netto      | Net amount in the invoice's currency    |
+| Kwota brutto     | Total gross amount in invoice's currency |
 
 A per-currency gross total is appended at the end of the file.
 
@@ -558,11 +578,29 @@ A per-currency gross total is appended at the end of the file.
 
 > The summary is generated from the local cache — no additional KSeF connection is required.
 
-### 📈 Income chart
+### 📈 Income / cost chart
 
-After searching, the currency filter panel displays a horizontal bar chart of net totals per currency. The chart appears automatically when invoice data is available; it can be disabled in **Preferences** (the **Show income chart** checkbox).
+After searching, the currency filter panel displays a horizontal bar chart of **net + VAT** stacked totals per currency. The chart appears automatically when invoice data is available; it can be disabled in **Preferences** (the **Show net + VAT chart** checkbox).
 
-Amounts are formatted using Polish locale conventions (e.g. `1 234 567,89`). Bars are sorted descending by value.
+The chart title adapts to the subject type: _Przychody netto + VAT_ (income) for Seller, _Koszty netto + VAT_ (costs) for Buyer, _Kwoty netto + VAT_ (amounts) for others.
+
+**Each bar:**
+- Coloured segment = net total in the invoice's currency
+- Grey segment = VAT total (`gross − net`) in the same currency; proportional to the net segment
+- Bars scale proportionally to the largest gross value; small currencies maintain correct net/VAT ratio
+- Label: `net + VAT ≈ net: X PLN / gross: Y PLN` (converted at current NBP rates)
+- Tooltip on hover: net, VAT and gross values for that currency
+
+**Currency chips** (above the chart):
+- Click to filter the invoice list to a single currency
+- Each chip shows the current NBP exchange rate (e.g. `EUR (12) 4.2567`)
+
+**PLN summary** (below the bars):
+- Reacts to active currency filter — sums only selected currencies (or all if no filter)
+- For foreign currencies: `~ łącznie netto: X PLN / brutto: Y PLN` (the `~` indicates approximation)
+- For PLN-only: exact total without `~`
+
+**Exchange rates** are fetched automatically from the public NBP API (Table A, mid rates), cached for 1 hour. If rates are unavailable, PLN conversions are silently skipped without affecting chart display.
 
 > The chart is generated from the local cache — no KSeF connection required.
 
@@ -759,6 +797,36 @@ Fields extracted from KSeF invoice XML (FA(3) schema) and included in the genera
 | `Fa`                                  | `WZ`                                 | WZ document reference                                      |
 | `Fa` › `WarunkiTransakcji` › `Umowy`  | `NrUmowy`                            | Contract number(s)                                         |
 | `Stopka` › `Rejestry`                 | `PelnaNazwa`, `REGON`, `BDO`         | Seller registry data                                       |
+
+---
+
+## 📋 Changelog
+
+### 0.6.1
+
+**Wykres walut / Currency chart**
+- Słupki netto + VAT: każdy słupek składa się z części netto (kolor waluty) i VAT (szary), proporcjonalnie skalowanych
+- Poprawna kolejność kolumn w tabeli faktur: netto → VAT → brutto → waluta
+- Kurs walut NBP: chipy walutowe wyświetlają aktualny kurs (np. `EUR (12) 4,2567`), pobierany z publicznego API NBP (Tabela A, cache 1 h)
+- Przeliczenie na PLN: etykiety słupków pokazują przybliżone wartości `≈ netto: X PLN / brutto: Y PLN`
+- Podsumowanie w PLN pod wykresem, reaktywne na filtr walut; `~` dla walut obcych, wartość dokładna dla PLN
+- Dynamiczny tytuł wykresu: Przychody / Koszty / Kwoty w zależności od typu podmiotu
+- Poprawna obsługa faktur korygujących: kwota VAT prawidłowo korygowana w dół
+
+**Tabela faktur / Invoice table**
+- Nowe kolumny: Kwota netto i VAT (`brutto − netto`) obok Kwoty brutto — wszystkie sortowalne
+- Kolumna VAT obliczana w walucie faktury (nie PLN)
+
+**Poprawki API / API fixes**
+- Naprawiono błąd 21405: `pageOffset` to numer strony (0-based), nie offset rekordu — `currentPage++` zamiast `currentOffset += pageSize`
+
+---
+
+### 0.6.0
+
+- Wykres przychodów netto per waluta (opt-out)
+- Segment VAT w wykresie walutowym
+- Powiadomienia e-mail (SMTP/STARTTLS)
 
 ---
 

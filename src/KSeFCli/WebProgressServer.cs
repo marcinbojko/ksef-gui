@@ -722,11 +722,17 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 .hbar-track{flex:1;background:#e8e8e8;border-radius:3px;height:10px;overflow:hidden;display:flex;align-items:stretch}
 .hbar-fill{transition:width .35s}
 .hbar-amt{font-size:.88rem;color:#555;white-space:nowrap;min-width:10rem;text-align:right;flex-shrink:0}
+.hbar-pln{font-size:.78rem;color:#999;margin-left:.3rem}
+.hbar-summary{font-size:.8rem;color:#666;margin-top:.4rem;padding-top:.35rem;border-top:1px solid #e0e0e0}
+.hbar-summary b{color:#444}
+.hbar-summary-warn{color:#e57373;font-size:.75rem}
+.hbar-summary-wait{font-style:italic;color:#aaa}
 .hbar-chart-title{font-size:.75rem;color:#888;font-weight:600;margin-bottom:.1rem}
 .chip{display:inline-flex;align-items:center;padding:.25rem .7rem;border-radius:16px;font-size:.78rem;cursor:pointer;border:1.5px solid #bbb;background:#fff;color:#555;transition:all .15s;user-select:none}
 .chip:hover{border-color:#888}
 .chip.active{background:#1976d2;color:#fff;border-color:#1976d2}
 .chip .chip-count{margin-left:.3rem;opacity:.7;font-size:.7rem}
+.chip .chip-rate{margin-left:.35rem;font-size:.68rem;opacity:.6;font-variant-numeric:tabular-nums}
 .btn-details{background:none;border:1px solid #bbb;border-radius:4px;padding:.15rem .4rem;font-size:.75rem;cursor:pointer;color:#666;white-space:nowrap}
 .btn-details:hover{border-color:#1976d2;color:#1976d2;background:#e3f2fd}
 .btn-preview{background:none;border:1px solid #bbb;border-radius:4px;padding:.15rem .4rem;font-size:.75rem;cursor:pointer;color:#666;white-space:nowrap}
@@ -823,6 +829,9 @@ body.dark .filter-label{color:#aaa}
 body.dark .filter-chart{border-top-color:#2a2a2a}
 body.dark .hbar-track{background:#333}
 body.dark .hbar-amt{color:#aaa}
+body.dark .hbar-pln{color:#666}
+body.dark .hbar-summary{color:#888;border-top-color:#333}
+body.dark .hbar-summary b{color:#bbb}
 body.dark .hbar-chart-title{color:#666}
 body.dark .chip{background:#2a2a2a;border-color:#555;color:#ccc}
 body.dark .chip:hover{border-color:#888}
@@ -1258,6 +1267,8 @@ const profileBadges = {}; // profileName → unread new-invoice count for dropdo
 let knownInvoiceKsefNumbers = null; // null = not yet baselined; Set after first search
 let lastSearchParams = null;        // params of last successful search; null = no search yet
 let showIncomeChart = true;         // opt-out pref — read from /prefs on load
+let fxRates = {};                   // { EUR: 4.25, HUF: 0.011, ... } — PLN per 1 unit, fetched from NBP
+let fxRatesFetchedAt = 0;           // epoch ms of last successful fetch
 
 // Set default month to current month and keep Od/Do consistent
 (function initDates() {
@@ -1309,6 +1320,7 @@ async function loadCachedInvoices() {
       knownInvoiceKsefNumbers = new Set(invoices.map(i => i.ksefNumber));
     }
     buildCurrencyFilter();
+    refreshExchangeRates(); // async — re-renders chart with PLN equivalents when rates arrive
     displayAll = false;
     currentPage = 0;
     renderTable();
@@ -1910,6 +1922,27 @@ function fmtAmt(v) {
   return v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Fetches daily average exchange rates from NBP Table A (CORS-open public API).
+// Caches for 1 hour — NBP rates are updated once per business day.
+// On success re-renders the currency filter bar so PLN equivalents appear without a page reload.
+async function refreshExchangeRates() {
+  if (Date.now() - fxRatesFetchedAt < 3_600_000) { return; }
+  try {
+    const res = await fetch('https://api.nbp.pl/api/exchangerates/tables/A/?format=json', { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) { return; }
+    const data = await res.json();
+    const updated = {};
+    for (const rate of data[0].rates) { updated[rate.code] = rate.mid; }
+    updated['PLN'] = 1;
+    fxRates = updated;
+    fxRatesFetchedAt = Date.now();
+    console.log('[FX] NBP rates refreshed:', Object.keys(fxRates).length, 'currencies, effective', data[0].effectiveDate);
+    buildCurrencyFilter(); // re-render so PLN equivalents appear immediately
+  } catch (e) {
+    console.warn('[FX] NBP rate fetch failed:', e.message);
+  }
+}
+
 function buildCurrencyFilter() {
   const counts = {}, netTotals = {}, vatTotals = {};
   for (const inv of invoices) {
@@ -1941,7 +1974,8 @@ function buildCurrencyFilter() {
     html += '<div class="filter-chips-row"><span class="filter-label">Waluta:</span>';
     for (const c of currencies) {
       const active = activeCurrencies.has(c) ? ' active' : '';
-      html += '<span class="chip' + active + '" onclick="toggleCurrency(\'' + c + '\')">' + c + '<span class="chip-count">(' + counts[c] + ')</span></span>';
+      const rate = c !== 'PLN' && fxRates[c] ? '<span class="chip-rate">' + fxRates[c].toFixed(4) + '</span>' : '';
+      html += '<span class="chip' + active + '" onclick="toggleCurrency(\'' + c + '\')">' + c + '<span class="chip-count">(' + counts[c] + ')</span>' + rate + '</span>';
     }
     html += '</div>';
   }
@@ -1974,10 +2008,33 @@ function buildCurrencyFilter() {
           '<div class="hbar-fill" style="width:' + netPct + '%;flex-shrink:0;background:' + color + '"></div>' +
           (vat > 0 ? '<div class="hbar-fill" style="' + vatStyle + '"></div>' : '') +
         '</div>' +
-        '<span class="hbar-amt">' + fmtAmt(net) + ' + ' + fmtAmt(vat) + ' VAT</span>' +
+        '<span class="hbar-amt">' + fmtAmt(net) + ' + ' + fmtAmt(vat) + ' VAT' +
+          (cur !== 'PLN' && fxRates[cur] ? ' <span class="hbar-pln">≈ netto: ' + fmtAmt(net * fxRates[cur]) + ' / brutto: ' + fmtAmt(gross * fxRates[cur]) + ' PLN</span>' : '') +
+        '</span>' +
         '</div>';
     });
-    html += '<div class="filter-chart"><div class="hbar-chart-title">' + chartTitle + '</div>' + barsHtml + '</div>';
+
+    // Summary row — totals in PLN for selected currencies (all when no filter active)
+    const summaryEntries = entries.filter(([c]) => activeCurrencies.size === 0 || activeCurrencies.has(c));
+    let totalNetPln = 0, totalGrossPln = 0, missingRate = false, hasNonPln = false;
+    for (const [c, net] of summaryEntries) {
+      const vat = vatTotals[c] || 0;
+      const rate = c === 'PLN' ? 1 : (fxRates[c] || null);
+      if (c !== 'PLN') { hasNonPln = true; }
+      if (rate == null) { missingRate = true; continue; }
+      totalNetPln += net * rate;
+      totalGrossPln += (net + vat) * rate;
+    }
+    let summaryHtml = '';
+    if (hasNonPln && Object.keys(fxRates).length === 0) {
+      summaryHtml = '<div class="hbar-summary hbar-summary-wait">Oczekiwanie na kursy NBP…</div>';
+    } else if (summaryEntries.length > 0) {
+      const prefix = hasNonPln ? '~ ' : '';
+      const missing = missingRate ? ' <span class="hbar-summary-warn">(brak kursu dla niektórych walut)</span>' : '';
+      summaryHtml = '<div class="hbar-summary">' + prefix + 'łącznie netto: <b>' + fmtAmt(totalNetPln) + ' PLN</b>'
+        + ' / brutto: <b>' + fmtAmt(totalGrossPln) + ' PLN</b>' + missing + '</div>';
+    }
+    html += '<div class="filter-chart"><div class="hbar-chart-title">' + chartTitle + '</div>' + barsHtml + summaryHtml + '</div>';
   }
 
   filterBar.innerHTML = html;
@@ -2007,13 +2064,16 @@ function renderTable() {
     {key:'issueDate', label:'Data wystawienia'},
     {key:'sellerName', label:'Sprzedawca'},
     {key:'buyerName', label:'Nabywca'},
+    {key:'netAmount', label:'Kwota netto', cls:'amount'},
+    {key:'_vat', label:'VAT', cls:'amount'},
     {key:'grossAmount', label:'Kwota brutto', cls:'amount'},
     {key:'currency', label:'Waluta'},
   ];
   let sorted = [...getFilteredInvoices()];
   if (sortCol !== null) {
     sorted.sort((a,b) => {
-      let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+      let va = sortCol === '_vat' ? ((a.grossAmount ?? 0) - (a.netAmount ?? 0)) : (a[sortCol] ?? '');
+      let vb = sortCol === '_vat' ? ((b.grossAmount ?? 0) - (b.netAmount ?? 0)) : (b[sortCol] ?? '');
       if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
       va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
@@ -2056,6 +2116,9 @@ function renderTable() {
     html += '<td>' + date + '</td>';
     html += '<td class="col-name" title="NIP: ' + (inv.sellerNip||'') + '">' + (inv.sellerName||'') + '</td>';
     html += '<td class="col-name">' + (inv.buyerName||'') + '</td>';
+    const vat = (inv.grossAmount != null && inv.netAmount != null) ? inv.grossAmount - inv.netAmount : null;
+    html += '<td class="amount">' + (inv.netAmount != null ? inv.netAmount.toFixed(2) : '') + '</td>';
+    html += '<td class="amount">' + (vat != null ? vat.toFixed(2) : '') + '</td>';
     html += '<td class="amount">' + (inv.grossAmount != null ? inv.grossAmount.toFixed(2) : '') + '</td>';
     html += '<td>' + (inv.currency||'') + '</td>';
     html += '</tr>';
@@ -2347,6 +2410,7 @@ async function doSearch() {
       setStatus('Znaleziono ' + total + ' faktur.', total > 0 ? 'info' : 'idle');
     }
     buildCurrencyFilter();
+    refreshExchangeRates(); // async — re-renders chart with PLN equivalents when rates arrive
     displayAll = false;
     currentPage = 0;
     renderTable();
