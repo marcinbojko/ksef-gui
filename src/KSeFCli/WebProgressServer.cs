@@ -1269,6 +1269,8 @@ let lastSearchParams = null;        // params of last successful search; null = 
 let showIncomeChart = true;         // opt-out pref — read from /prefs on load
 let fxRates = {};                   // { EUR: 4.25, HUF: 0.011, ... } — PLN per 1 unit, fetched from NBP
 let fxRatesFetchedAt = 0;           // epoch ms of last successful fetch
+let fxRatesFetchInProgress = false; // true while the NBP request is in-flight
+let fxRatesFetchFailed = false;     // true after a failed fetch (distinct from "never fetched")
 
 // Set default month to current month and keep Od/Do consistent
 (function initDates() {
@@ -1927,19 +1929,26 @@ function fmtAmt(v) {
 // On success re-renders the currency filter bar so PLN equivalents appear without a page reload.
 async function refreshExchangeRates() {
   if (Date.now() - fxRatesFetchedAt < 3_600_000) { return; }
+  if (fxRatesFetchInProgress) { return; }
+  fxRatesFetchInProgress = true;
   try {
     const res = await fetch('https://api.nbp.pl/api/exchangerates/tables/A/?format=json', { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) { return; }
+    if (!res.ok) { fxRatesFetchFailed = true; buildCurrencyFilter(); return; }
     const data = await res.json();
     const updated = {};
     for (const rate of data[0].rates) { updated[rate.code] = rate.mid; }
     updated['PLN'] = 1;
     fxRates = updated;
     fxRatesFetchedAt = Date.now();
+    fxRatesFetchFailed = false;
     console.log('[FX] NBP rates refreshed:', Object.keys(fxRates).length, 'currencies, effective', data[0].effectiveDate);
     buildCurrencyFilter(); // re-render so PLN equivalents appear immediately
   } catch (e) {
+    fxRatesFetchFailed = true;
     console.warn('[FX] NBP rate fetch failed:', e.message);
+    buildCurrencyFilter();
+  } finally {
+    fxRatesFetchInProgress = false;
   }
 }
 
@@ -2002,8 +2011,11 @@ function buildCurrencyFilter() {
       const color = colorMap[cur] || CHART_PALETTE[0];
       // Negative net (corrections dominate): render muted bar, label shows sign
       const barColor = isNeg ? '#ef9a9a' : color; // red-200 for net-negative currencies
-      const netPct = Math.max(MIN_PCT, (absNet / maxVal) * 100);
-      const vatPct = absNet > 0 ? Math.min((absVat / absNet) * netPct, 100 - netPct) : 0;
+      // Clamp the total bar (net+vat together) to MIN_PCT, then split proportionally.
+      // This prevents a fake net bar when absNet===0 (e.g. cancellation-only currencies).
+      const totalPct = Math.max(MIN_PCT, ((absNet + absVat) / maxVal) * 100);
+      const netPct = absNet === 0 ? 0 : (absNet / (absNet + absVat || 1)) * totalPct;
+      const vatPct = totalPct - netPct;
       const tooltip = cur + ': netto ' + fmtAmt(net) + ', VAT ' + fmtAmt(vat) + ', brutto ' + fmtAmt(gross);
       const vatStyle = 'width:' + vatPct + '%;flex-shrink:0;background:' + VAT_COLOR;
       barsHtml += '<div class="hbar-row" title="' + tooltip + '">' +
@@ -2032,7 +2044,11 @@ function buildCurrencyFilter() {
     }
     let summaryHtml = '';
     const allRatesMissing = hasNonPln && missingRate && !convertedAny;
-    if (hasNonPln && Object.keys(fxRates).length === 0) {
+    if (hasNonPln && fxRatesFetchInProgress) {
+      summaryHtml = '<div class="hbar-summary hbar-summary-wait">Oczekiwanie na kursy NBP…</div>';
+    } else if (hasNonPln && fxRatesFetchFailed && Object.keys(fxRates).length === 0) {
+      summaryHtml = '<div class="hbar-summary hbar-summary-warn">Nie udało się pobrać kursów NBP</div>';
+    } else if (hasNonPln && Object.keys(fxRates).length === 0) {
       summaryHtml = '<div class="hbar-summary hbar-summary-wait">Oczekiwanie na kursy NBP…</div>';
     } else if (allRatesMissing) {
       summaryHtml = '<div class="hbar-summary hbar-summary-wait">Brak kursów NBP dla wybranych walut</div>';
