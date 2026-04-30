@@ -2,7 +2,7 @@
 
 <img src="src/KSeFCli/app.png" width="96" alt="ksefcli logo" />
 
-# ksefcli
+# ksef-gui
 
 **Klient KSeF ze wbudowanym interfejsem przeglądarkowym**<br/>
 **KSeF client with a built-in browser GUI**
@@ -26,7 +26,7 @@
 
 > **Fork** projektu [kamilcuk/ksefcli](https://github.com/kamilcuk/ksefcli) autorstwa [Kamila Cukrowskiego](https://github.com/kamilcuk). Oryginalne repozytorium zawiera wersję CLI; ten fork dodaje rozbudowany interfejs przeglądarkowy i dodatkowe funkcje.
 
-`ksefcli` to narzędzie do pobierania faktur z **Krajowego Systemu e-Faktur (KSeF)**. Oprócz CLI posiada wbudowany interfejs przeglądarkowy uruchamiany lokalnie — bez instalowania dodatkowego oprogramowania.
+`ksefcli` to narzędzie do pobierania faktur z **Krajowego Systemu e-Faktur (KSeF)**. Oprócz CLI posiada wbudowany interfejs przeglądarkowy uruchamiany lokalnie (KSEF Gui) — bez instalowania dodatkowego oprogramowania.
 
 ### ✨ Cechy
 
