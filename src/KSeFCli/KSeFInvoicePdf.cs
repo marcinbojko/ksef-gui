@@ -604,6 +604,7 @@ internal static class KSeFInvoiceSanitizer
         WZ = Text(d.WZ),
         NrUmowy = d.NrUmowy.Select(u => Text(u) ?? "").ToList(),
         NrFaZaliczkowej = Text(d.NrFaZaliczkowej),
+        ProceduraMarzy = Text(d.ProceduraMarzy),
         PodstawaZwolnienia = Text(d.PodstawaZwolnienia),
         PodstawaZwolnieniaA = Text(d.PodstawaZwolnieniaA),
         PodstawaZwolnieniaB = Text(d.PodstawaZwolnieniaB),
@@ -1526,7 +1527,7 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                         h.Cell().Background(Blue).Padding(3)
                             .Text(t).FontSize(6.5f).Bold().FontColor(Colors.White);
                     Th("Lp."); Th("Stawka podatku"); Th("Kwota netto");
-                    Th("Kwota podatku");
+                    Th(hasVatW ? "VAT (PLN)" : "Kwota podatku");
                     if (hasVatW) { Th($"VAT ({d.Waluta})"); }
                     Th("Kwota brutto");
                 });

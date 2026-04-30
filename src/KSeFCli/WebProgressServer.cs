@@ -2020,7 +2020,7 @@ function buildCurrencyFilter() {
 
     // Summary row — totals in PLN for selected currencies (all when no filter active)
     const summaryEntries = entries.filter(([c]) => activeCurrencies.size === 0 || activeCurrencies.has(c));
-    let totalNetPln = 0, totalGrossPln = 0, missingRate = false, hasNonPln = false;
+    let totalNetPln = 0, totalGrossPln = 0, missingRate = false, hasNonPln = false, convertedAny = false;
     for (const [c, net] of summaryEntries) {
       const vat = vatTotals[c] || 0;
       const rate = c === 'PLN' ? 1 : (fxRates[c] || null);
@@ -2028,9 +2028,10 @@ function buildCurrencyFilter() {
       if (rate == null) { missingRate = true; continue; }
       totalNetPln += net * rate;
       totalGrossPln += (net + vat) * rate;
+      convertedAny = true;
     }
     let summaryHtml = '';
-    const allRatesMissing = hasNonPln && missingRate && totalNetPln === 0 && totalGrossPln === 0;
+    const allRatesMissing = hasNonPln && missingRate && !convertedAny;
     if (hasNonPln && Object.keys(fxRates).length === 0) {
       summaryHtml = '<div class="hbar-summary hbar-summary-wait">Oczekiwanie na kursy NBP…</div>';
     } else if (allRatesMissing) {
