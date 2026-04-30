@@ -2030,8 +2030,11 @@ function buildCurrencyFilter() {
       totalGrossPln += (net + vat) * rate;
     }
     let summaryHtml = '';
+    const allRatesMissing = hasNonPln && missingRate && totalNetPln === 0 && totalGrossPln === 0;
     if (hasNonPln && Object.keys(fxRates).length === 0) {
       summaryHtml = '<div class="hbar-summary hbar-summary-wait">Oczekiwanie na kursy NBP…</div>';
+    } else if (allRatesMissing) {
+      summaryHtml = '<div class="hbar-summary hbar-summary-wait">Brak kursów NBP dla wybranych walut</div>';
     } else if (summaryEntries.length > 0) {
       const prefix = hasNonPln ? '~ ' : '';
       const missing = missingRate ? ' <span class="hbar-summary-warn">(brak kursu dla niektórych walut)</span>' : '';

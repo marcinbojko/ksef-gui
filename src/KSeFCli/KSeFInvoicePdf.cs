@@ -207,7 +207,7 @@ internal static class KSeFInvoiceParser
         // VAT summary — dynamic scan of all P_13_* present in Fa (schema-driven, no hardcoded rate list)
         List<VatRow> vatRows = fa.Elements()
             .Where(e => e.Name.LocalName.StartsWith("P_13_", StringComparison.Ordinal))
-            .OrderBy(e => e.Name.LocalName, StringComparer.Ordinal)
+            .OrderBy(e => int.TryParse(e.Name.LocalName["P_13_".Length..], out int n) ? n : int.MaxValue)
             .Select(e =>
             {
                 string suffix = e.Name.LocalName["P_13_".Length..];
@@ -1535,8 +1535,11 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                 {
                     string bg = i % 2 == 0 ? Colors.White : LightGray;
                     decimal net = Parse(row.Net);
-                    // Use VatW (invoice currency) when present; fall back to Vat (PLN) for PLN invoices
-                    decimal vatForBrutto = !string.IsNullOrEmpty(row.VatW) ? Parse(row.VatW) : Parse(row.Vat);
+                    // VatW = VAT in invoice currency; Vat = PLN-recalculated.
+                    // Only fall back to Vat when the invoice is in PLN — never add PLN VAT to a foreign-currency net.
+                    decimal vatForBrutto = !string.IsNullOrEmpty(row.VatW) ? Parse(row.VatW)
+                        : d.Waluta == "PLN" ? Parse(row.Vat)
+                        : 0m;
                     string brutto = (net + vatForBrutto).ToString("F2", CultureInfo.InvariantCulture);
 
                     table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(BorderGray).Padding(3)
