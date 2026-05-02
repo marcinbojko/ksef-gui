@@ -856,7 +856,7 @@ Fields extracted from KSeF invoice XML (FA(3) schema) and included in the genera
 
 ## 📋 Changelog
 
-### 0.6.2 (unreleased)
+### 0.6.2
 
 **⚠️ Breaking change — struktura katalogów**
 - Faktury zapisywane są teraz w podkatalogu według typu podmiotu: `katalog/[NIP/]sprzedawca|nabywca|podmiot3|uprawniony/`

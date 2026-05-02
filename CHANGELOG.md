@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.2] — unreleased
+## [0.6.2] — 2026-05-02
 
 ### ⚠️ Breaking Changes
 
@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.6.1] — 2025-05-02
+## [0.6.1] — 2026-04-30
 
 ### Added
 - NBP exchange rate integration: currency chips show live mid-rate from NBP Table A (1 h cache)
