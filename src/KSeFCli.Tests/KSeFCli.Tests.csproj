@@ -23,7 +23,7 @@
     <ProjectReference Include="../KSeFCli/KSeFCli.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Update="TestData/sample-invoice.xml">
+    <None Update="TestData/*.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

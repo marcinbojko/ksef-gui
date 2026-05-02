@@ -1514,12 +1514,12 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
             {
                 table.ColumnsDefinition(cols =>
                 {
-                    cols.ConstantColumn(18);  // Lp
-                    cols.ConstantColumn(55);  // Stawka
-                    cols.ConstantColumn(70);  // Netto
-                    cols.ConstantColumn(60);  // VAT (PLN)
-                    if (hasVatW) { cols.ConstantColumn(60); } // VAT walutowy
-                    cols.ConstantColumn(70);  // Brutto
+                    cols.ConstantColumn(18);   // Lp — fixed, narrow
+                    cols.ConstantColumn(50);   // Stawka — fixed, narrow
+                    cols.RelativeColumn(3);    // Netto — proportional
+                    cols.RelativeColumn(3);    // VAT (PLN) — proportional
+                    if (hasVatW) { cols.RelativeColumn(3); } // VAT walutowy — proportional, only when present
+                    cols.RelativeColumn(3);    // Brutto — proportional
                 });
                 table.Header(h =>
                 {

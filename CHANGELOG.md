@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.4] — 2026-05-02
+
+### Fixed
+
+- PDF generation crash (`DocumentLayoutException`) when downloading foreign-currency invoices (EUR, CZK, etc.) that have a VAT-in-invoice-currency column (`P_14_*W`); the VAT summary table now uses proportional columns that fit regardless of how many columns are present
+
+### Tests
+
+- Added PDF render tests for 6 common invoice scenarios: PLN baseline, EUR with foreign-currency VAT column, Podmiot3 (third party), reverse charge (P_16/P_17), multiple VAT rates (23%/8%/5%/np), correction invoice (KOR) with negative amounts
+- Added currency render tests for 18 currencies including exotic cases (BHD, KWD, IQD, IDR, VND, XAU, XDR, XXX) to verify PDF layout handles extreme values and unusual currency codes
+- Test project now copies all `TestData/*.xml` files to output directory
+
+### CI
+
+- Updated `actions/upload-artifact` from v4 to v7 (Node.js 20 → 24, required before June 2026)
+- Updated `dorny/test-reporter` from v2 to v3 (Node.js 20 → 24)
+
+---
+
 ## [0.6.3] — 2026-05-02
 
 ### Security
