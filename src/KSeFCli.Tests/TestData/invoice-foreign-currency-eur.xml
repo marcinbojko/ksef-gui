@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Scenario: EUR invoice with VatW column (P_14_1W) — was crashing before fix -->
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (2)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>2</WariantFormularza>
+    <DataWytworzeniaFa>2024-04-01T10:00:00</DataWytworzeniaFa>
+    <SystemInfo>TestSystem v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>1234567890</NIP>
+      <Nazwa>Sprzedawca EUR Sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Exportowa 1</AdresL1>
+      <AdresL2>00-001 Warszawa</AdresL2>
+    </Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <NIP>DE123456789</NIP>
+      <Nazwa>German Buyer GmbH</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>DE</KodKraju>
+      <AdresL1>Musterstraße 10</AdresL1>
+      <AdresL2>10115 Berlin</AdresL2>
+    </Adres>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>EUR</KodWaluty>
+    <P_KursWaluty>4.2500</P_KursWaluty>
+    <P_1>2024-04-01</P_1>
+    <P_2>FV/2024/04/EUR/001</P_2>
+    <RodzajFaktury>VAT</RodzajFaktury>
+    <P_6>2024-04-01</P_6>
+    <FaWiersz>
+      <NrWierszaFa>1</NrWierszaFa>
+      <P_7>Software development service</P_7>
+      <P_8A>h</P_8A>
+      <P_8B>20</P_8B>
+      <P_9A>100.00</P_9A>
+      <P_11>2000.00</P_11>
+      <P_12>23</P_12>
+      <KursWaluty>4.2500</KursWaluty>
+    </FaWiersz>
+    <P_13_1>2000.00</P_13_1>
+    <P_14_1>8500.00</P_14_1>
+    <P_14_1W>460.00</P_14_1W>
+    <P_15>2460.00</P_15>
+    <Platnosc>
+      <FormaPlatnosci>6</FormaPlatnosci>
+      <TerminPlatnosci>
+        <Termin>2024-04-15</Termin>
+      </TerminPlatnosci>
+    </Platnosc>
+  </Fa>
+</Faktura>

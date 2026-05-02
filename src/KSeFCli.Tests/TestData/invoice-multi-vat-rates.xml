@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Scenario: Multiple VAT rates — dynamic P_13_* scan (23%, 8%, 5%, np) -->
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (2)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>2</WariantFormularza>
+    <DataWytworzeniaFa>2024-04-04T10:00:00</DataWytworzeniaFa>
+    <SystemInfo>TestSystem v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>1234567890</NIP>
+      <Nazwa>Sprzedawca Mix-VAT Sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Mieszana 1</AdresL1>
+      <AdresL2>00-001 Warszawa</AdresL2>
+    </Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <NIP>9876543210</NIP>
+      <Nazwa>Nabywca S.A.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Nabywców 2</AdresL1>
+      <AdresL2>31-001 Kraków</AdresL2>
+    </Adres>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2024-04-04</P_1>
+    <P_2>FV/2024/04/004</P_2>
+    <RodzajFaktury>VAT</RodzajFaktury>
+    <FaWiersz>
+      <NrWierszaFa>1</NrWierszaFa>
+      <P_7>Usługa doradcza 23%</P_7>
+      <P_8A>godz</P_8A>
+      <P_8B>5</P_8B>
+      <P_9A>200.00</P_9A>
+      <P_11>1000.00</P_11>
+      <P_12>23</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>2</NrWierszaFa>
+      <P_7>Jedzenie 8%</P_7>
+      <P_8A>szt</P_8A>
+      <P_8B>10</P_8B>
+      <P_9A>50.00</P_9A>
+      <P_11>500.00</P_11>
+      <P_12>8</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>3</NrWierszaFa>
+      <P_7>Książka 5%</P_7>
+      <P_8A>szt</P_8A>
+      <P_8B>3</P_8B>
+      <P_9A>100.00</P_9A>
+      <P_11>300.00</P_11>
+      <P_12>5</P_12>
+    </FaWiersz>
+    <FaWiersz>
+      <NrWierszaFa>4</NrWierszaFa>
+      <P_7>Usługa finansowa (np)</P_7>
+      <P_8A>szt</P_8A>
+      <P_8B>1</P_8B>
+      <P_9A>200.00</P_9A>
+      <P_11>200.00</P_11>
+      <P_12>np</P_12>
+    </FaWiersz>
+    <P_13_1>1000.00</P_13_1>
+    <P_14_1>230.00</P_14_1>
+    <P_13_2>500.00</P_13_2>
+    <P_14_2>40.00</P_14_2>
+    <P_13_3>300.00</P_13_3>
+    <P_14_3>15.00</P_14_3>
+    <P_13_7>200.00</P_13_7>
+    <P_15>2285.00</P_15>
+    <Platnosc>
+      <FormaPlatnosci>6</FormaPlatnosci>
+      <TerminPlatnosci>
+        <Termin>2024-04-18</Termin>
+      </TerminPlatnosci>
+    </Platnosc>
+  </Fa>
+</Faktura>

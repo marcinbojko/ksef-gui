@@ -233,6 +233,96 @@ public class PdfGenerationTests
         Assert.Equal("000012345", d.Bdo);
     }
 
+    // ── Render scenarios ──────────────────────────────────────────────────────
+
+    public static IEnumerable<object[]> RenderScenarios() =>
+    [
+        ["sample-invoice.xml",               "PLN invoice — baseline"],
+        ["invoice-foreign-currency-eur.xml", "EUR invoice with VatW column"],
+        ["invoice-podmiot3.xml",             "Invoice with Podmiot3 (third party)"],
+        ["invoice-reverse-charge.xml",       "Reverse charge + self-billing flags (P_16/P_17)"],
+        ["invoice-multi-vat-rates.xml",      "Multiple VAT rates (23%, 8%, 5%, np)"],
+        ["invoice-correction.xml",           "Correction invoice (KOR) with negative amounts"],
+    ];
+
+    [Theory]
+    [MemberData(nameof(RenderScenarios))]
+    public void GeneratePdf_Scenario_ReturnsPdfBytes(string xmlFile, string description)
+    {
+        string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        string xml = File.ReadAllText(Path.Combine(dir, "TestData", xmlFile));
+        byte[] pdf = KSeFInvoicePdf.FromXml(xml);
+        Assert.True(IsPdfHeader(pdf), $"Scenario '{description}': expected %PDF header");
+        Assert.True(pdf.Length > 1024, $"Scenario '{description}': PDF too small ({pdf.Length} bytes)");
+    }
+
+    // ── Currency rendering ────────────────────────────────────────────────────
+
+    public static IEnumerable<object[]> ForeignCurrencies() =>
+    [
+        // Common European / Western
+        ["USD"], ["GBP"], ["CHF"], ["CZK"], ["HUF"],
+        ["DKK"], ["SEK"], ["NOK"], ["JPY"], ["CAD"],
+        // Exotic — long display names, non-Latin regions, unusual exchange rates
+        ["BHD"],  // Bahraini dinar — 3 decimal places
+        ["KWD"],  // Kuwaiti dinar — highest-valued currency
+        ["IQD"],  // Iraqi dinar — very large nominal values
+        ["IDR"],  // Indonesian rupiah — 5-digit amounts common
+        ["VND"],  // Vietnamese dong — 6-digit amounts common
+        ["XAU"],  // Gold (troy ounce) — commodity pseudo-currency
+        ["XDR"],  // IMF Special Drawing Rights
+        ["XXX"],  // No currency / unspecified
+    ];
+
+    private static string BuildForeignCurrencyXml(string currency) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+          <Naglowek>
+            <KodFormularza kodSystemowy="FA (2)" wersjaSchemy="1-0E">FA</KodFormularza>
+            <WariantFormularza>2</WariantFormularza>
+            <DataWytworzeniaFa>2024-05-01T10:00:00</DataWytworzeniaFa>
+            <SystemInfo>CurrencyTest</SystemInfo>
+          </Naglowek>
+          <Podmiot1>
+            <DaneIdentyfikacyjne><NIP>1234567890</NIP><Nazwa>Sprzedawca Sp. z o.o.</Nazwa></DaneIdentyfikacyjne>
+            <Adres><KodKraju>PL</KodKraju><AdresL1>ul. Testowa 1</AdresL1><AdresL2>00-001 Warszawa</AdresL2></Adres>
+          </Podmiot1>
+          <Podmiot2>
+            <DaneIdentyfikacyjne><NIP>9876543210</NIP><Nazwa>Buyer Corp.</Nazwa></DaneIdentyfikacyjne>
+            <Adres><KodKraju>PL</KodKraju><AdresL1>ul. Nabywców 2</AdresL1><AdresL2>31-001 Kraków</AdresL2></Adres>
+          </Podmiot2>
+          <Fa>
+            <KodWaluty>{currency}</KodWaluty>
+            <P_KursWaluty>4.2500</P_KursWaluty>
+            <P_1>2024-05-01</P_1>
+            <P_2>FV/TEST/{currency}/001</P_2>
+            <RodzajFaktury>VAT</RodzajFaktury>
+            <FaWiersz>
+              <NrWierszaFa>1</NrWierszaFa>
+              <P_7>Test service — {currency}</P_7>
+              <P_8A>szt</P_8A><P_8B>1</P_8B>
+              <P_9A>1000.00</P_9A>
+              <P_11>1000.00</P_11>
+              <P_12>23</P_12>
+            </FaWiersz>
+            <P_13_1>1000.00</P_13_1>
+            <P_14_1>4255.00</P_14_1>
+            <P_14_1W>230.00</P_14_1W>
+            <P_15>1230.00</P_15>
+            <Platnosc><FormaPlatnosci>6</FormaPlatnosci></Platnosc>
+          </Fa>
+        </Faktura>
+        """;
+
+    [Theory]
+    [MemberData(nameof(ForeignCurrencies))]
+    public void GeneratePdf_ForeignCurrency_ReturnsPdfBytes(string currency)
+    {
+        byte[] pdf = KSeFInvoicePdf.FromXml(BuildForeignCurrencyXml(currency));
+        Assert.True(IsPdfHeader(pdf), $"Currency {currency}: expected %PDF header");
+        Assert.True(pdf.Length > 1024, $"Currency {currency}: PDF too small ({pdf.Length} bytes)");
+    }
+
     [Fact]
     public void ParserAndSanitizer_PreserveKsefReferenceNumber()
     {
