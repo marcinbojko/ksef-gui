@@ -6,10 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### ⚠️ Breaking Changes
 
-- **Download directory structure changed.** Invoices are now saved to a subject-type subfolder: `output-dir/[NIP/]sprzedawca|nabywca|podmiot3|uprawniony/`. Previously files landed directly in `output-dir/` or `output-dir/NIP/`. Existing downloaded files will not be detected as present (table icons will be missing) until moved to the new subfolder or re-downloaded.
+- **Download directory structure changed.** Invoices are now saved to a subject-type subfolder. Previously files landed directly in `output-dir/` or `output-dir/NIP/`. The new layout:
+  - `output-dir/sprzedawca/` — Subject1, no NIP separation
+  - `output-dir/nabywca/` — Subject2, no NIP separation
+  - `output-dir/NIP/sprzedawca/` — Subject1, with NIP separation
+  - `output-dir/NIP/nabywca/` — Subject2, with NIP separation
+  - `output-dir/NIP/podmiot3/` — Subject3
+  - `output-dir/NIP/uprawniony/` — SubjectAuthorized
+
+  Existing downloaded files will not be detected as present (table icons will be missing) until moved to the new subfolder or re-downloaded. Preferences are migrated automatically on first start.
 
 ### Added
-- Save path now includes subject-type subfolder: `outputDir/[NIP/]sprzedawca|nabywca|podmiot3|uprawniony/`
+- Save path now includes a subject-type subfolder (`sprzedawca`, `nabywca`, `podmiot3`, or `uprawniony`) appended after the optional NIP segment
+- Automatic prefs migration on startup: strips legacy NIP/subject-type segments from stored `OutputDir`
 
 ---
 
