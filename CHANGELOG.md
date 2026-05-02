@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] — unreleased
+
+### Security
+
+- `Log.cs`: suppressed false-positive `cs/exposure-of-sensitive-information` CodeQL alerts on `LogDebug` and `LogInformation` — callers audited, no credentials or secrets are logged (only metadata: expiry timestamps, public NIP, file paths)
+- `Program.cs`: added `using` on `StringWriter`, `Parser`, and `CancellationTokenSource` — fixes `cs/local-not-disposed` CodeQL warnings (resources were not disposed on exit)
+
+---
+
 ## [0.6.2] — 2026-05-02
 
 ### ⚠️ Breaking Changes
