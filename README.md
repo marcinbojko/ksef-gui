@@ -163,6 +163,21 @@ Token długoterminowy: portal KSeF → _Integracja → Tokeny_.
 | `--useInvoiceNumber` | Nazwa pliku wg numeru faktury        | wyłączone |
 | `--lan`              | Nasłuchuj na wszystkich interfejsach | wyłączone |
 
+### 📁 Struktura katalogów przy pobieraniu
+
+Faktury zapisywane są według schematu zależnego od ustawień:
+
+| Oddziel po NIP | Typ podmiotu | Ścieżka |
+| :------------: | ------------ | ------- |
+| ✗ | Subject1 | `katalog-wyjściowy/sprzedawca/` |
+| ✗ | Subject2 | `katalog-wyjściowy/nabywca/` |
+| ✓ | Subject1 | `katalog-wyjściowy/NIP/sprzedawca/` |
+| ✓ | Subject2 | `katalog-wyjściowy/NIP/nabywca/` |
+| ✓ | Subject3 | `katalog-wyjściowy/NIP/podmiot3/` |
+| ✓ | SubjectAuthorized | `katalog-wyjściowy/NIP/uprawniony/` |
+
+> ⚠️ **Breaking change (0.6.2):** W poprzednich wersjach faktury trafiały bezpośrednio do `katalog-wyjściowy/` lub `katalog-wyjściowy/NIP/` bez podkatalogu typu podmiotu. Po aktualizacji pliki pobrane wcześniej nie będą widoczne jako już istniejące (ikony XML/PDF w tabeli) — należy je ręcznie przenieść do odpowiedniego podkatalogu lub ponownie pobrać.
+
 ### 📊 Podsumowanie miesięczne (CSV)
 
 Po wyszukaniu faktur przycisk **Podsumowanie CSV** (widoczny na pasku narzędzi obok przycisków pobierania) generuje zestawienie faktur za miesiąc wybrany w polu **Od**.
@@ -564,6 +579,21 @@ Obtain a long-term token from the KSeF portal: _Integracja → Tokeny_.
 | `--useInvoiceNumber` | Use invoice number for filenames |   off   |
 | `--lan`              | Listen on all network interfaces |   off   |
 
+### 📁 Download directory structure
+
+Invoices are saved according to a path scheme determined by settings:
+
+| Separate by NIP | Subject type | Path |
+| :-------------: | ------------ | ---- |
+| ✗ | Subject1 | `output-dir/sprzedawca/` |
+| ✗ | Subject2 | `output-dir/nabywca/` |
+| ✓ | Subject1 | `output-dir/NIP/sprzedawca/` |
+| ✓ | Subject2 | `output-dir/NIP/nabywca/` |
+| ✓ | Subject3 | `output-dir/NIP/podmiot3/` |
+| ✓ | SubjectAuthorized | `output-dir/NIP/uprawniony/` |
+
+> ⚠️ **Breaking change (0.6.2):** Previous versions saved invoices directly to `output-dir/` or `output-dir/NIP/` with no subject-type subfolder. After upgrading, previously downloaded files will no longer be detected as existing (XML/PDF icons will not appear in the table). Move existing files to the appropriate subfolder or re-download them.
+
 ### 📊 Monthly summary (CSV)
 
 After searching, the **Podsumowanie CSV** button (visible in the toolbar next to the download buttons) generates an invoice summary for the month selected in the **From** field.
@@ -826,33 +856,22 @@ Fields extracted from KSeF invoice XML (FA(3) schema) and included in the genera
 
 ## 📋 Changelog
 
+### 0.6.2
+
+**⚠️ Breaking change — struktura katalogów**
+- Faktury zapisywane są teraz w podkatalogu według typu podmiotu: `katalog/[NIP/]sprzedawca|nabywca|podmiot3|uprawniony/`
+- Pliki pobrane we wcześniejszych wersjach nie będą rozpoznawane jako istniejące — należy je przenieść do odpowiedniego podkatalogu
+
+---
+
 ### 0.6.1
 
-**Wykres walut / Currency chart**
-- Słupki netto + VAT: każdy słupek składa się z części netto (kolor waluty) i VAT (szary), proporcjonalnie skalowanych
-- Poprawna kolejność kolumn w tabeli faktur: netto → VAT → brutto → waluta
-- Kurs walut NBP: chipy walutowe wyświetlają aktualny kurs (np. `EUR (12) 4,2567`), pobierany z publicznego API NBP (Tabela A, cache 1 h)
-- Przeliczenie na PLN: etykiety słupków pokazują przybliżone wartości `≈ netto: X PLN / brutto: Y PLN`
-- Podsumowanie w PLN pod wykresem, reaktywne na filtr walut; `~` dla walut obcych, wartość dokładna dla PLN
-- Dynamiczny tytuł wykresu: Przychody / Koszty / Kwoty w zależności od typu podmiotu
-- Poprawna obsługa faktur korygujących: kwota VAT prawidłowo korygowana w dół
-
-**Tabela faktur / Invoice table**
-- Nowe kolumny: Kwota netto i VAT (`brutto − netto`) obok Kwoty brutto — wszystkie sortowalne
-- Kolumna VAT obliczana w walucie faktury (nie PLN)
-
-**Poprawki API / API fixes**
-- Naprawiono błąd 21405: `pageOffset` to numer strony (0-based), nie offset rekordu — `currentPage++` zamiast `currentOffset += pageSize`
-
-**PDF — nowe pola FA(3)**
-- `Podmiot3` (podmiot trzeci) — osobny blok pod Sprzedawcą/Nabywcą
-- `PodmiotUpowazniony` — podmiot upoważniony do wystawiania faktur
-- Dynamiczne wykrywanie stawek VAT: skan wszystkich `P_13_*` / `P_14_*` zamiast hardcodowanej listy — obsługuje wszystkie stawki (23%, 8%, 5%, 3%, 0%, zw, np, oo i inne)
-- `P_14_*W` — VAT w walucie obcej jako dodatkowa kolumna w tabeli stawek
-- `P_KursWaluty` — kurs waluty całej faktury w sekcji Szczegóły
-- `P_16` (odwrotne obciążenie), `P_17` (samofakturowanie), `P_18` (procedura marży), `P_18A` (nowe środki transportu) — wyróżnione adnotacje
-- `P_19` / `P_19A` / `P_19B` — podstawa i przepis zwolnienia z VAT
-- `WarunkiTransakcji`: `NrZamowienia`, `NrPartiiDostawy`, `Incoterms`
+- Kursy walut NBP w chipach walutowych (np. `EUR (12) 4,2567`)
+- Przeliczenie na PLN w wykresie: `≈ netto: X PLN / brutto: Y PLN`
+- Podsumowanie w PLN pod wykresem, reaktywne na filtr walut
+- Słupki netto + VAT skalowane proporcjonalnie do największej wartości brutto
+- Nowe kolumny w tabeli faktur: Kwota netto i VAT (`brutto − netto`)
+- PDF: Podmiot3, PodmiotUpowazniony, dynamiczne stawki VAT (`P_13_*`/`P_14_*`), VAT walutowy (`P_14_*W`), kurs waluty, procedury specjalne (P_16–P_18A), podstawa zwolnienia (P_19), warunki transakcji (Incoterms, NrZamówienia)
 
 ---
 

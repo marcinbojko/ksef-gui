@@ -167,8 +167,9 @@ public class GuiCommand : IWithConfigCommand
                 // Log instead of silently swallowing: a JsonException here (e.g. from a partially
                 // written file) would cause every subsequent SavePrefs call to use an empty GuiPrefs
                 // as the base, wiping SMTP credentials and webhook URLs from disk.
-                return JsonSerializer.Deserialize<GuiPrefs>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                GuiPrefs loaded = JsonSerializer.Deserialize<GuiPrefs>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new GuiPrefs();
+                return ApplyMigrations(loaded);
             }
             catch (IOException ex)
             {
@@ -184,6 +185,55 @@ public class GuiCommand : IWithConfigCommand
             }
         }
         return new GuiPrefs();
+    }
+
+    // Runs automatically on every prefs load. Add new migrations as new versions require them.
+    // Each migration must be idempotent — safe to run on already-migrated prefs.
+    private static GuiPrefs ApplyMigrations(GuiPrefs prefs)
+    {
+        bool changed = false;
+
+        // v0.6.2: OutputDir stored by old versions may contain a trailing NIP and/or subject-type
+        // segment appended by the old download logic. Strip them so the stored path is the clean
+        // user-chosen base directory, preventing double-appending on the next download.
+        if (!string.IsNullOrEmpty(prefs.OutputDir))
+        {
+            string stripped = StripLegacyOutputDirSegments(prefs.OutputDir);
+            if (stripped != prefs.OutputDir)
+            {
+                Log.LogInformation($"[prefs] Migration: OutputDir '{prefs.OutputDir}' → '{stripped}'");
+                prefs = prefs with { OutputDir = stripped };
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            SavePrefs(prefs);
+        }
+
+        return prefs;
+    }
+
+    private static string StripLegacyOutputDirSegments(string path)
+    {
+        string result = Path.GetFullPath(path);
+
+        // Strip trailing subject-type folder (e.g. /sprzedawca, /nabywca, /podmiot3, /uprawniony)
+        string lastName = Path.GetFileName(result);
+        if (lastName is "sprzedawca" or "nabywca" or "podmiot3" or "uprawniony")
+        {
+            result = Path.GetDirectoryName(result) ?? result;
+            lastName = Path.GetFileName(result);
+        }
+
+        // Strip trailing NIP segment (exactly 10 digits)
+        if (lastName.Length == 10 && lastName.All(char.IsDigit))
+        {
+            result = Path.GetDirectoryName(result) ?? result;
+        }
+
+        return result;
     }
 
     private static void SavePrefs(GuiPrefs prefs)
@@ -501,8 +551,13 @@ public class GuiCommand : IWithConfigCommand
                 string nip = Config().Nip;
                 if (!string.IsNullOrEmpty(nip))
                 {
-                    outputDir = Path.Combine(outputDir, nip);
+                    outputDir = Path.Join(outputDir, nip);
                 }
+            }
+            string checkSubjectFolder = SubjectTypeFolder(checkParams.SubjectType);
+            if (!string.IsNullOrEmpty(checkSubjectFolder))
+            {
+                outputDir = Path.Join(outputDir, checkSubjectFolder);
             }
 
             var result = _cachedInvoices.Select(inv =>
@@ -1944,14 +1999,20 @@ public class GuiCommand : IWithConfigCommand
             throw new InvalidOperationException("No invoices found. Search first.");
         }
 
-        string outputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
+        string baseOutputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
+        string outputDir = baseOutputDir;
         if (dlParams.SeparateByNip)
         {
             string nip = Config().Nip;
             if (!string.IsNullOrEmpty(nip))
             {
-                outputDir = Path.Combine(outputDir, nip);
+                outputDir = Path.Join(outputDir, nip);
             }
+        }
+        string subjectFolder = SubjectTypeFolder(dlParams.SubjectType);
+        if (!string.IsNullOrEmpty(subjectFolder))
+        {
+            outputDir = Path.Join(outputDir, subjectFolder);
         }
         Directory.CreateDirectory(outputDir);
 
@@ -2061,7 +2122,7 @@ public class GuiCommand : IWithConfigCommand
 
         SavePrefs(LoadPrefs() with
         {
-            OutputDir = dlParams.SeparateByNip ? Path.GetDirectoryName(outputDir) ?? outputDir : outputDir,
+            OutputDir = baseOutputDir,
             ExportXml = dlParams.ExportXml,
             ExportJson = dlParams.ExportJson,
             ExportPdf = wantPdf,
@@ -2088,6 +2149,15 @@ public class GuiCommand : IWithConfigCommand
         string ksef = inv.KsefNumber;
         return $"{date}-{seller}-{currency}-{ksef}";
     }
+
+    internal static string SubjectTypeFolder(string? subjectType) => subjectType?.ToLowerInvariant() switch
+    {
+        "subject1" or "1" => "sprzedawca",
+        "subject2" or "2" => "nabywca",
+        "subject3" or "3" => "podmiot3",
+        "subjectauthorized" or "4" => "uprawniony",
+        _ => string.Empty
+    };
 
     internal static string SanitizeFileName(string name)
     {
