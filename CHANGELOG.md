@@ -49,7 +49,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.6.0] — 2025-04-09
+## [0.6.0] — 2026-04-17
 
 ### Added
 - Horizontal bar chart showing net totals per currency (opt-out in Preferences)
@@ -58,14 +58,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.5.9] — 2025-04-07
+## [0.5.9] — 2026-04-16
 
 ### Changed
 - Renamed `offset` variable to `pageNumber` to reflect correct KSeF API semantics
 
 ---
 
-## [0.5.8] — 2025-04-06
+## [0.5.8] — 2026-04-16
 
 ### Fixed
 - Handle KSeF error 21405 (page offset out of range) with user-friendly warning
@@ -73,14 +73,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.5.7] — 2025-04-04
+## [0.5.7] — 2026-04-16
 
 ### Changed
 - Bumped all GitHub Actions to latest versions
 
 ---
 
-## [0.5.6] — 2025-03-31
+## [0.5.6] — 2026-04-16
 
 ### Added
 - Toast notifications for search results and background events
@@ -88,35 +88,35 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.5.5] — 2025-03-28
+## [0.5.5] — 2026-04-15
 
 ### Added
 - KSeF API 10 000-result limit detection with truncation warning and UI message
 
 ---
 
-## [0.5.4] — 2025-03-25
+## [0.5.4] — 2026-04-15
 
 ### Fixed
 - Active profile cache now syncs correctly after background refresh
 
 ---
 
-## [0.5.3] — 2025-03-22
+## [0.5.3] — 2026-03-31
 
 ### Fixed
 - Prevent double notifications for the active profile during background refresh
 
 ---
 
-## [0.5.2] — 2025-03-19
+## [0.5.2] — 2026-03-12
 
 ### Added
 - Monthly invoice summary CSV export (UTF-8 BOM, `;` separator, per-currency totals)
 
 ---
 
-## [0.5.1] — 2025-03-15
+## [0.5.1] — 2026-03-05
 
 ### Fixed
 - Font rendering improvements in PDF output
@@ -124,7 +124,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.5.0] — 2025-03-12
+## [0.5.0] — 2026-03-05
 
 ### Added
 - KSeF reference number displayed in PDF (injected from API response, not XML)
@@ -132,35 +132,35 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.4.2] — 2025-03-08
+## [0.4.2] — 2026-03-03
 
 ### Added
 - Retry mechanism for failed webhook/email notifications with persistent queue
 
 ---
 
-## [0.4.1] — 2025-03-05
+## [0.4.1] — 2026-03-02
 
 ### Fixed
 - Token handling improvements: correct refresh timing and expiry logic
 
 ---
 
-## [0.4.0] — 2025-03-02
+## [0.4.0] — 2026-03-01
 
 ### Added
 - Auto-refresh date range controls per profile (limit to current month option)
 
 ---
 
-## [0.3.9] — 2025-02-26
+## [0.3.9] — 2026-02-26
 
 ### Fixed
 - Escape special Markdown characters in Slack notification messages
 
 ---
 
-## [0.3.8] — 2025-02-24
+## [0.3.8] — 2026-02-25
 
 ### Added
 - SMTP e-mail notifications (STARTTLS, port 587) per profile
@@ -168,56 +168,56 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.3.7] — 2025-02-20
+## [0.3.7] — 2026-02-24
 
 ### Changed
 - Improved token management flow: proactive expiry, single refresh path
 
 ---
 
-## [0.3.6] — 2025-02-18
+## [0.3.6] — 2026-02-24
 
 ### Fixed
 - Preferences modal UX: data loss on cancel prevented, validation improved
 
 ---
 
-## [0.3.5] — 2025-02-16
+## [0.3.5] — 2026-02-24
 
 ### Added
 - Webhook notifications documentation
 
 ---
 
-## [0.3.4] — 2025-02-13
+## [0.3.4] — 2026-02-19
 
 ### Fixed
 - Path traversal vulnerability in file serving endpoint
 
 ---
 
-## [0.3.3] — 2025-02-11
+## [0.3.3] — 2026-02-19
 
 ### Changed
 - Improved profile deletion UX with confirmation dialog
 
 ---
 
-## [0.3.2] — 2025-02-09
+## [0.3.2] — 2026-02-18
 
 ### Added
 - Docker image published to GitHub Container Registry (GHCR)
 
 ---
 
-## [0.3.1] — 2025-02-06
+## [0.3.1] — 2026-02-16
 
 ### Added
 - Comprehensive invoice XML security validation (XSD, element limits, size cap)
 
 ---
 
-## [0.3.0] — 2025-02-04
+## [0.3.0] — 2026-02-16
 
 ### Added
 - SQLite invoice cache with background auto-refresh every N minutes
@@ -226,63 +226,63 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.2.7] — 2025-01-30
+## [0.2.7] — 2026-02-14
 
 ### Changed
 - Test infrastructure improvements, code quality fixes
 
 ---
 
-## [0.2.6] — 2025-01-28
+## [0.2.6] — 2026-02-14
 
 ### Fixed
 - 100 unit tests passing; exposed internals for testing; corrected routes, exception types, sanitization
 
 ---
 
-## [0.2.5] — 2025-01-24
+## [0.2.5] — 2026-02-14
 
 ### Added
 - Docker production stack with Traefik reverse proxy and Ofelia scheduler
 
 ---
 
-## [0.2.4] — 2025-01-21
+## [0.2.4] — 2026-02-13
 
 ### Changed
 - Improved logging, documentation, privacy handling (no PII in logs)
 
 ---
 
-## [0.2.3] — 2025-01-18
+## [0.2.3] — 2026-02-13
 
 ### Changed
 - Improved logging and localization for GUI interface
 
 ---
 
-## [0.2.2] — 2025-01-15
+## [0.2.2] — 2026-02-12
 
 ### Changed
 - Removed unused submodules (ksef-docs, ksef-pdf-generator)
 
 ---
 
-## [0.2.1] — 2025-01-14
+## [0.2.1] — 2026-02-12
 
 ### Fixed
 - Release workflow trigger: match non-`v`-prefixed tags
 
 ---
 
-## [0.2.0] — 2025-01-12
+## [0.2.0] — 2026-02-12
 
 ### Changed
 - Replaced external Node.js PDF generator with native QuestPDF renderer (no external dependencies)
 
 ---
 
-## [0.1.4] — 2025-01-09
+## [0.1.4] — 2026-02-12
 
 ### Fixed
 - Cache corruption prevention on profile switch failure
@@ -290,21 +290,21 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.1.3] — 2025-01-07
+## [0.1.3] — 2026-02-10
 
 ### Fixed
 - PDF generation error handling on Windows
 
 ---
 
-## [0.1.2] — 2025-01-06
+## [0.1.2] — 2026-02-10
 
 ### Fixed
 - Node.js path parsing on Windows
 
 ---
 
-## [0.1.1] — 2025-01-05
+## [0.1.1] — 2026-02-10
 
 ### Fixed
 - Resource leaks in scope recreation
@@ -312,7 +312,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [0.1.0] — 2025-01-04
+## [0.1.0] — 2026-02-10
 
 ### Added
 - Initial public release
