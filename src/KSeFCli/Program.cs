@@ -29,8 +29,8 @@ internal class Program
         }
 
         // https://github.com/commandlineparser/commandline/wiki/How-To
-        StringWriter helpWriter = new StringWriter();
-        Parser parser = new Parser(with =>
+        using StringWriter helpWriter = new StringWriter();
+        using Parser parser = new Parser(with =>
         {
             with.HelpWriter = helpWriter;
             with.EnableDashDash = true;
@@ -38,7 +38,7 @@ internal class Program
 
         ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand, SelfUpdateCommand, PrintConfigCommand, GuiCommand>(args);
 
-        CancellationTokenSource cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
         {
             Console.WriteLine("Canceling...");
