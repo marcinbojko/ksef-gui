@@ -11,8 +11,8 @@ All notable changes to this project will be documented in this file.
   - `output-dir/nabywca/` — Subject2, no NIP separation
   - `output-dir/NIP/sprzedawca/` — Subject1, with NIP separation
   - `output-dir/NIP/nabywca/` — Subject2, with NIP separation
-  - `output-dir/NIP/podmiot3/` — Subject3
-  - `output-dir/NIP/uprawniony/` — SubjectAuthorized
+  - `output-dir/podmiot3/` or `output-dir/NIP/podmiot3/` — Subject3
+  - `output-dir/uprawniony/` or `output-dir/NIP/uprawniony/` — SubjectAuthorized
 
   Existing downloaded files will not be detected as present (table icons will be missing) until moved to the new subfolder or re-downloaded. Preferences are migrated automatically on first start.
 
