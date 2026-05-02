@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] — 2026-05-02
+
+### Security
+
+- `Log.cs`: removed broad `[SuppressMessage]` on `LogDebug` and `LogInformation` — generic helpers must remain visible to CodeQL so sensitive data flows can be detected at call sites
+- `IWithConfigCommand.cs`: added scoped `[SuppressMessage]` on `PrintXmlToConsole` only — this debug-only method intentionally logs auth request XML structure for cert-auth diagnostics and is never called in normal operation
+- `Program.cs`: added `using` on `StringWriter`, `Parser`, and `CancellationTokenSource` — fixes `cs/local-not-disposed` CodeQL warnings
+- `Program.cs`: captured `CancelKeyPress` handler in a local variable and unsubscribed it in `finally` — prevents `ObjectDisposedException` if Ctrl+C fires after `CancellationTokenSource` is disposed
+
+---
+
 ## [0.6.2] — 2026-05-02
 
 ### ⚠️ Breaking Changes
