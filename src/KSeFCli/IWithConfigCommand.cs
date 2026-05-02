@@ -109,6 +109,10 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return sb.ToString();
     }
 
+    // Intentionally logs raw auth XML for debugging certificate auth flows (verbose/debug mode only).
+    // The XML contains the auth request structure, not credential values.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "cs/exposure-of-sensitive-information",
+        Justification = "Debug-only method: logs auth request XML structure for cert-auth diagnostics. Never called in normal operation.")]
     private static void PrintXmlToConsole(string xml, string title)
     {
         Log.LogInformation($"----- {title} -----");

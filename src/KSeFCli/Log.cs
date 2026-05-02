@@ -67,17 +67,8 @@ public static class Log
     }
 
     public static void LogTrace(string message) => Logger.LogTrace("{Message}", message);
-
-    // Callers are audited: no token values, passwords, or private keys are passed to these methods.
-    // NIP numbers logged here are public business identifiers, not credentials.
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "cs/exposure-of-sensitive-information",
-        Justification = "Callers audited — only metadata (expiry timestamps, public NIP, file paths) is logged; no credentials or secrets.")]
     public static void LogDebug(string message) => Logger.LogDebug("{Message}", message);
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "cs/exposure-of-sensitive-information",
-        Justification = "Callers audited — only metadata (expiry timestamps, public NIP, file paths) is logged; no credentials or secrets.")]
     public static void LogInformation(string message) => Logger.LogInformation("{Message}", message);
-
     public static void LogWarning(string message) => Logger.LogWarning("{Message}", message);
     public static void LogError(string message) => Logger.LogError("{Message}", message);
     public static void LogCritical(string message) => Logger.LogCritical("{Message}", message);

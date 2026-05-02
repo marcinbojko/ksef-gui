@@ -39,12 +39,13 @@ internal class Program
         ParserResult<object> result = parser.ParseArguments<GetFakturaCommand, SzukajFakturCommand, TokenAuthCommand, TokenRefreshCommand, CertAuthCommand, AuthCommand, PrzeslijFakturyCommand, PobierzFakturyCommand, LinkDoFakturyCommand, QRDoFakturyCommand, XML2PDFCommand, SelfUpdateCommand, PrintConfigCommand, GuiCommand>(args);
 
         using CancellationTokenSource cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (s, e) =>
+        ConsoleCancelEventHandler cancelHandler = (s, e) =>
         {
             Console.WriteLine("Canceling...");
             cts.Cancel();
             e.Cancel = true;
         };
+        Console.CancelKeyPress += cancelHandler;
 
         try
         {
@@ -88,6 +89,7 @@ internal class Program
         }
         finally
         {
+            Console.CancelKeyPress -= cancelHandler;
             Log.Shutdown();
         }
     }
