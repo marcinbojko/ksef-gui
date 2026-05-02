@@ -501,8 +501,13 @@ public class GuiCommand : IWithConfigCommand
                 string nip = Config().Nip;
                 if (!string.IsNullOrEmpty(nip))
                 {
-                    outputDir = Path.Combine(outputDir, nip);
+                    outputDir = Path.Join(outputDir, nip);
                 }
+            }
+            string checkSubjectFolder = SubjectTypeFolder(checkParams.SubjectType);
+            if (!string.IsNullOrEmpty(checkSubjectFolder))
+            {
+                outputDir = Path.Join(outputDir, checkSubjectFolder);
             }
 
             var result = _cachedInvoices.Select(inv =>
@@ -1944,14 +1949,20 @@ public class GuiCommand : IWithConfigCommand
             throw new InvalidOperationException("No invoices found. Search first.");
         }
 
-        string outputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
+        string baseOutputDir = string.IsNullOrWhiteSpace(dlParams.OutputDir) ? OutputDir : dlParams.OutputDir;
+        string outputDir = baseOutputDir;
         if (dlParams.SeparateByNip)
         {
             string nip = Config().Nip;
             if (!string.IsNullOrEmpty(nip))
             {
-                outputDir = Path.Combine(outputDir, nip);
+                outputDir = Path.Join(outputDir, nip);
             }
+        }
+        string subjectFolder = SubjectTypeFolder(dlParams.SubjectType);
+        if (!string.IsNullOrEmpty(subjectFolder))
+        {
+            outputDir = Path.Join(outputDir, subjectFolder);
         }
         Directory.CreateDirectory(outputDir);
 
@@ -2061,7 +2072,7 @@ public class GuiCommand : IWithConfigCommand
 
         SavePrefs(LoadPrefs() with
         {
-            OutputDir = dlParams.SeparateByNip ? Path.GetDirectoryName(outputDir) ?? outputDir : outputDir,
+            OutputDir = baseOutputDir,
             ExportXml = dlParams.ExportXml,
             ExportJson = dlParams.ExportJson,
             ExportPdf = wantPdf,
@@ -2088,6 +2099,15 @@ public class GuiCommand : IWithConfigCommand
         string ksef = inv.KsefNumber;
         return $"{date}-{seller}-{currency}-{ksef}";
     }
+
+    internal static string SubjectTypeFolder(string? subjectType) => subjectType?.ToLowerInvariant() switch
+    {
+        "subject1" or "1" => "sprzedawca",
+        "subject2" or "2" => "nabywca",
+        "subject3" or "3" => "podmiot3",
+        "subjectauthorized" or "4" => "uprawniony",
+        _ => string.Empty
+    };
 
     internal static string SanitizeFileName(string name)
     {

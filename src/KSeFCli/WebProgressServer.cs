@@ -9,8 +9,8 @@ using KSeF.Client.Core.Exceptions;
 namespace KSeFCli;
 
 internal record SearchParams(string SubjectType, string From, string? To, string DateType, string? Source = null);
-internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null);
-internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip);
+internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null, string? SubjectType = null);
+internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip, string? SubjectType = null);
 internal record DownloadSummaryParams(string OutputDir, string Month, bool SeparateByNip = false);
 
 internal sealed class WebProgressServer : IDisposable
@@ -2644,7 +2644,8 @@ async function doDownload(selOnly) {
       exportJson: $('expJson').checked,
       exportPdf: $('expPdf').checked,
       separateByNip: $('separateByNip').checked,
-      pdfColorScheme: $('pdfColorScheme').value
+      pdfColorScheme: $('pdfColorScheme').value,
+      subjectType: $('subjectType') ? $('subjectType').value : null
     };
     const res = await fetch('/download', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Download failed'); }
@@ -2946,7 +2947,8 @@ async function checkExisting() {
     const body = {
       outputDir: $('outputDir').value || '.',
       customFilenames: $('customFilenames').checked,
-      separateByNip: $('separateByNip').checked
+      separateByNip: $('separateByNip').checked,
+      subjectType: $('subjectType') ? $('subjectType').value : null
     };
     const res = await fetch('/check-existing', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     if (!res.ok) return;
