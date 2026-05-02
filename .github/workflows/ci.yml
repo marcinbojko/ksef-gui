@@ -66,7 +66,7 @@ jobs:
         run: dotnet test src/KSeFCli.Tests/KSeFCli.Tests.csproj -c Release --no-build --logger trx
 
       - name: Publish test results
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         if: always()
         with:
           name: Test results (${{ matrix.os }})
@@ -74,7 +74,7 @@ jobs:
           reporter: dotnet-trx
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results-${{ matrix.os }}-${{ github.run_attempt }}
