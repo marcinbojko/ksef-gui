@@ -169,7 +169,6 @@ Faktury zapisywane są według schematu zależnego od ustawień:
 
 | Oddziel po NIP | Typ podmiotu | Ścieżka |
 | :------------: | ------------ | ------- |
-| ✗ | — | `katalog-wyjściowy/` |
 | ✗ | Subject1 | `katalog-wyjściowy/sprzedawca/` |
 | ✗ | Subject2 | `katalog-wyjściowy/nabywca/` |
 | ✓ | Subject1 | `katalog-wyjściowy/NIP/sprzedawca/` |
@@ -586,7 +585,6 @@ Invoices are saved according to a path scheme determined by settings:
 
 | Separate by NIP | Subject type | Path |
 | :-------------: | ------------ | ---- |
-| ✗ | — | `output-dir/` |
 | ✗ | Subject1 | `output-dir/sprzedawca/` |
 | ✗ | Subject2 | `output-dir/nabywca/` |
 | ✓ | Subject1 | `output-dir/NIP/sprzedawca/` |

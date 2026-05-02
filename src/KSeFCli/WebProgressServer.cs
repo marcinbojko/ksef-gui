@@ -248,7 +248,8 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 if (OnSavePrefs != null)
                 {
                     await OnSavePrefs(body).ConfigureAwait(false);
@@ -279,7 +280,8 @@ internal sealed class WebProgressServer : IDisposable
                     throw new InvalidOperationException("Search not configured");
                 }
 
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 SearchParams searchParams = JsonSerializer.Deserialize<SearchParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? throw new InvalidOperationException("Invalid search parameters");
                 object result = await OnSearch(searchParams, ct).ConfigureAwait(false);
@@ -323,7 +325,8 @@ internal sealed class WebProgressServer : IDisposable
         {
             await HandleAction(ctx, ct, async () =>
             {
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 using JsonDocument doc = JsonDocument.Parse(body);
                 string dirPath = doc.RootElement.GetProperty("path").GetString()
                     ?? throw new InvalidOperationException("Missing path");
@@ -348,7 +351,8 @@ internal sealed class WebProgressServer : IDisposable
                     throw new InvalidOperationException("Download not configured");
                 }
 
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 DownloadParams dlParams = JsonSerializer.Deserialize<DownloadParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new DownloadParams(".", null, false);
                 await OnDownload(dlParams, ct).ConfigureAwait(false);
@@ -364,7 +368,8 @@ internal sealed class WebProgressServer : IDisposable
                     throw new InvalidOperationException("Summary not configured");
                 }
 
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 DownloadSummaryParams sumParams = JsonSerializer.Deserialize<DownloadSummaryParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new DownloadSummaryParams(".", "");
                 string filePath = await OnDownloadSummary(sumParams, ct).ConfigureAwait(false);
@@ -395,7 +400,8 @@ internal sealed class WebProgressServer : IDisposable
                     return "[]";
                 }
 
-                string body = await new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding).ReadToEndAsync(ct).ConfigureAwait(false);
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 CheckExistingParams checkParams = JsonSerializer.Deserialize<CheckExistingParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new CheckExistingParams(".", false, false);
                 object result = await OnCheckExisting(checkParams).ConfigureAwait(false);
