@@ -380,27 +380,38 @@ internal sealed class WebProgressServer : IDisposable
                 (byte[] data, string contentType, string fileName) = await OnBrowserDownload(dlParams, ct).ConfigureAwait(false);
                 ctx.Response.StatusCode = 200;
                 ctx.Response.ContentType = contentType;
-                ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
+                // Sanitize fileName: strip path traversal, control characters and quotes to prevent header injection.
+                string safeBase = Path.GetFileName(fileName);
+                if (string.IsNullOrWhiteSpace(safeBase)) { safeBase = "download"; }
+                safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
+                string encoded = Uri.EscapeDataString(safeBase);
+                ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
                 ctx.Response.ContentLength64 = data.Length;
                 await ctx.Response.OutputStream.WriteAsync(data, ct).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                Log.LogError($"[browser-dl] Failed: {ex.GetType().Name}: {ex.Message}");
-                try
-                {
-                    ctx.Response.StatusCode = 500;
-                    string err = JsonSerializer.Serialize(new { error = ex.Message });
-                    byte[] errBytes = System.Text.Encoding.UTF8.GetBytes(err);
-                    ctx.Response.ContentType = "application/json";
-                    ctx.Response.ContentLength64 = errBytes.Length;
-                    await ctx.Response.OutputStream.WriteAsync(errBytes, ct).ConfigureAwait(false);
-                }
-                catch { }
+                Log.LogWarning("[browser-dl] Cancelled by client.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Log.LogError($"[browser-dl] Failed: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, 500, "Nie udało się pobrać faktur.");
+            }
+            catch (IOException ex)
+            {
+                Log.LogError($"[browser-dl] I/O error: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, 500, "Błąd odczytu/zapisu.");
+            }
+            catch (HttpRequestException ex)
+            {
+                Log.LogError($"[browser-dl] Upstream error: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, 502, "Błąd komunikacji z KSeF.");
             }
             finally
             {
-                try { ctx.Response.Close(); } catch { }
+                try { ctx.Response.Close(); }
+                catch (ObjectDisposedException) { }
             }
             return;
         }
@@ -610,6 +621,20 @@ internal sealed class WebProgressServer : IDisposable
             await ctx.Response.OutputStream.WriteAsync(html, ct).ConfigureAwait(false);
             ctx.Response.Close();
         }
+    }
+
+    private static void WriteErrorResponse(HttpListenerContext ctx, int statusCode, string message)
+    {
+        try
+        {
+            byte[] body = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { error = message }));
+            ctx.Response.StatusCode = statusCode;
+            ctx.Response.ContentType = "application/json";
+            ctx.Response.ContentLength64 = body.Length;
+            ctx.Response.OutputStream.Write(body, 0, body.Length);
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
     }
 
     private static async Task HandleAction(HttpListenerContext ctx, CancellationToken ct, Func<Task<string>> action)

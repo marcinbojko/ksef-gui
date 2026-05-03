@@ -2137,6 +2137,27 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
+    private async Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
+    {
+        const int maxRetries = 5;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await _ksefClient!.GetInvoiceAsync(
+                    ksefNumber,
+                    await GetAccessToken(_scope!, ct).ConfigureAwait(false),
+                    ct).ConfigureAwait(false);
+            }
+            catch (KsefRateLimitException ex) when (attempt < maxRetries)
+            {
+                TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
+                Log.LogWarning($"[browser-dl] Rate limited on {ksefNumber}. Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{maxRetries})");
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+        }
+    }
+
     private async Task<(byte[] Data, string ContentType, string FileName)> BrowserDownloadAsync(
         BrowserDownloadParams dlParams, CancellationToken ct)
     {
@@ -2145,9 +2166,27 @@ public class GuiCommand : IWithConfigCommand
             throw new InvalidOperationException("No invoices found. Search first.");
         }
 
-        List<(int idx, InvoiceSummary inv)> toDownload = dlParams.Indices is { Length: > 0 }
-            ? dlParams.Indices.Select(i => (i, _cachedInvoices[i])).ToList()
-            : _cachedInvoices.Select((inv, i) => (i, inv)).ToList();
+        List<(int idx, InvoiceSummary inv)> toDownload;
+        if (dlParams.Indices == null)
+        {
+            toDownload = _cachedInvoices.Select((inv, i) => (i, inv)).ToList();
+        }
+        else if (dlParams.Indices.Length == 0)
+        {
+            throw new InvalidOperationException("No invoices selected.");
+        }
+        else
+        {
+            toDownload = dlParams.Indices
+                .Distinct()
+                .Where(i => i >= 0 && i < _cachedInvoices.Count)
+                .Select(i => (i, _cachedInvoices[i]))
+                .ToList();
+            if (toDownload.Count == 0)
+            {
+                throw new InvalidOperationException("All supplied indices are out of range.");
+            }
+        }
 
         if (toDownload.Count == 0)
         {
@@ -2163,10 +2202,7 @@ public class GuiCommand : IWithConfigCommand
         {
             (int _, InvoiceSummary inv) = toDownload[0];
             Log.LogInformation($"[browser-dl] Fetching XML for {inv.KsefNumber}");
-            string xml = await _ksefClient!.GetInvoiceAsync(
-                inv.KsefNumber,
-                await GetAccessToken(_scope!, ct).ConfigureAwait(false),
-                ct).ConfigureAwait(false);
+            string xml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
             Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
             string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
             byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
@@ -2189,10 +2225,7 @@ public class GuiCommand : IWithConfigCommand
                 {
                     n++;
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Fetching {inv.KsefNumber}");
-                    string xml = await _ksefClient!.GetInvoiceAsync(
-                        inv.KsefNumber,
-                        await GetAccessToken(_scope!, ct).ConfigureAwait(false),
-                        ct).ConfigureAwait(false);
+                    string xml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
                     byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
                     string entryName = SanitizeFileName(inv.KsefNumber) + ".pdf";
