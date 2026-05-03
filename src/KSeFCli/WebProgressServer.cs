@@ -388,7 +388,7 @@ internal sealed class WebProgressServer : IDisposable
                     safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
                     string encoded = Uri.EscapeDataString(safeBase);
                     ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
-                    if (dataStream.CanSeek) { ctx.Response.ContentLength64 = dataStream.Length; }
+                    if (dataStream.CanSeek) { dataStream.Seek(0, System.IO.SeekOrigin.Begin); ctx.Response.ContentLength64 = dataStream.Length; }
                     await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
                 }
             }
@@ -2363,7 +2363,7 @@ function connectSSE() {
         setStatus('Gotowe! Pobrano ' + (d.count || dlTotal) + ' faktur.', 'done');
         bar.style.width = '100%'; bar.textContent = '100%';
         btnSearch.disabled = false; btnDownload.disabled = false;
-        btnDownloadSel.disabled = selectedInvoices.size === 0;
+        btnDownloadSel.disabled = selectedInvoices.size === 0; btnBrowserDownload.disabled = selectedInvoices.size === 0;
         checkExisting();
         break;
       case 'error': {
@@ -2374,7 +2374,7 @@ function connectSSE() {
         if (d.fatal) {
           setStatus('Blad: ' + d.message, 'error');
           btnSearch.disabled = false; btnDownload.disabled = false;
-          btnDownloadSel.disabled = selectedInvoices.size === 0;
+          btnDownloadSel.disabled = selectedInvoices.size === 0; btnBrowserDownload.disabled = selectedInvoices.size === 0;
         }
         break;
       }
@@ -2494,9 +2494,16 @@ function monthToTo(val) {
   return val + '-' + String(last).padStart(2, '0');
 }
 
+function setBusyState(busy) {
+  btnSearch.disabled = busy;
+  btnDownload.disabled = busy;
+  btnDownloadSel.disabled = busy || selectedInvoices.size === 0;
+  btnBrowserDownload.disabled = busy || selectedInvoices.size === 0;
+}
+
 async function doSearch() {
   searchRunning = true;
-  btnSearch.disabled = true; btnDownload.disabled = true; btnDownloadSel.disabled = true;
+  setBusyState(true);
   downloadBar.style.display = 'none';
   selToolbar.classList.remove('visible');
   tableWrap.innerHTML = '';
@@ -2538,7 +2545,7 @@ async function doSearch() {
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
     searchRunning = false;
-    btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true;
+    searchRunning = false; btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true; btnBrowserDownload.disabled = total === 0;
     checkExisting();
     // Capture params for cyclic refresh; re-baseline known set on every manual search
     lastSearchParams = { subjectType: $('subjectType').value, fromDate: $('fromDate').value, toDate: $('toDate').value, dateType: $('dateType').value };
@@ -2718,7 +2725,7 @@ async function doDownload(selOnly) {
   const dlCount = selOnly ? selectedInvoices.size : total;
   if (selOnly && dlCount === 0) { setStatus('Nie zaznaczono faktur.', 'error'); return; }
 
-  btnSearch.disabled = true; btnDownload.disabled = true; btnDownloadSel.disabled = true;
+  setBusyState(true);
   completed = 0; dlTotal = dlCount;
   progressWrap.classList.add('visible');
   bar.style.width = '0%'; bar.textContent = '0%';
@@ -2746,7 +2753,8 @@ async function doDownload(selOnly) {
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Download failed'); }
   } catch (err) {
     setStatus('Blad: ' + err.message, 'error');
-    btnSearch.disabled = false; btnDownload.disabled = false; btnDownloadSel.disabled = selectedInvoices.size === 0;
+    setStatus('Blad: ' + err.message, 'error');
+    setBusyState(false);
   }
 }
 
@@ -2758,7 +2766,7 @@ async function doBrowserDownload() {
     pdfColorScheme: $('pdfColorScheme').value,
     month
   };
-  btnBrowserDownload.disabled = true;
+  setBusyState(true);
   try {
     const res = await fetch('/download-browser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error || msg; } catch { msg = await res.text().then(t => t.slice(0,120)).catch(() => msg); } throw new Error(msg); }
@@ -2775,7 +2783,7 @@ async function doBrowserDownload() {
   } catch (err) {
     setStatus('Błąd pobierania: ' + err.message, 'error');
   } finally {
-    btnBrowserDownload.disabled = false;
+    setBusyState(false);
   }
 }
 
