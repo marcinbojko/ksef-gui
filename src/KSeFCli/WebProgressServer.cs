@@ -398,8 +398,8 @@ internal sealed class WebProgressServer : IDisposable
             }
             catch (InvalidOperationException ex)
             {
-                Log.LogError($"[browser-dl] Failed: {ex.Message}\n{ex.StackTrace}");
-                WriteErrorResponse(ctx, 500, "Nie udało się pobrać faktur.");
+                Log.LogWarning($"[browser-dl] Client error: {ex.Message}");
+                WriteErrorResponse(ctx, 400, ex.Message);
             }
             catch (IOException ex)
             {

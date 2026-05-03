@@ -2158,10 +2158,18 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
+    // Ownership of the returned Stream is transferred to the caller (WebProgressServer),
+    // which disposes it via `await using`. CodeQL cannot track cross-method ownership.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000",
+        Justification = "Stream ownership is transferred to the caller which disposes it.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "cs/local-not-disposed",
+        Justification = "Stream ownership is transferred to the caller which disposes it.")]
     private async Task<(System.IO.Stream Data, string ContentType, string FileName)> BrowserDownloadAsync(
         BrowserDownloadParams dlParams, CancellationToken ct)
     {
-        if (_cachedInvoices == null || _cachedInvoices.Count == 0)
+        // Snapshot the list once — background refresh can swap _cachedInvoices between reads.
+        IReadOnlyList<InvoiceSummary>? invoices = _cachedInvoices;
+        if (invoices == null || invoices.Count == 0)
         {
             throw new InvalidOperationException("No invoices found. Search first.");
         }
@@ -2169,7 +2177,7 @@ public class GuiCommand : IWithConfigCommand
         List<(int idx, InvoiceSummary inv)> toDownload;
         if (dlParams.Indices == null)
         {
-            toDownload = _cachedInvoices.Select((inv, i) => (i, inv)).ToList();
+            toDownload = invoices.Select((inv, i) => (i, inv)).ToList();
         }
         else if (dlParams.Indices.Length == 0)
         {
@@ -2179,8 +2187,8 @@ public class GuiCommand : IWithConfigCommand
         {
             toDownload = dlParams.Indices
                 .Distinct()
-                .Where(i => i >= 0 && i < _cachedInvoices.Count)
-                .Select(i => (i, _cachedInvoices[i]))
+                .Where(i => i >= 0 && i < invoices.Count)
+                .Select(i => (i, invoices[i]))
                 .ToList();
             if (toDownload.Count == 0)
             {
