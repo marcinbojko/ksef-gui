@@ -2158,7 +2158,7 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private async Task<(byte[] Data, string ContentType, string FileName)> BrowserDownloadAsync(
+    private async Task<(System.IO.Stream Data, string ContentType, string FileName)> BrowserDownloadAsync(
         BrowserDownloadParams dlParams, CancellationToken ct)
     {
         if (_cachedInvoices == null || _cachedInvoices.Count == 0)
@@ -2208,7 +2208,7 @@ public class GuiCommand : IWithConfigCommand
             byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
             string safeName = SanitizeFileName(inv.KsefNumber) + ".pdf";
             Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
-            return (pdf, "application/pdf", safeName);
+            return (new System.IO.MemoryStream(pdf), "application/pdf", safeName);
         }
         else
         {
@@ -2217,7 +2217,7 @@ public class GuiCommand : IWithConfigCommand
             string zipName = $"faktury-{month}-{uid}.zip";
             Log.LogInformation($"[browser-dl] Building ZIP: {zipName}");
 
-            using System.IO.MemoryStream ms = new();
+            System.IO.MemoryStream ms = new(); // ownership transferred to caller via returned Stream
             using (System.IO.Compression.ZipArchive zip = new(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
             {
                 int n = 0;
@@ -2238,8 +2238,9 @@ public class GuiCommand : IWithConfigCommand
                     }
                 }
             }
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
             Log.LogInformation($"[browser-dl] ZIP ready: {zipName} ({ms.Length} bytes)");
-            return (ms.ToArray(), "application/zip", zipName);
+            return (ms, "application/zip", zipName);
         }
     }
 

@@ -31,8 +31,8 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called when the user requests a monthly summary CSV. Returns the output file path.</summary>
     public Func<DownloadSummaryParams, CancellationToken, Task<string>>? OnDownloadSummary { get; set; }
 
-    /// <summary>Called when the user requests ad-hoc browser download. Returns (bytes, contentType, fileName).</summary>
-    public Func<BrowserDownloadParams, CancellationToken, Task<(byte[] Data, string ContentType, string FileName)>>? OnBrowserDownload { get; set; }
+    /// <summary>Called when the user requests ad-hoc browser download. Returns (stream, contentType, fileName). Caller disposes the stream.</summary>
+    public Func<BrowserDownloadParams, CancellationToken, Task<(System.IO.Stream Data, string ContentType, string FileName)>>? OnBrowserDownload { get; set; }
 
     /// <summary>Called when the user clicks "Autoryzuj". Forces re-authentication and returns status message.</summary>
     public Func<CancellationToken, Task<string>>? OnAuth { get; set; }
@@ -377,17 +377,20 @@ internal sealed class WebProgressServer : IDisposable
                 string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
                 BrowserDownloadParams dlParams = JsonSerializer.Deserialize<BrowserDownloadParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? new BrowserDownloadParams(null);
-                (byte[] data, string contentType, string fileName) = await OnBrowserDownload(dlParams, ct).ConfigureAwait(false);
-                ctx.Response.StatusCode = 200;
-                ctx.Response.ContentType = contentType;
-                // Sanitize fileName: strip path traversal, control characters and quotes to prevent header injection.
-                string safeBase = Path.GetFileName(fileName);
-                if (string.IsNullOrWhiteSpace(safeBase)) { safeBase = "download"; }
-                safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
-                string encoded = Uri.EscapeDataString(safeBase);
-                ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
-                ctx.Response.ContentLength64 = data.Length;
-                await ctx.Response.OutputStream.WriteAsync(data, ct).ConfigureAwait(false);
+                (System.IO.Stream dataStream, string contentType, string fileName) = await OnBrowserDownload(dlParams, ct).ConfigureAwait(false);
+                await using (dataStream.ConfigureAwait(false))
+                {
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.ContentType = contentType;
+                    // Sanitize fileName: strip path traversal, control characters and quotes to prevent header injection.
+                    string safeBase = Path.GetFileName(fileName);
+                    if (string.IsNullOrWhiteSpace(safeBase)) { safeBase = "download"; }
+                    safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
+                    string encoded = Uri.EscapeDataString(safeBase);
+                    ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
+                    if (dataStream.CanSeek) { ctx.Response.ContentLength64 = dataStream.Length; }
+                    await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -407,6 +410,17 @@ internal sealed class WebProgressServer : IDisposable
             {
                 Log.LogError($"[browser-dl] Upstream error: {ex.Message}\n{ex.StackTrace}");
                 WriteErrorResponse(ctx, 502, "Błąd komunikacji z KSeF.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                (int statusCode, string msg) = ex switch
+                {
+                    UnauthorizedAccessException => (401, "Brak autoryzacji."),
+                    JsonException => (400, "Nieprawidłowy format danych."),
+                    _ => (500, "Nieoczekiwany błąd serwera.")
+                };
+                Log.LogError($"[browser-dl] Unexpected {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, statusCode, msg);
             }
             finally
             {
@@ -2753,8 +2767,10 @@ async function doBrowserDownload() {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = fileName; a.click();
-    URL.revokeObjectURL(url);
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
   } catch (err) {
     setStatus('Błąd pobierania: ' + err.message, 'error');
   } finally {
