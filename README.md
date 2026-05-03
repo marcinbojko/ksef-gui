@@ -884,43 +884,7 @@ Fields extracted from KSeF invoice XML (FA(3) schema) and included in the genera
 
 ---
 
-## 📋 Changelog
-
-### 0.6.5 (unreleased)
-
-- Nowy przycisk **Pobierz PDF / ZIP** (pomarańczowy) — pobiera faktury bezpośrednio do przeglądarki; 1 faktura = PDF, wiele = archiwum ZIP `faktury-RRRR-MM-{uid}.zip`
-- Zmiana nazw przycisków: "Pobierz zaznaczone/wszystkie" → "Zapisz zaznaczone/wszystkie" (zapis na serwer)
-- Logi `[browser-dl]` ze szczegółami każdego kroku pobierania
-- `Generating PDF...` teraz przez logger (z timestamp i poziomem), nie `Console.WriteLine`
-
----
-
-### 0.6.2
-
-**⚠️ Breaking change — struktura katalogów**
-- Faktury zapisywane są teraz w podkatalogu według typu podmiotu: `katalog/[NIP/]sprzedawca|nabywca|podmiot3|uprawniony/`
-- Pliki pobrane we wcześniejszych wersjach nie będą rozpoznawane jako istniejące — należy je przenieść do odpowiedniego podkatalogu
-
----
-
-### 0.6.1
-
-- Kursy walut NBP w chipach walutowych (np. `EUR (12) 4,2567`)
-- Przeliczenie na PLN w wykresie: `≈ netto: X PLN / brutto: Y PLN`
-- Podsumowanie w PLN pod wykresem, reaktywne na filtr walut
-- Słupki netto + VAT skalowane proporcjonalnie do największej wartości brutto
-- Nowe kolumny w tabeli faktur: Kwota netto i VAT (`brutto − netto`)
-- PDF: Podmiot3, PodmiotUpowazniony, dynamiczne stawki VAT (`P_13_*`/`P_14_*`), VAT walutowy (`P_14_*W`), kurs waluty, procedury specjalne (P_16–P_18A), podstawa zwolnienia (P_19), warunki transakcji (Incoterms, NrZamówienia)
-
----
-
-### 0.6.0
-
-- Wykres przychodów netto per waluta (opt-out)
-- Segment VAT w wykresie walutowym
-- Powiadomienia e-mail (SMTP/STARTTLS)
-
----
+_Pełna historia zmian: [CHANGELOG.md](CHANGELOG.md)_
 
 <div align="center">
 
