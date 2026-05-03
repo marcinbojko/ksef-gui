@@ -403,6 +403,7 @@ public class GuiCommand : IWithConfigCommand
 
         server.OnSearch = SearchAsync;
         server.OnDownload = DownloadAsync;
+        server.OnBrowserDownload = BrowserDownloadAsync;
         server.OnDownloadSummary = GenerateSummaryAsync;
         server.OnAuth = AuthAsync;
         server.OnInvoiceDetails = InvoiceDetailsAsync;
@@ -2133,6 +2134,79 @@ public class GuiCommand : IWithConfigCommand
         if (_server != null)
         {
             await _server.SendEventAsync("all_done", new { count = toDownload.Count }).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(byte[] Data, string ContentType, string FileName)> BrowserDownloadAsync(
+        BrowserDownloadParams dlParams, CancellationToken ct)
+    {
+        if (_cachedInvoices == null || _cachedInvoices.Count == 0)
+        {
+            throw new InvalidOperationException("No invoices found. Search first.");
+        }
+
+        List<(int idx, InvoiceSummary inv)> toDownload = dlParams.Indices is { Length: > 0 }
+            ? dlParams.Indices.Select(i => (i, _cachedInvoices[i])).ToList()
+            : _cachedInvoices.Select((inv, i) => (i, inv)).ToList();
+
+        if (toDownload.Count == 0)
+        {
+            throw new InvalidOperationException("No invoices selected.");
+        }
+
+        IVerificationLinkService? linkSvc = _scope?.ServiceProvider.GetService<IVerificationLinkService>();
+        string colorScheme = dlParams.PdfColorScheme ?? "navy";
+
+        Log.LogInformation($"[browser-dl] Starting browser download: {toDownload.Count} invoice(s), profile={ActiveProfile}");
+
+        if (toDownload.Count == 1)
+        {
+            (int _, InvoiceSummary inv) = toDownload[0];
+            Log.LogInformation($"[browser-dl] Fetching XML for {inv.KsefNumber}");
+            string xml = await _ksefClient!.GetInvoiceAsync(
+                inv.KsefNumber,
+                await GetAccessToken(_scope!, ct).ConfigureAwait(false),
+                ct).ConfigureAwait(false);
+            Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
+            string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
+            byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
+            string safeName = SanitizeFileName(inv.KsefNumber) + ".pdf";
+            Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
+            return (pdf, "application/pdf", safeName);
+        }
+        else
+        {
+            string month = dlParams.Month ?? DateTime.UtcNow.ToString("yyyy-MM");
+            string uid = Guid.NewGuid().ToString("N")[..8];
+            string zipName = $"faktury-{month}-{uid}.zip";
+            Log.LogInformation($"[browser-dl] Building ZIP: {zipName}");
+
+            using System.IO.MemoryStream ms = new();
+            using (System.IO.Compression.ZipArchive zip = new(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+            {
+                int n = 0;
+                foreach ((int _, InvoiceSummary inv) in toDownload)
+                {
+                    n++;
+                    Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Fetching {inv.KsefNumber}");
+                    string xml = await _ksefClient!.GetInvoiceAsync(
+                        inv.KsefNumber,
+                        await GetAccessToken(_scope!, ct).ConfigureAwait(false),
+                        ct).ConfigureAwait(false);
+                    string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
+                    byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
+                    string entryName = SanitizeFileName(inv.KsefNumber) + ".pdf";
+                    Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Added {entryName} ({pdf.Length} bytes)");
+                    System.IO.Compression.ZipArchiveEntry entry = zip.CreateEntry(entryName, System.IO.Compression.CompressionLevel.Fastest);
+                    System.IO.Stream entryStream = entry.Open();
+                    await using (entryStream.ConfigureAwait(false))
+                    {
+                        await entryStream.WriteAsync(pdf, ct).ConfigureAwait(false);
+                    }
+                }
+            }
+            Log.LogInformation($"[browser-dl] ZIP ready: {zipName} ({ms.Length} bytes)");
+            return (ms.ToArray(), "application/zip", zipName);
         }
     }
 

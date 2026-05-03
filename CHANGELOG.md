@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.5] — unreleased
+
+### Added
+
+- **Browser download** — new "Pobierz PDF" / "Pobierz ZIP" button (orange) downloads invoices directly to the browser instead of saving to a server folder:
+  - 1 invoice selected → single `.pdf` file sent to browser download dialog
+  - 2+ invoices selected → `.zip` archive containing one PDF per invoice, named `faktury-YYYY-MM-{uid}.zip`
+  - Button is disabled when nothing is selected; label updates dynamically with selection count
+- All browser-download steps logged at `[INF]` level with prefix `[browser-dl]`
+
+### Changed
+
+- Renamed "Pobierz zaznaczone" → "Zapisz zaznaczone" and "Pobierz wszystkie" → "Zapisz wszystkie" to distinguish server-folder saves from browser downloads
+- `Generating PDF (native renderer)...` now routed through the logger (with timestamp and level) instead of raw `Console.WriteLine`
+
+---
+
 ## [0.6.4] — 2026-05-02
 
 ### Fixed

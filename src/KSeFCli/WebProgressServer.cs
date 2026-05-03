@@ -12,6 +12,7 @@ internal record SearchParams(string SubjectType, string From, string? To, string
 internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null, string? SubjectType = null);
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip, string? SubjectType = null);
 internal record DownloadSummaryParams(string OutputDir, string Month, bool SeparateByNip = false);
+internal record BrowserDownloadParams(int[]? Indices, string? PdfColorScheme = null, string? Month = null);
 
 internal sealed class WebProgressServer : IDisposable
 {
@@ -29,6 +30,9 @@ internal sealed class WebProgressServer : IDisposable
 
     /// <summary>Called when the user requests a monthly summary CSV. Returns the output file path.</summary>
     public Func<DownloadSummaryParams, CancellationToken, Task<string>>? OnDownloadSummary { get; set; }
+
+    /// <summary>Called when the user requests ad-hoc browser download. Returns (bytes, contentType, fileName).</summary>
+    public Func<BrowserDownloadParams, CancellationToken, Task<(byte[] Data, string ContentType, string FileName)>>? OnBrowserDownload { get; set; }
 
     /// <summary>Called when the user clicks "Autoryzuj". Forces re-authentication and returns status message.</summary>
     public Func<CancellationToken, Task<string>>? OnAuth { get; set; }
@@ -358,6 +362,47 @@ internal sealed class WebProgressServer : IDisposable
                 await OnDownload(dlParams, ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { ok = true });
             }).ConfigureAwait(false);
+        }
+        else if (path == "/download-browser" && method == "POST")
+        {
+            if (OnBrowserDownload == null)
+            {
+                ctx.Response.StatusCode = 501;
+                ctx.Response.Close();
+                return;
+            }
+            try
+            {
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
+                BrowserDownloadParams dlParams = JsonSerializer.Deserialize<BrowserDownloadParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new BrowserDownloadParams(null);
+                (byte[] data, string contentType, string fileName) = await OnBrowserDownload(dlParams, ct).ConfigureAwait(false);
+                ctx.Response.StatusCode = 200;
+                ctx.Response.ContentType = contentType;
+                ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
+                ctx.Response.ContentLength64 = data.Length;
+                await ctx.Response.OutputStream.WriteAsync(data, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.LogError($"[browser-dl] Failed: {ex.GetType().Name}: {ex.Message}");
+                try
+                {
+                    ctx.Response.StatusCode = 500;
+                    string err = JsonSerializer.Serialize(new { error = ex.Message });
+                    byte[] errBytes = System.Text.Encoding.UTF8.GetBytes(err);
+                    ctx.Response.ContentType = "application/json";
+                    ctx.Response.ContentLength64 = errBytes.Length;
+                    await ctx.Response.OutputStream.WriteAsync(errBytes, ct).ConfigureAwait(false);
+                }
+                catch { }
+            }
+            finally
+            {
+                try { ctx.Response.Close(); } catch { }
+            }
+            return;
         }
         else if (path == "/download-summary" && method == "POST")
         {
@@ -1199,8 +1244,9 @@ body.dark .pref-label{color:#aaa}
 </div>
 <div id="tableWrap"></div>
 <div class="toolbar" id="downloadBar" style="display:none">
-  <button class="btn-success" id="btnDownloadSel" onclick="doDownload(true)">Pobierz zaznaczone</button>
-  <button class="btn-success" id="btnDownload" onclick="doDownload(false)" style="background:#1976d2">Pobierz wszystkie</button>
+  <button class="btn-success" id="btnDownloadSel" onclick="doDownload(true)">Zapisz zaznaczone</button>
+  <button class="btn-success" id="btnDownload" onclick="doDownload(false)" style="background:#1976d2">Zapisz wszystkie</button>
+  <button class="btn-success" id="btnBrowserDownload" onclick="doBrowserDownload()" style="background:#e65100">Pobierz PDF</button>
   <button class="btn-success" id="btnSummary" onclick="doSummary()" style="background:#7b1fa2">Podsumowanie CSV</button>
   <span class="count" id="countLabel"></span>
 </div>
@@ -1258,7 +1304,7 @@ const $ = id => document.getElementById(id);
 const bar = $('bar'), progressWrap = $('progressWrap'),
       tableWrap = $('tableWrap'), downloadBar = $('downloadBar'), filterBar = $('filterBar'),
       selToolbar = $('selToolbar'), selCount = $('selCount'),
-      btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'),
+      btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'), btnBrowserDownload = $('btnBrowserDownload'),
       btnSummary = $('btnSummary'), countLabel = $('countLabel');
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
 let profileSwitchGen = 0; // incremented on every profile switch; stale async results discard themselves
@@ -1397,7 +1443,7 @@ loadPrefs().then(() => loadCachedInvoices());
 function applySetupMode(required) {
   const banner = $('setupBanner');
   if (banner) banner.style.display = required ? 'flex' : 'none';
-  const blocked = [btnSearch, btnDownload, btnDownloadSel, $('btnAuth')];
+  const blocked = [btnSearch, btnDownload, btnDownloadSel, btnBrowserDownload, $('btnAuth')];
   for (const b of blocked) { if (b) b.disabled = required; }
   if (required) setTimeout(() => openConfigEditor(), 400);
 }
@@ -2246,7 +2292,10 @@ function updateSelectionUI() {
   selToolbar.classList.toggle('visible', invoices.length > 0);
   selCount.textContent = n > 0 ? 'Zaznaczono: ' + n : '';
   btnDownloadSel.disabled = n === 0;
-  btnDownloadSel.textContent = n > 0 ? 'Pobierz zaznaczone (' + n + ')' : 'Pobierz zaznaczone';
+  btnDownloadSel.textContent = n > 0 ? 'Zapisz zaznaczone (' + n + ')' : 'Zapisz zaznaczone';
+  btnBrowserDownload.disabled = n === 0;
+  if (n <= 1) { btnBrowserDownload.textContent = 'Pobierz PDF'; }
+  else { btnBrowserDownload.textContent = 'Pobierz ZIP (' + n + ')'; }
 }
 
 function connectSSE() {
@@ -2658,6 +2707,33 @@ async function doDownload(selOnly) {
   } catch (err) {
     setStatus('Blad: ' + err.message, 'error');
     btnSearch.disabled = false; btnDownload.disabled = false; btnDownloadSel.disabled = selectedInvoices.size === 0;
+  }
+}
+
+async function doBrowserDownload() {
+  const indices = selectedInvoices.size > 0 ? [...selectedInvoices] : null;
+  const month = $('fromDate').value || new Date().toISOString().slice(0, 7);
+  const body = {
+    indices,
+    pdfColorScheme: $('pdfColorScheme').value,
+    month
+  };
+  btnBrowserDownload.disabled = true;
+  try {
+    const res = await fetch('/download-browser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error || msg; } catch { msg = await res.text().then(t => t.slice(0,120)).catch(() => msg); } throw new Error(msg); }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename="([^"]+)"/);
+    const fileName = nameMatch ? nameMatch[1] : 'faktury.pdf';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    setStatus('Błąd pobierania: ' + err.message, 'error');
+  } finally {
+    btnBrowserDownload.disabled = false;
   }
 }
 
