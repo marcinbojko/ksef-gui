@@ -163,6 +163,21 @@ Token długoterminowy: portal KSeF → _Integracja → Tokeny_.
 | `--useInvoiceNumber` | Nazwa pliku wg numeru faktury        | wyłączone |
 | `--lan`              | Nasłuchuj na wszystkich interfejsach | wyłączone |
 
+### 📥 Pobieranie faktur
+
+Po wyszukaniu faktur dostępne są dwa tryby pobierania:
+
+| Przycisk | Kolor | Działanie |
+| -------- | ----- | --------- |
+| **Zapisz zaznaczone** | Zielony | Zapisuje zaznaczone faktury do skonfigurowanego katalogu na serwerze |
+| **Zapisz wszystkie** | Niebieski | Zapisuje wszystkie faktury do skonfigurowanego katalogu na serwerze |
+| **Pobierz PDF** / **Pobierz ZIP (X)** | Pomarańczowy | Pobiera bezpośrednio do przeglądarki — bez zapisu na serwerze |
+
+**Pobieranie przez przeglądarkę ("Pobierz PDF / ZIP"):**
+- Przycisk jest wyszarzony gdy nic nie jest zaznaczone
+- 1 faktura zaznaczona → plik `.pdf` bezpośrednio w oknie pobierania przeglądarki
+- 2+ faktur zaznaczonych → archiwum `.zip` z plikami PDF, nazwa: `faktury-RRRR-MM-{uid}.zip`
+
 ### 📁 Struktura katalogów przy pobieraniu
 
 Faktury zapisywane są według schematu zależnego od ustawień:
@@ -579,6 +594,21 @@ Obtain a long-term token from the KSeF portal: _Integracja → Tokeny_.
 | `--useInvoiceNumber` | Use invoice number for filenames |   off   |
 | `--lan`              | Listen on all network interfaces |   off   |
 
+### 📥 Downloading invoices
+
+After searching, two download modes are available:
+
+| Button | Colour | Action |
+| ------ | ------ | ------ |
+| **Zapisz zaznaczone** | Green | Saves selected invoices to the configured server folder |
+| **Zapisz wszystkie** | Blue | Saves all invoices to the configured server folder |
+| **Pobierz PDF** / **Pobierz ZIP (X)** | Orange | Downloads directly to the browser — no server folder needed |
+
+**Browser download ("Pobierz PDF / ZIP"):**
+- Button is disabled when nothing is selected
+- 1 invoice selected → single `.pdf` sent to the browser download dialog
+- 2+ invoices selected → `.zip` archive with one PDF per invoice, named `faktury-YYYY-MM-{uid}.zip`
+
 ### 📁 Download directory structure
 
 Invoices are saved according to a path scheme determined by settings:
@@ -855,6 +885,15 @@ Fields extracted from KSeF invoice XML (FA(3) schema) and included in the genera
 ---
 
 ## 📋 Changelog
+
+### 0.6.5 (unreleased)
+
+- Nowy przycisk **Pobierz PDF / ZIP** (pomarańczowy) — pobiera faktury bezpośrednio do przeglądarki; 1 faktura = PDF, wiele = archiwum ZIP `faktury-RRRR-MM-{uid}.zip`
+- Zmiana nazw przycisków: "Pobierz zaznaczone/wszystkie" → "Zapisz zaznaczone/wszystkie" (zapis na serwer)
+- Logi `[browser-dl]` ze szczegółami każdego kroku pobierania
+- `Generating PDF...` teraz przez logger (z timestamp i poziomem), nie `Console.WriteLine`
+
+---
 
 ### 0.6.2
 

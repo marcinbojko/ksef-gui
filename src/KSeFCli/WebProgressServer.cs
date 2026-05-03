@@ -12,6 +12,7 @@ internal record SearchParams(string SubjectType, string From, string? To, string
 internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null, string? SubjectType = null);
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip, string? SubjectType = null);
 internal record DownloadSummaryParams(string OutputDir, string Month, bool SeparateByNip = false);
+internal record BrowserDownloadParams(int[]? Indices, string? PdfColorScheme = null, string? Month = null);
 
 internal sealed class WebProgressServer : IDisposable
 {
@@ -29,6 +30,9 @@ internal sealed class WebProgressServer : IDisposable
 
     /// <summary>Called when the user requests a monthly summary CSV. Returns the output file path.</summary>
     public Func<DownloadSummaryParams, CancellationToken, Task<string>>? OnDownloadSummary { get; set; }
+
+    /// <summary>Called when the user requests ad-hoc browser download. Returns (stream, contentType, fileName). Caller disposes the stream.</summary>
+    public Func<BrowserDownloadParams, CancellationToken, Task<(System.IO.Stream Data, string ContentType, string FileName)>>? OnBrowserDownload { get; set; }
 
     /// <summary>Called when the user clicks "Autoryzuj". Forces re-authentication and returns status message.</summary>
     public Func<CancellationToken, Task<string>>? OnAuth { get; set; }
@@ -359,6 +363,73 @@ internal sealed class WebProgressServer : IDisposable
                 return JsonSerializer.Serialize(new { ok = true });
             }).ConfigureAwait(false);
         }
+        else if (path == "/download-browser" && method == "POST")
+        {
+            if (OnBrowserDownload == null)
+            {
+                ctx.Response.StatusCode = 501;
+                ctx.Response.Close();
+                return;
+            }
+            try
+            {
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
+                BrowserDownloadParams dlParams = JsonSerializer.Deserialize<BrowserDownloadParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new BrowserDownloadParams(null);
+                (System.IO.Stream dataStream, string contentType, string fileName) = await OnBrowserDownload(dlParams, ct).ConfigureAwait(false);
+                await using (dataStream.ConfigureAwait(false))
+                {
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.ContentType = contentType;
+                    // Sanitize fileName: strip path traversal, control characters and quotes to prevent header injection.
+                    string safeBase = Path.GetFileName(fileName);
+                    if (string.IsNullOrWhiteSpace(safeBase)) { safeBase = "download"; }
+                    safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
+                    string encoded = Uri.EscapeDataString(safeBase);
+                    ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
+                    if (dataStream.CanSeek) { dataStream.Seek(0, System.IO.SeekOrigin.Begin); ctx.Response.ContentLength64 = dataStream.Length; }
+                    await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Log.LogWarning("[browser-dl] Cancelled by client.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Log.LogWarning($"[browser-dl] Client error: {ex.Message}");
+                WriteErrorResponse(ctx, 400, ex.Message);
+            }
+            catch (IOException ex)
+            {
+                Log.LogError($"[browser-dl] I/O error: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, 500, "Błąd odczytu/zapisu.");
+            }
+            catch (HttpRequestException ex)
+            {
+                Log.LogError($"[browser-dl] Upstream error: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, 502, "Błąd komunikacji z KSeF.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                (int statusCode, string msg) = ex switch
+                {
+                    KsefApiException kex => ((int)kex.StatusCode, kex.Message),
+                    UnauthorizedAccessException => (401, "Brak autoryzacji."),
+                    JsonException => (400, "Nieprawidłowy format danych."),
+                    _ => (500, "Nieoczekiwany błąd serwera.")
+                };
+                Log.LogError($"[browser-dl] Unexpected {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                WriteErrorResponse(ctx, statusCode, msg);
+            }
+            finally
+            {
+                try { ctx.Response.Close(); }
+                catch (ObjectDisposedException) { }
+            }
+            return;
+        }
         else if (path == "/download-summary" && method == "POST")
         {
             await HandleAction(ctx, ct, async () =>
@@ -565,6 +636,20 @@ internal sealed class WebProgressServer : IDisposable
             await ctx.Response.OutputStream.WriteAsync(html, ct).ConfigureAwait(false);
             ctx.Response.Close();
         }
+    }
+
+    private static void WriteErrorResponse(HttpListenerContext ctx, int statusCode, string message)
+    {
+        try
+        {
+            byte[] body = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { error = message }));
+            ctx.Response.StatusCode = statusCode;
+            ctx.Response.ContentType = "application/json";
+            ctx.Response.ContentLength64 = body.Length;
+            ctx.Response.OutputStream.Write(body, 0, body.Length);
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
     }
 
     private static async Task HandleAction(HttpListenerContext ctx, CancellationToken ct, Func<Task<string>> action)
@@ -1199,8 +1284,9 @@ body.dark .pref-label{color:#aaa}
 </div>
 <div id="tableWrap"></div>
 <div class="toolbar" id="downloadBar" style="display:none">
-  <button class="btn-success" id="btnDownloadSel" onclick="doDownload(true)">Pobierz zaznaczone</button>
-  <button class="btn-success" id="btnDownload" onclick="doDownload(false)" style="background:#1976d2">Pobierz wszystkie</button>
+  <button class="btn-success" id="btnDownloadSel" onclick="doDownload(true)">Zapisz zaznaczone</button>
+  <button class="btn-success" id="btnDownload" onclick="doDownload(false)" style="background:#1976d2">Zapisz wszystkie</button>
+  <button class="btn-success" id="btnBrowserDownload" onclick="doBrowserDownload()" style="background:#e65100">Pobierz PDF</button>
   <button class="btn-success" id="btnSummary" onclick="doSummary()" style="background:#7b1fa2">Podsumowanie CSV</button>
   <span class="count" id="countLabel"></span>
 </div>
@@ -1258,7 +1344,7 @@ const $ = id => document.getElementById(id);
 const bar = $('bar'), progressWrap = $('progressWrap'),
       tableWrap = $('tableWrap'), downloadBar = $('downloadBar'), filterBar = $('filterBar'),
       selToolbar = $('selToolbar'), selCount = $('selCount'),
-      btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'),
+      btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'), btnBrowserDownload = $('btnBrowserDownload'),
       btnSummary = $('btnSummary'), countLabel = $('countLabel');
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
 let profileSwitchGen = 0; // incremented on every profile switch; stale async results discard themselves
@@ -1397,7 +1483,7 @@ loadPrefs().then(() => loadCachedInvoices());
 function applySetupMode(required) {
   const banner = $('setupBanner');
   if (banner) banner.style.display = required ? 'flex' : 'none';
-  const blocked = [btnSearch, btnDownload, btnDownloadSel, $('btnAuth')];
+  const blocked = [btnSearch, btnDownload, btnDownloadSel, btnBrowserDownload, $('btnAuth')];
   for (const b of blocked) { if (b) b.disabled = required; }
   if (required) setTimeout(() => openConfigEditor(), 400);
 }
@@ -2246,7 +2332,10 @@ function updateSelectionUI() {
   selToolbar.classList.toggle('visible', invoices.length > 0);
   selCount.textContent = n > 0 ? 'Zaznaczono: ' + n : '';
   btnDownloadSel.disabled = n === 0;
-  btnDownloadSel.textContent = n > 0 ? 'Pobierz zaznaczone (' + n + ')' : 'Pobierz zaznaczone';
+  btnDownloadSel.textContent = n > 0 ? 'Zapisz zaznaczone (' + n + ')' : 'Zapisz zaznaczone';
+  btnBrowserDownload.disabled = n === 0;
+  if (n <= 1) { btnBrowserDownload.textContent = 'Pobierz PDF'; }
+  else { btnBrowserDownload.textContent = 'Pobierz ZIP (' + n + ')'; }
 }
 
 function connectSSE() {
@@ -2274,7 +2363,7 @@ function connectSSE() {
         setStatus('Gotowe! Pobrano ' + (d.count || dlTotal) + ' faktur.', 'done');
         bar.style.width = '100%'; bar.textContent = '100%';
         btnSearch.disabled = false; btnDownload.disabled = false;
-        btnDownloadSel.disabled = selectedInvoices.size === 0;
+        btnDownloadSel.disabled = selectedInvoices.size === 0; btnBrowserDownload.disabled = selectedInvoices.size === 0;
         checkExisting();
         break;
       case 'error': {
@@ -2285,7 +2374,7 @@ function connectSSE() {
         if (d.fatal) {
           setStatus('Blad: ' + d.message, 'error');
           btnSearch.disabled = false; btnDownload.disabled = false;
-          btnDownloadSel.disabled = selectedInvoices.size === 0;
+          btnDownloadSel.disabled = selectedInvoices.size === 0; btnBrowserDownload.disabled = selectedInvoices.size === 0;
         }
         break;
       }
@@ -2405,9 +2494,16 @@ function monthToTo(val) {
   return val + '-' + String(last).padStart(2, '0');
 }
 
+function setBusyState(busy) {
+  btnSearch.disabled = busy;
+  btnDownload.disabled = busy;
+  btnDownloadSel.disabled = busy || selectedInvoices.size === 0;
+  btnBrowserDownload.disabled = busy || selectedInvoices.size === 0;
+}
+
 async function doSearch() {
   searchRunning = true;
-  btnSearch.disabled = true; btnDownload.disabled = true; btnDownloadSel.disabled = true;
+  setBusyState(true);
   downloadBar.style.display = 'none';
   selToolbar.classList.remove('visible');
   tableWrap.innerHTML = '';
@@ -2449,7 +2545,7 @@ async function doSearch() {
     renderTable();
     downloadBar.style.display = total > 0 ? 'flex' : 'none';
     searchRunning = false;
-    btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true;
+    searchRunning = false; btnSearch.disabled = false; btnDownload.disabled = total === 0; btnDownloadSel.disabled = true; btnBrowserDownload.disabled = total === 0;
     checkExisting();
     // Capture params for cyclic refresh; re-baseline known set on every manual search
     lastSearchParams = { subjectType: $('subjectType').value, fromDate: $('fromDate').value, toDate: $('toDate').value, dateType: $('dateType').value };
@@ -2629,7 +2725,7 @@ async function doDownload(selOnly) {
   const dlCount = selOnly ? selectedInvoices.size : total;
   if (selOnly && dlCount === 0) { setStatus('Nie zaznaczono faktur.', 'error'); return; }
 
-  btnSearch.disabled = true; btnDownload.disabled = true; btnDownloadSel.disabled = true;
+  setBusyState(true);
   completed = 0; dlTotal = dlCount;
   progressWrap.classList.add('visible');
   bar.style.width = '0%'; bar.textContent = '0%';
@@ -2657,7 +2753,37 @@ async function doDownload(selOnly) {
     if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Download failed'); }
   } catch (err) {
     setStatus('Blad: ' + err.message, 'error');
-    btnSearch.disabled = false; btnDownload.disabled = false; btnDownloadSel.disabled = selectedInvoices.size === 0;
+    setStatus('Blad: ' + err.message, 'error');
+    setBusyState(false);
+  }
+}
+
+async function doBrowserDownload() {
+  const indices = selectedInvoices.size > 0 ? [...selectedInvoices] : null;
+  const month = $('fromDate').value || new Date().toISOString().slice(0, 7);
+  const body = {
+    indices,
+    pdfColorScheme: $('pdfColorScheme').value,
+    month
+  };
+  setBusyState(true);
+  try {
+    const res = await fetch('/download-browser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error || msg; } catch { msg = await res.text().then(t => t.slice(0,120)).catch(() => msg); } throw new Error(msg); }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename="([^"]+)"/);
+    const fileName = nameMatch ? nameMatch[1] : 'faktury.pdf';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  } catch (err) {
+    setStatus('Błąd pobierania: ' + err.message, 'error');
+  } finally {
+    setBusyState(false);
   }
 }
 
