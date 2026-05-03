@@ -415,6 +415,7 @@ internal sealed class WebProgressServer : IDisposable
             {
                 (int statusCode, string msg) = ex switch
                 {
+                    KsefApiException kex => ((int)kex.StatusCode, kex.Message),
                     UnauthorizedAccessException => (401, "Brak autoryzacji."),
                     JsonException => (400, "Nieprawidłowy format danych."),
                     _ => (500, "Nieoczekiwany błąd serwera.")
