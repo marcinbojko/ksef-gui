@@ -2121,11 +2121,13 @@ public class GuiCommand : IWithConfigCommand
 
     private async Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
     {
-        // Capture a snapshot so a concurrent profile switch cannot change the client/scope mid-retry.
-        IKSeFClient requestClient = _ksefClient!;
-        IServiceScope requestScope = _scope!;
+        // Snapshot profile identity before acquiring scope so ExpireStoredAccessToken targets the right profile.
         string requestProfile = ActiveProfile;
         ProfileConfig requestConfig = Config();
+
+        // Own a fresh scope for this operation so a concurrent profile switch cannot dispose our client mid-retry.
+        using IServiceScope requestScope = GetScope(requestConfig);
+        IKSeFClient requestClient = requestScope.ServiceProvider.GetRequiredService<IKSeFClient>();
 
         const int maxRetries = 5;
         bool tokenExpiredRetried = false;
@@ -2351,9 +2353,10 @@ public class GuiCommand : IWithConfigCommand
         XElement? platnosc = fa?.Element(ns + "Platnosc");
         XElement? rachunek = platnosc?.Element(ns + "RachunekBankowy");
         string? rawTermin = platnosc?.Element(ns + "TerminPlatnosci")
-            ?.Elements()
-            .FirstOrDefault()?.Value
-            ?? platnosc?.Element(ns + "TerminPlatnosci")?.Value;
+            ?.Elements().FirstOrDefault()?.Value
+            ?? platnosc?.Element(ns + "TerminPlatnosci")?.Value
+            ?? platnosc?.Element(ns + "Termin")?.Elements().FirstOrDefault()?.Value
+            ?? platnosc?.Element(ns + "Termin")?.Value;
         string? rawForma = platnosc?.Element(ns + "FormaPlatnosci")?.Value;
         string? paymentMethod = rawForma switch
         {

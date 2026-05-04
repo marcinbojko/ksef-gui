@@ -189,7 +189,7 @@ Każda faktura ma przycisk 📄 otwierający podgląd z pełnymi danymi:
 - Kopiowanie do schowka: numer faktury, nazwa sprzedawcy, numer konta, kwota brutto
 - Weryfikacja QR KSeF
 
-> ⚠️ **Breaking change (0.6.5):** Przycisk 🔍 "Szczegóły faktury" został usunięty. Wszystkie informacje dostępne są teraz wyłącznie w Podglądzie faktury (przycisk 📄).
+> ⚠️ **Breaking change (0.6.6):** Przycisk 🔍 "Szczegóły faktury" został usunięty. Wszystkie informacje dostępne są teraz wyłącznie w Podglądzie faktury (przycisk 📄).
 
 ### 📁 Struktura katalogów przy pobieraniu
 
@@ -633,7 +633,7 @@ Every invoice has a 📄 button that opens a full-detail preview popup:
 - Copy to clipboard: invoice number, seller name, bank account number, gross amount
 - KSeF QR code verification
 
-> ⚠️ **Breaking change (0.6.5):** The 🔍 "Invoice Details" button and its popup have been removed. All information previously shown there is now available in the Invoice Preview (📄 button).
+> ⚠️ **Breaking change (0.6.6):** The 🔍 "Invoice Details" button and its popup have been removed. All information previously shown there is now available in the Invoice Preview (📄 button).
 
 ### 📁 Download directory structure
 

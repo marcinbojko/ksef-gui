@@ -16,6 +16,15 @@ internal record BrowserDownloadParams(int[]? Indices, string? PdfColorScheme = n
 
 internal sealed class WebProgressServer : IDisposable
 {
+    private static readonly HttpClient _wlHttpClient = CreateWlHttpClient();
+
+    private static HttpClient CreateWlHttpClient()
+    {
+        HttpClient c = new() { Timeout = TimeSpan.FromSeconds(10) };
+        c.DefaultRequestHeaders.Add("Accept", "application/json");
+        return c;
+    }
+
     private readonly HttpListener _listener = new();
     private readonly List<StreamWriter> _sseClients = new();
     private readonly Lock _clientsLock = new();
@@ -634,11 +643,7 @@ internal sealed class WebProgressServer : IDisposable
                 string date = DateTime.UtcNow.ToString("yyyy-MM-dd");
                 string apiUrl = $"https://wl-api.mf.gov.pl/api/check/nip/{Uri.EscapeDataString(nip)}/bank-account/{Uri.EscapeDataString(account)}?date={date}";
 
-                using HttpClient http = new();
-                http.DefaultRequestHeaders.Add("Accept", "application/json");
-                http.Timeout = TimeSpan.FromSeconds(10);
-
-                HttpResponseMessage resp = await http.GetAsync(apiUrl, ct).ConfigureAwait(false);
+                HttpResponseMessage resp = await _wlHttpClient.GetAsync(apiUrl, ct).ConfigureAwait(false);
                 string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
                 string maskedNip = nip.Length > 4 ? new string('*', nip.Length - 4) + nip[^4..] : "****";

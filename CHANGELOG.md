@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
   - Bank account number (`NrRB`) with one-click copy-to-clipboard button
   - Payment method and due date
   - Bank name and account description
-  - **Biała Lista verification** — "Sprawdź w Białej Liście" button calls the MF API (`wl-api.mf.gov.pl`) directly and shows the result inline: ✓ / ✗ with date and verification key (`requestId`). Limit: 100 requests/day per IP.
+  - **Biała Lista verification** — "Sprawdź w Białej Liście" button calls the server-side `/whitelist-check` proxy, which normalises the account number (strips spaces, dashes, country prefix), forwards the request to `wl-api.mf.gov.pl`, wraps upstream errors into a structured JSON envelope, and shows the result inline: ✓ / ✗ with date and verification key (`requestId`). Limit: 100 requests/day per server IP. NIP and account are masked to last-4 digits in server logs.
 - **Copy to clipboard** buttons in invoice preview: invoice number, seller name, bank account number, gross amount
 - Biała Lista check logged at `[INF]` with masked NIP/account (last 4 digits only)
 
