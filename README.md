@@ -39,7 +39,7 @@
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
 | 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
-| 🌙 **Tryb ciemny**        | Trzy niezależne tryby: GUI, podgląd faktury, szczegóły                                    |
+| 🌙 **Tryb ciemny**        | Niezależne tryby ciemny/jasny dla GUI i podglądu faktury                                  |
 | 🐳 **Docker**             | Gotowy `docker-compose` z Traefik i Ofelia                                                |
 | 🔒 **Bez internetu**      | Walidacja XSD i generowanie PDF działają w pełni offline                                  |
 
@@ -177,6 +177,19 @@ Po wyszukaniu faktur dostępne są dwa tryby pobierania:
 - Przycisk jest wyszarzony gdy nic nie jest zaznaczone
 - 1 faktura zaznaczona → plik `.pdf` bezpośrednio w oknie pobierania przeglądarki
 - 2+ faktur zaznaczonych → archiwum `.zip` z plikami PDF, nazwa: `faktury-RRRR-MM-{uid}.zip`
+
+### 👁 Podgląd faktury
+
+Każda faktura ma przycisk 📄 otwierający podgląd z pełnymi danymi:
+
+- Dane sprzedawcy i nabywcy (z przyciskami kopiowania)
+- Tabela pozycji, podsumowanie stawek VAT
+- Sekcja **Płatność**: forma, termin, numer konta bankowego z przyciskiem kopiowania
+- **Biała Lista podatników** — przycisk "Sprawdź w Białej Liście" wysyła zapytanie do lokalnego proxy `/whitelist-check`, które normalizuje numer konta (usuwa spacje, myślniki, prefiks kraju), przekazuje je do `wl-api.mf.gov.pl`, opakowuje błędy upstream i pokazuje wynik inline: ✓ konto zweryfikowane / ✗ konto niezarejestrowane, z datą i kluczem weryfikacji (`requestId`). Limit: 100 zapytań/dzień per IP serwera (wspólny dla wszystkich podglądów).
+- Kopiowanie do schowka: numer faktury, nazwa sprzedawcy, numer konta, kwota brutto
+- Weryfikacja QR KSeF
+
+> ⚠️ **Breaking change (0.6.6):** Przycisk 🔍 "Szczegóły faktury" został usunięty. Wszystkie informacje dostępne są teraz wyłącznie w Podglądzie faktury (przycisk 📄).
 
 ### 📁 Struktura katalogów przy pobieraniu
 
@@ -470,7 +483,7 @@ Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowa
 | 🔄 **Auto-refresh**        | Background search every N minutes; OS notifications for new invoices                        |
 | 🔔 **Notifications**       | OS desktop notifications, Slack / Teams webhooks, and e-mail (SMTP) per profile             |
 | 💾 **SQLite cache**        | Search results stored locally; profile switching without re-fetching                        |
-| 🌙 **Dark mode**           | Three independent modes: GUI, invoice preview, details panel                                |
+| 🌙 **Dark mode**           | Independent dark/light modes for GUI and invoice preview                                    |
 | 🐳 **Docker**              | Ready-to-use `docker-compose` with Traefik and Ofelia                                       |
 | 🔒 **Offline**             | XSD validation and PDF generation work fully offline                                        |
 
@@ -608,6 +621,19 @@ After searching, two download modes are available:
 - Button is disabled when nothing is selected
 - 1 invoice selected → single `.pdf` sent to the browser download dialog
 - 2+ invoices selected → `.zip` archive with one PDF per invoice, named `faktury-YYYY-MM-{uid}.zip`
+
+### 👁 Invoice Preview
+
+Every invoice has a 📄 button that opens a full-detail preview popup:
+
+- Seller and buyer data (with copy-to-clipboard buttons for name and gross amount)
+- Line-item table, VAT rate summary
+- **Payment section**: payment method, due date, bank account number with copy button
+- **Taxpayer Whitelist (Biała Lista)** — the "Sprawdź w Białej Liście" button sends the request to the local `/whitelist-check` proxy, which normalises the account number (strips spaces, dashes, country prefix), forwards it to `wl-api.mf.gov.pl`, wraps upstream errors, and shows the result inline: ✓ account verified / ✗ account not registered, with the verification timestamp and request key (`requestId`). Limit: 100 requests/day per server IP (shared across all invoice previews).
+- Copy to clipboard: invoice number, seller name, bank account number, gross amount
+- KSeF QR code verification
+
+> ⚠️ **Breaking change (0.6.6):** The 🔍 "Invoice Details" button and its popup have been removed. All information previously shown there is now available in the Invoice Preview (📄 button).
 
 ### 📁 Download directory structure
 

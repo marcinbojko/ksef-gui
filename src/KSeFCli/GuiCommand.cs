@@ -2048,26 +2048,8 @@ public class GuiCommand : IWithConfigCommand
                     await _server.SendEventAsync("invoice_start", new { current = i, name = fileName, progress = n, total = toDownload.Count }).ConfigureAwait(false);
                 }
 
-                // Fetch XML from API (always needed — source data for all formats), retry on 429
-                const int dlMaxRetries = 5;
-                string invoiceXml = null!;
-                for (int attempt = 0; ; attempt++)
-                {
-                    try
-                    {
-                        invoiceXml = await _ksefClient!.GetInvoiceAsync(
-                            inv.KsefNumber,
-                            await GetAccessToken(_scope!, ct).ConfigureAwait(false),
-                            ct).ConfigureAwait(false);
-                        break;
-                    }
-                    catch (KsefRateLimitException ex) when (attempt < dlMaxRetries)
-                    {
-                        TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
-                        Log.LogWarning($"Rate limited downloading {inv.KsefNumber}. Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{dlMaxRetries})");
-                        await Task.Delay(delay, ct).ConfigureAwait(false);
-                    }
-                }
+                // Fetch XML — shared helper handles 429 rate-limit retry and 401 token-refresh.
+                string invoiceXml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
 
                 // Write desired formats to workdir, then move to output
                 if (dlParams.ExportJson)
@@ -2139,21 +2121,37 @@ public class GuiCommand : IWithConfigCommand
 
     private async Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
     {
+        // Snapshot profile identity before acquiring scope so ExpireStoredAccessToken targets the right profile.
+        string requestProfile = ActiveProfile;
+        ProfileConfig requestConfig = Config();
+
+        // Own a fresh scope for this operation so a concurrent profile switch cannot dispose our client mid-retry.
+        using IServiceScope requestScope = GetScope(requestConfig);
+        IKSeFClient requestClient = requestScope.ServiceProvider.GetRequiredService<IKSeFClient>();
+
         const int maxRetries = 5;
+        bool tokenExpiredRetried = false;
         for (int attempt = 0; ; attempt++)
         {
             try
             {
-                return await _ksefClient!.GetInvoiceAsync(
+                return await requestClient.GetInvoiceAsync(
                     ksefNumber,
-                    await GetAccessToken(_scope!, ct).ConfigureAwait(false),
+                    await GetAccessToken(requestScope, ct).ConfigureAwait(false),
                     ct).ConfigureAwait(false);
             }
             catch (KsefRateLimitException ex) when (attempt < maxRetries)
             {
                 TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
-                Log.LogWarning($"[browser-dl] Rate limited on {ksefNumber}. Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{maxRetries})");
+                Log.LogWarning($"[invoice] Rate limited on {ksefNumber}. Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{maxRetries})");
                 await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (KsefApiException ex) when ((int)ex.StatusCode == 401 && !tokenExpiredRetried)
+            {
+                // Token expired mid-session — expire it and retry once with a fresh one.
+                Log.LogWarning($"[invoice] 401 on {ksefNumber} — expiring token and retrying once.");
+                ExpireStoredAccessToken(requestProfile, requestConfig);
+                tokenExpiredRetried = true;
             }
         }
     }
@@ -2310,8 +2308,7 @@ public class GuiCommand : IWithConfigCommand
         }
 
         InvoiceSummary inv = _cachedInvoices[idx];
-        string accessToken = await GetAccessToken(_scope!, ct).ConfigureAwait(false);
-        string xml = await _ksefClient!.GetInvoiceAsync(inv.KsefNumber, accessToken, ct).ConfigureAwait(false);
+        string xml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
 
         XDocument doc = XDocument.Parse(xml);
         XNamespace fallbackNs = "http://crd.gov.pl/wzor/2025/06/25/13775/";
@@ -2352,6 +2349,28 @@ public class GuiCommand : IWithConfigCommand
         string? addr1 = FormatAddress(podmiot1?.Element(ns + "Adres"), ns);
         string? addr2 = FormatAddress(podmiot2?.Element(ns + "Adres"), ns);
 
+        // Payment / bank account
+        XElement? platnosc = fa?.Element(ns + "Platnosc");
+        XElement? rachunek = platnosc?.Element(ns + "RachunekBankowy");
+        string? rawTermin = platnosc?.Element(ns + "TerminPlatnosci")
+            ?.Elements().FirstOrDefault()?.Value
+            ?? platnosc?.Element(ns + "TerminPlatnosci")?.Value
+            ?? platnosc?.Element(ns + "Termin")?.Elements().FirstOrDefault()?.Value
+            ?? platnosc?.Element(ns + "Termin")?.Value;
+        string? rawForma = platnosc?.Element(ns + "FormaPlatnosci")?.Value;
+        string? paymentMethod = rawForma switch
+        {
+            "1" => "Gotówka",
+            "2" => "Karta",
+            "3" => "Bon",
+            "4" => "Czek",
+            "5" => "Kredyt",
+            "6" => "Przelew",
+            "7" => "Mobilna",
+            null => null,
+            _ => rawForma
+        };
+
         return new
         {
             createdAt = naglowek?.Element(ns + "DataWytworzeniaFa")?.Value,
@@ -2370,6 +2389,12 @@ public class GuiCommand : IWithConfigCommand
             grossTotal = fa?.Element(ns + "P_15")?.Value,
             lineItems,
             additionalDescriptions = additionalDesc,
+            paymentMethod,
+            dueDate = rawTermin,
+            bankAccount = rachunek?.Element(ns + "NrRB")?.Value,
+            bankName = rachunek?.Element(ns + "NazwaBanku")?.Value,
+            bankDescription = rachunek?.Element(ns + "OpisRachunku")?.Value,
+            sellerNip = podmiot1?.Element(ns + "DaneIdentyfikacyjne")?.Element(ns + "NIP")?.Value,
         };
     }
 
