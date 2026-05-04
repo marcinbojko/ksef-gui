@@ -641,7 +641,10 @@ internal sealed class WebProgressServer : IDisposable
                 HttpResponseMessage resp = await http.GetAsync(apiUrl, ct).ConfigureAwait(false);
                 string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-                Log.LogInformation($"[whitelist] NIP={nip} account={account} date={date} status={resp.StatusCode} body={body}");
+                string maskedNip = nip.Length > 4 ? new string('*', nip.Length - 4) + nip[^4..] : "****";
+                string maskedAccount = account.Length > 4 ? new string('*', account.Length - 4) + account[^4..] : "****";
+                string requestId = resp.Headers.TryGetValues("X-Request-ID", out IEnumerable<string>? ids) ? ids.First() : "-";
+                Log.LogInformation($"[whitelist] NIP=...{maskedNip} account=...{maskedAccount} date={date} status={resp.StatusCode} requestId={requestId}");
 
                 // Parse and re-serialize so HandleAction doesn't double-encode the JSON string.
                 using JsonDocument doc = JsonDocument.Parse(body);
@@ -2911,6 +2914,7 @@ async function checkWhitelist(btn, nip, account) {
     const res = await fetch('/whitelist-check?nip=' + encodeURIComponent(nip) + '&account=' + encodeURIComponent(account));
     const data = await res.json();
     // API MF returns { result: { accountAssigned: "TAK"|"NIE", requestDateTime, requestId } }
+    // HandleAction errors return { error: "..." }
     const result = data.result || data;
     const assigned = result.accountAssigned;
     const dt = (result.requestDateTime || new Date().toISOString().slice(0,10)).slice(0,10);
@@ -2920,7 +2924,7 @@ async function checkWhitelist(btn, nip, account) {
     } else if (assigned === 'NIE') {
       if (resultEl) { resultEl.textContent = '✗ NIE na Białej Liście (' + dt + ')' + key; resultEl.className = 'wl-result fail'; }
     } else {
-      const msg = data.message || data.code || result.message || 'nieznany błąd';
+      const msg = data.error || data.message || data.code || result.message || ('HTTP ' + res.status);
       if (resultEl) { resultEl.textContent = '⚠ ' + msg; resultEl.className = 'wl-result err'; }
     }
   } catch (e) {
@@ -2931,18 +2935,24 @@ async function checkWhitelist(btn, nip, account) {
 }
 
 function copyToClipboard(btn, text) {
-  navigator.clipboard.writeText(text).then(() => {
+  const showOk = () => {
     const orig = btn.innerHTML;
     btn.innerHTML = '&#10003; Skopiowano';
     btn.classList.add('copied');
     setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1800);
-  }).catch(() => {
+  };
+  const fallback = () => {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch (_) {}
+    try { document.execCommand('copy'); showOk(); } catch (_) {}
     ta.remove();
-  });
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showOk).catch(fallback);
+  } else {
+    fallback();
+  }
 }
 function escAttr(s) { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 

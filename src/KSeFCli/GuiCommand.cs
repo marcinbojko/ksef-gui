@@ -2048,26 +2048,8 @@ public class GuiCommand : IWithConfigCommand
                     await _server.SendEventAsync("invoice_start", new { current = i, name = fileName, progress = n, total = toDownload.Count }).ConfigureAwait(false);
                 }
 
-                // Fetch XML from API (always needed — source data for all formats), retry on 429
-                const int dlMaxRetries = 5;
-                string invoiceXml = null!;
-                for (int attempt = 0; ; attempt++)
-                {
-                    try
-                    {
-                        invoiceXml = await _ksefClient!.GetInvoiceAsync(
-                            inv.KsefNumber,
-                            await GetAccessToken(_scope!, ct).ConfigureAwait(false),
-                            ct).ConfigureAwait(false);
-                        break;
-                    }
-                    catch (KsefRateLimitException ex) when (attempt < dlMaxRetries)
-                    {
-                        TimeSpan delay = ex.RecommendedDelay + TimeSpan.FromSeconds(attempt * 2);
-                        Log.LogWarning($"Rate limited downloading {inv.KsefNumber}. Retrying in {delay.TotalSeconds:F0}s... (attempt {attempt + 1}/{dlMaxRetries})");
-                        await Task.Delay(delay, ct).ConfigureAwait(false);
-                    }
-                }
+                // Fetch XML — shared helper handles 429 rate-limit retry and 401 token-refresh.
+                string invoiceXml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
 
                 // Write desired formats to workdir, then move to output
                 if (dlParams.ExportJson)
