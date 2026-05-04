@@ -178,6 +178,19 @@ Po wyszukaniu faktur dostępne są dwa tryby pobierania:
 - 1 faktura zaznaczona → plik `.pdf` bezpośrednio w oknie pobierania przeglądarki
 - 2+ faktur zaznaczonych → archiwum `.zip` z plikami PDF, nazwa: `faktury-RRRR-MM-{uid}.zip`
 
+### 👁 Podgląd faktury
+
+Każda faktura ma przycisk 📄 otwierający podgląd z pełnymi danymi:
+
+- Dane sprzedawcy i nabywcy (z przyciskami kopiowania)
+- Tabela pozycji, podsumowanie stawek VAT
+- Sekcja **Płatność**: forma, termin, numer konta bankowego z przyciskiem kopiowania
+- **Biała Lista podatników** — przycisk "Sprawdź w Białej Liście" wywołuje API MF (`wl-api.mf.gov.pl`) i pokazuje wynik inline: ✓ konto zweryfikowane / ✗ konto niezarejestrowane, z datą i kluczem weryfikacji (`requestId`). Limit: 100 zapytań/dzień per IP.
+- Kopiowanie do schowka: numer faktury, nazwa sprzedawcy, numer konta, kwota brutto
+- Weryfikacja QR KSeF
+
+> ⚠️ **Breaking change (0.6.5):** Przycisk 🔍 "Szczegóły faktury" został usunięty. Wszystkie informacje dostępne są teraz wyłącznie w Podglądzie faktury (przycisk 📄).
+
 ### 📁 Struktura katalogów przy pobieraniu
 
 Faktury zapisywane są według schematu zależnego od ustawień:
@@ -470,7 +483,7 @@ Pola wyodrębniane z XML faktury KSeF (schemat FA(3)) i uwzględniane w generowa
 | 🔄 **Auto-refresh**        | Background search every N minutes; OS notifications for new invoices                        |
 | 🔔 **Notifications**       | OS desktop notifications, Slack / Teams webhooks, and e-mail (SMTP) per profile             |
 | 💾 **SQLite cache**        | Search results stored locally; profile switching without re-fetching                        |
-| 🌙 **Dark mode**           | Three independent modes: GUI, invoice preview, details panel                                |
+| 🌙 **Dark mode**           | Independent dark/light modes for GUI and invoice preview                                    |
 | 🐳 **Docker**              | Ready-to-use `docker-compose` with Traefik and Ofelia                                       |
 | 🔒 **Offline**             | XSD validation and PDF generation work fully offline                                        |
 
@@ -608,6 +621,19 @@ After searching, two download modes are available:
 - Button is disabled when nothing is selected
 - 1 invoice selected → single `.pdf` sent to the browser download dialog
 - 2+ invoices selected → `.zip` archive with one PDF per invoice, named `faktury-YYYY-MM-{uid}.zip`
+
+### 👁 Invoice Preview
+
+Every invoice has a 📄 button that opens a full-detail preview popup:
+
+- Seller and buyer data (with copy-to-clipboard buttons for name and gross amount)
+- Line-item table, VAT rate summary
+- **Payment section**: payment method, due date, bank account number with copy button
+- **Taxpayer Whitelist (Biała Lista)** — the "Sprawdź w Białej Liście" button calls the MF API (`wl-api.mf.gov.pl`) and shows the result inline: ✓ account verified / ✗ account not found, with the verification timestamp and request key (`requestId`). Limit: 100 requests/day per IP.
+- Copy to clipboard: invoice number, seller name, bank account number, gross amount
+- KSeF QR code verification
+
+> ⚠️ **Breaking change (0.6.5):** The 🔍 "Invoice Details" button and its popup have been removed. All information previously shown there is now available in the Invoice Preview (📄 button).
 
 ### 📁 Download directory structure
 

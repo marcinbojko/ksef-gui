@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.6] — unreleased
+
+### ⚠️ Breaking Changes
+
+- **"Szczegóły faktury" popup removed.** The separate invoice details button (🔍) and its popup have been removed from the invoice table. All information previously shown there (invoice type, currency, period, creation date, form code, amounts, addresses, line items, additional descriptions) is now available in the **Invoice Preview** popup. Open the preview with the 📄 button.
+
+### Added
+
+- **Invoice preview — bank account and payment section:**
+  - Bank account number (`NrRB`) with one-click copy-to-clipboard button
+  - Payment method and due date
+  - Bank name and account description
+  - **Biała Lista verification** — "Sprawdź w Białej Liście" button calls the MF API (`wl-api.mf.gov.pl`) directly and shows the result inline: ✓ / ✗ with date and verification key (`requestId`). Limit: 100 requests/day per IP.
+- **Copy to clipboard** buttons in invoice preview: invoice number, seller name, bank account number, gross amount
+- Biała Lista check logged at `[INF]` with masked NIP/account (last 4 digits only)
+
+### Fixed
+
+- `GetInvoiceXmlWithRetryAsync` now handles HTTP 401 (expired token): automatically expires the stored token and retries once with a fresh one
+- Same retry logic (rate-limit + 401 refresh) now applied to both "Zapisz" and "Pobierz PDF/ZIP" flows
+- `copyToClipboard` guards against `navigator.clipboard` being unavailable (HTTP context, older browsers) — falls back to `execCommand`
+- Whitelist error messages now prefer `data.error` (from server-side errors) and fall back to `data.message`, `data.code`, or HTTP status code — no more generic "nieznany błąd"
+
+### Changed
+
+- `[HandleAction]` exceptions: `KsefApiException` logged as `[WRN]` with HTTP status, others as `[ERR]` — no more raw stack traces via `Console.Error`
+
+---
+
 ## [0.6.5] — 2026-05-03
 
 ### Added

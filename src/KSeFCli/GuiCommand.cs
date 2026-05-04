@@ -2121,15 +2121,21 @@ public class GuiCommand : IWithConfigCommand
 
     private async Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
     {
+        // Capture a snapshot so a concurrent profile switch cannot change the client/scope mid-retry.
+        IKSeFClient requestClient = _ksefClient!;
+        IServiceScope requestScope = _scope!;
+        string requestProfile = ActiveProfile;
+        ProfileConfig requestConfig = Config();
+
         const int maxRetries = 5;
         bool tokenExpiredRetried = false;
         for (int attempt = 0; ; attempt++)
         {
             try
             {
-                return await _ksefClient!.GetInvoiceAsync(
+                return await requestClient.GetInvoiceAsync(
                     ksefNumber,
-                    await GetAccessToken(_scope!, ct).ConfigureAwait(false),
+                    await GetAccessToken(requestScope, ct).ConfigureAwait(false),
                     ct).ConfigureAwait(false);
             }
             catch (KsefRateLimitException ex) when (attempt < maxRetries)
@@ -2142,7 +2148,7 @@ public class GuiCommand : IWithConfigCommand
             {
                 // Token expired mid-session — expire it and retry once with a fresh one.
                 Log.LogWarning($"[invoice] 401 on {ksefNumber} — expiring token and retrying once.");
-                ExpireStoredAccessToken(ActiveProfile, Config());
+                ExpireStoredAccessToken(requestProfile, requestConfig);
                 tokenExpiredRetried = true;
             }
         }

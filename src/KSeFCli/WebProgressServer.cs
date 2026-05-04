@@ -648,6 +648,16 @@ internal sealed class WebProgressServer : IDisposable
 
                 // Parse and re-serialize so HandleAction doesn't double-encode the JSON string.
                 using JsonDocument doc = JsonDocument.Parse(body);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return JsonSerializer.Serialize(new
+                    {
+                        error = $"MF API returned HTTP {(int)resp.StatusCode}",
+                        status = (int)resp.StatusCode,
+                        requestId,
+                        detail = doc.RootElement,
+                    });
+                }
                 return JsonSerializer.Serialize(doc.RootElement);
             }).ConfigureAwait(false);
         }
