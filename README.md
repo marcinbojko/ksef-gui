@@ -39,7 +39,7 @@
 | 🔄 **Auto-odświeżanie**   | Wyszukiwanie w tle co N minut; powiadomienia o nowych fakturach                           |
 | 🔔 **Powiadomienia**      | Powiadomienia OS, webhooki Slack / Teams oraz e-mail (SMTP) per profil                    |
 | 💾 **Cache SQLite**       | Wyniki wyszukiwania przechowywane lokalnie; przełączanie profili bez ponownego pobierania |
-| 🌙 **Tryb ciemny**        | Trzy niezależne tryby: GUI, podgląd faktury, szczegóły                                    |
+| 🌙 **Tryb ciemny**        | Niezależne tryby ciemny/jasny dla GUI i podglądu faktury                                  |
 | 🐳 **Docker**             | Gotowy `docker-compose` z Traefik i Ofelia                                                |
 | 🔒 **Bez internetu**      | Walidacja XSD i generowanie PDF działają w pełni offline                                  |
 
@@ -185,7 +185,7 @@ Każda faktura ma przycisk 📄 otwierający podgląd z pełnymi danymi:
 - Dane sprzedawcy i nabywcy (z przyciskami kopiowania)
 - Tabela pozycji, podsumowanie stawek VAT
 - Sekcja **Płatność**: forma, termin, numer konta bankowego z przyciskiem kopiowania
-- **Biała Lista podatników** — przycisk "Sprawdź w Białej Liście" wywołuje API MF (`wl-api.mf.gov.pl`) i pokazuje wynik inline: ✓ konto zweryfikowane / ✗ konto niezarejestrowane, z datą i kluczem weryfikacji (`requestId`). Limit: 100 zapytań/dzień per IP.
+- **Biała Lista podatników** — przycisk "Sprawdź w Białej Liście" wysyła zapytanie do lokalnego proxy `/whitelist-check`, które normalizuje numer konta (usuwa spacje, myślniki, prefiks kraju), przekazuje je do `wl-api.mf.gov.pl`, opakowuje błędy upstream i pokazuje wynik inline: ✓ konto zweryfikowane / ✗ konto niezarejestrowane, z datą i kluczem weryfikacji (`requestId`). Limit: 100 zapytań/dzień per IP serwera (wspólny dla wszystkich podglądów).
 - Kopiowanie do schowka: numer faktury, nazwa sprzedawcy, numer konta, kwota brutto
 - Weryfikacja QR KSeF
 
@@ -629,7 +629,7 @@ Every invoice has a 📄 button that opens a full-detail preview popup:
 - Seller and buyer data (with copy-to-clipboard buttons for name and gross amount)
 - Line-item table, VAT rate summary
 - **Payment section**: payment method, due date, bank account number with copy button
-- **Taxpayer Whitelist (Biała Lista)** — the "Sprawdź w Białej Liście" button calls the MF API (`wl-api.mf.gov.pl`) and shows the result inline: ✓ account verified / ✗ account not found, with the verification timestamp and request key (`requestId`). Limit: 100 requests/day per IP.
+- **Taxpayer Whitelist (Biała Lista)** — the "Sprawdź w Białej Liście" button sends the request to the local `/whitelist-check` proxy, which normalises the account number (strips spaces, dashes, country prefix), forwards it to `wl-api.mf.gov.pl`, wraps upstream errors, and shows the result inline: ✓ account verified / ✗ account not found, with the verification timestamp and request key (`requestId`). Limit: 100 requests/day per server IP (shared across all invoice previews).
 - Copy to clipboard: invoice number, seller name, bank account number, gross amount
 - KSeF QR code verification
 
