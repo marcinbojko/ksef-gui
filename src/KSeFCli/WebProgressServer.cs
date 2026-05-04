@@ -618,6 +618,36 @@ internal sealed class WebProgressServer : IDisposable
                 ctx.Response.Close();
             }
         }
+        else if (path == "/whitelist-check" && method == "GET")
+        {
+            await HandleAction(ctx, ct, async () =>
+            {
+                string? nip = ctx.Request.QueryString["nip"]?.Trim();
+                string? account = ctx.Request.QueryString["account"]?.Trim();
+                if (string.IsNullOrEmpty(nip) || string.IsNullOrEmpty(account))
+                {
+                    throw new ArgumentException("Wymagane parametry: nip, account");
+                }
+                // Biała Lista API accepts digits only (26 chars): strip spaces, dashes, country code prefix (e.g. "PL"), any non-digits.
+                account = System.Text.RegularExpressions.Regex.Replace(account, @"[^\d]", "");
+
+                string date = DateTime.UtcNow.ToString("yyyy-MM-dd");
+                string apiUrl = $"https://wl-api.mf.gov.pl/api/check/nip/{Uri.EscapeDataString(nip)}/bank-account/{Uri.EscapeDataString(account)}?date={date}";
+
+                using HttpClient http = new();
+                http.DefaultRequestHeaders.Add("Accept", "application/json");
+                http.Timeout = TimeSpan.FromSeconds(10);
+
+                HttpResponseMessage resp = await http.GetAsync(apiUrl, ct).ConfigureAwait(false);
+                string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+                Log.LogInformation($"[whitelist] NIP={nip} account={account} date={date} status={resp.StatusCode} body={body}");
+
+                // Parse and re-serialize so HandleAction doesn't double-encode the JSON string.
+                using JsonDocument doc = JsonDocument.Parse(body);
+                return JsonSerializer.Serialize(doc.RootElement);
+            }).ConfigureAwait(false);
+        }
         else if (path == "/quit" && method == "POST")
         {
             ctx.Response.StatusCode = 200;
@@ -674,7 +704,14 @@ internal sealed class WebProgressServer : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Console.Error.WriteLine($"[HandleAction] Unhandled exception: {ex}");
+            if (ex is KsefApiException kapi)
+            {
+                Log.LogWarning($"[HandleAction] KSeF API error: HTTP {(int)kapi.StatusCode} — {kapi.Message}");
+            }
+            else
+            {
+                Log.LogError($"[HandleAction] Unhandled {ex.GetType().Name}: {ex.Message}");
+            }
             (int statusCode, string errorMessage) = ex switch
             {
                 KsefApiException kex => ((int)kex.StatusCode, kex.Message),
@@ -824,8 +861,6 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 .chip.active{background:#1976d2;color:#fff;border-color:#1976d2}
 .chip .chip-count{margin-left:.3rem;opacity:.7;font-size:.7rem}
 .chip .chip-rate{margin-left:.35rem;font-size:.68rem;opacity:.6;font-variant-numeric:tabular-nums}
-.btn-details{background:none;border:1px solid #bbb;border-radius:4px;padding:.15rem .4rem;font-size:.75rem;cursor:pointer;color:#666;white-space:nowrap}
-.btn-details:hover{border-color:#1976d2;color:#1976d2;background:#e3f2fd}
 .btn-preview{background:none;border:1px solid #bbb;border-radius:4px;padding:.15rem .4rem;font-size:.75rem;cursor:pointer;color:#666;white-space:nowrap}
 .btn-preview:hover{border-color:#2e7d32;color:#2e7d32;background:#e8f5e9}
 .badge{display:inline-block;padding:.1rem .3rem;border-radius:3px;font-size:.58rem;font-weight:700;letter-spacing:.3px;margin-right:.15rem;line-height:1.2}
@@ -835,7 +870,7 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 tr.has-files>td{background:rgba(46,125,50,.05)}
 tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .preview-page{padding:2rem;max-width:800px;margin:0 auto;font-size:.85rem;line-height:1.5}
-.preview-title{text-align:center;font-size:1.1rem;font-weight:700;margin-bottom:.3rem}
+.preview-title{font-size:1.1rem;font-weight:700}
 .preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:.6rem}
 .preview-qr{text-align:center;margin-bottom:1rem}.preview-qr img{width:90px;height:90px;border:1px solid #ddd;border-radius:4px}
 .preview-qr a{display:inline-flex;align-items:center;gap:.25rem;font-size:.72rem;color:#1565c0;margin-top:.4rem;text-decoration:none;border:1px solid #1565c0;border-radius:4px;padding:.2rem .5rem;transition:background .15s,color .15s}.preview-qr a:hover{background:#1565c0;color:#fff}@media(prefers-color-scheme:dark){.preview-qr a{color:#90caf9;border-color:#90caf9}.preview-qr a:hover{background:#90caf9;color:#000}}
@@ -854,22 +889,23 @@ tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .preview-totals .label{font-weight:600;background:#f5f5f5}
 .preview-totals .total{font-weight:700;font-size:.95rem}
 .preview-meta{font-size:.75rem;color:#888;border-top:1px solid #eee;padding-top:.5rem;margin-top:1rem}
+.preview-payment{border:1px solid #ddd;border-radius:6px;padding:.8rem 1rem;margin-bottom:1rem;font-size:.82rem}
+.preview-payment h5{font-size:.72rem;text-transform:uppercase;color:#888;margin-bottom:.4rem;letter-spacing:.5px}
+.preview-payment .pay-meta{color:#555;margin-bottom:.6rem;font-size:.8rem}
+.preview-payment .bank-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.25rem}
+.preview-payment .bank-nr{font-family:monospace;font-size:.88rem;font-weight:600;letter-spacing:.5px}
+.preview-payment .bank-name{font-size:.78rem;color:#777;margin-bottom:.6rem}
+.btn-copy{display:inline-flex;align-items:center;gap:.25rem;background:#e8f5e9;border:1px solid #81c784;border-radius:4px;padding:.15rem .45rem;font-size:.72rem;cursor:pointer;color:#2e7d32;white-space:nowrap;transition:all .15s}
+.btn-copy:hover{background:#c8e6c9;border-color:#4caf50;color:#1b5e20}
+.btn-copy.copied{background:#a5d6a7;border-color:#388e3c;color:#1b5e20}
+.btn-whitelist{display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;color:#1565c0;background:none;border:1px solid #1565c0;border-radius:4px;padding:.25rem .6rem;cursor:pointer;transition:background .15s,color .15s}
+.btn-whitelist:hover{background:#1565c0;color:#fff}
+.btn-whitelist:disabled{opacity:.5;cursor:wait}
+.wl-result{font-size:.78rem;margin-left:.5rem;font-weight:600}
+.wl-result.ok{color:#2e7d32}.wl-result.fail{color:#c62828}.wl-result.err{color:#e65100}
+.wl-limit{display:block;font-size:.7rem;color:#999;margin-top:.3rem}
+.preview-title-row{display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.2rem}
 .detail-overlay{display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;overflow-y:auto;padding:1rem}
-.detail-popover{position:relative;background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.25);width:600px;max-width:95vw;max-height:90vh;overflow-y:auto;padding:0;font-size:.82rem;margin:auto}
-.detail-popover .dp-header{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:#fafafa;border-bottom:1px solid #e0e0e0;border-radius:10px 10px 0 0;position:sticky;top:0;z-index:1}
-.detail-popover .dp-header h3{margin:0;font-size:.9rem}
-.detail-popover .dp-close{background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888;padding:0 .3rem}
-.detail-popover .dp-close:hover{color:#333}
-.detail-popover .dp-body{padding:.8rem 1rem}
-.detail-popover .dp-section{margin-bottom:.8rem}
-.detail-popover .dp-section h4{font-size:.78rem;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.3rem;border-bottom:1px solid #eee;padding-bottom:.2rem}
-.detail-popover .dp-row{display:flex;gap:.5rem;padding:.15rem 0}
-.detail-popover .dp-label{font-weight:600;color:#555;min-width:120px;flex-shrink:0}
-.detail-popover .dp-val{color:#333;word-break:break-word}
-.detail-popover table{font-size:.78rem;margin-top:.3rem;box-shadow:none}
-.detail-popover th{font-size:.72rem;padding:.3rem .5rem}
-.detail-popover td{padding:.3rem .5rem;font-size:.78rem}
-.detail-popover .dp-loading{text-align:center;padding:2rem;color:#999}
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.visible{display:flex}
 .modal{background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.2);width:480px;max-width:95vw;max-height:70vh;display:flex;flex-direction:column;overflow:hidden}
@@ -927,8 +963,6 @@ body.dark .hbar-chart-title{color:#666}
 body.dark .chip{background:#2a2a2a;border-color:#555;color:#ccc}
 body.dark .chip:hover{border-color:#888}
 body.dark .chip.active{background:#1565c0;color:#fff;border-color:#1565c0}
-body.dark .btn-details{border-color:#555;color:#aaa}
-body.dark .btn-details:hover{border-color:#64b5f6;color:#64b5f6;background:#0d2137}
 /* --- Preview dark mode (independent of GUI dark mode) --- */
 .detail-popover.preview-dark{background:#1e1e1e;color:#e0e0e0}
 .detail-popover.preview-dark .dp-header{background:#252525;border-bottom-color:#444}
@@ -946,28 +980,37 @@ body.dark .btn-details:hover{border-color:#64b5f6;color:#64b5f6;background:#0d21
 .detail-popover.preview-dark .preview-totals td{border-color:#444;color:#e0e0e0}
 .detail-popover.preview-dark .preview-totals .label{background:#252525}
 .detail-popover.preview-dark .preview-meta{color:#666;border-top-color:#333}
+.detail-popover.preview-dark .preview-payment{border-color:#444}
+.detail-popover.preview-dark .preview-payment h5{color:#888}
+.detail-popover.preview-dark .preview-payment .pay-meta{color:#aaa}
+.detail-popover.preview-dark .preview-payment .bank-nr{color:#e0e0e0}
+.detail-popover.preview-dark .preview-payment .bank-name{color:#666}
+.detail-popover.preview-dark .btn-copy{background:#1b5e20;border-color:#4caf50;color:#a5d6a7}
+.detail-popover.preview-dark .btn-copy:hover{background:#2e7d32;border-color:#66bb6a;color:#c8e6c9}
+.detail-popover.preview-dark .btn-copy.copied{background:#388e3c;border-color:#81c784;color:#e8f5e9}
+.detail-popover.preview-dark .btn-whitelist{color:#90caf9;border-color:#90caf9}
+.detail-popover.preview-dark .btn-whitelist:hover{background:#90caf9;color:#000}
+.detail-popover.preview-dark .wl-result.ok{color:#a5d6a7}
+.detail-popover.preview-dark .wl-result.fail{color:#ef9a9a}
+.detail-popover.preview-dark .wl-result.err{color:#ffcc80}
+.detail-popover.preview-dark .wl-limit{color:#555}
 .detail-popover.preview-dark .dp-section h4{color:#aaa;border-bottom-color:#333}
 .detail-popover.preview-dark .dp-label{color:#aaa}
 .detail-popover.preview-dark .dp-val{color:#e0e0e0}
 .detail-popover.preview-dark th{background:#252525;border-bottom-color:#444;color:#aaa}
 .detail-popover.preview-dark td{border-bottom-color:#333;color:#e0e0e0}
 .detail-popover.preview-dark .dp-loading{color:#666}
-/* --- Details dark mode (independent of GUI dark mode) --- */
-.detail-popover.details-dark{background:#1e1e1e;color:#e0e0e0}
-.detail-popover.details-dark .dp-header{background:#252525;border-bottom-color:#444}
-.detail-popover.details-dark .dp-header h3{color:#e0e0e0}
-.detail-popover.details-dark .dp-close{color:#888}
-.detail-popover.details-dark .dp-close:hover{color:#e0e0e0}
-.detail-popover.details-dark .dp-section h4{color:#aaa;border-bottom-color:#333}
-.detail-popover.details-dark .dp-label{color:#aaa}
-.detail-popover.details-dark .dp-val{color:#e0e0e0}
-.detail-popover.details-dark th{background:#252525;border-bottom-color:#444;color:#aaa}
-.detail-popover.details-dark td{border-bottom-color:#333;color:#e0e0e0}
-.detail-popover.details-dark .dp-loading{color:#666}
 body.dark .btn-preview{border-color:#555;color:#aaa}
 body.dark .btn-preview:hover{border-color:#81c784;color:#81c784;background:#1b3a1b}
 body.dark tr.has-files>td{background:rgba(129,199,132,.06)}
 body.dark tr.has-files:hover>td{background:rgba(129,199,132,.12)}
+/* Preview popover header — flex so close button stays in top-right corner */
+.detail-popover.preview-popover .dp-header{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:#fafafa;border-bottom:1px solid #e0e0e0;border-radius:10px 10px 0 0;position:sticky;top:0;z-index:1}
+.detail-popover.preview-popover .dp-header h3{margin:0;font-size:.9rem}
+.detail-popover.preview-popover .dp-close{background:none;border:none;font-size:1.2rem;cursor:pointer;color:#888;padding:0 .3rem}
+.detail-popover.preview-popover .dp-close:hover{color:#333}
+.detail-popover.preview-popover .dp-body{padding:.8rem 1rem}
+.detail-popover.preview-popover .dp-loading{text-align:center;padding:2rem;color:#999}
 /* Force light styles on details popover when details-dark is off (overrides body.dark) */
 .detail-popover:not(.preview-popover):not(.details-dark){background:#fff;color:#333;box-shadow:0 8px 30px rgba(0,0,0,.25)}
 .detail-popover:not(.preview-popover):not(.details-dark) .dp-header{background:#fafafa;border-bottom-color:#e0e0e0}
@@ -1244,10 +1287,6 @@ body.dark .pref-label{color:#aaa}
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode"> Włącz</label>
         </div>
         <div class="pref-row">
-          <span class="pref-label">Szczegóły faktury ciemne</span>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="detailsDarkMode"> Włącz</label>
-        </div>
-        <div class="pref-row">
           <span class="pref-label">Testuj powiadomienia</span>
           <button class="btn-sm btn-prefs" onclick="sendSampleNotification()">&#128276; Wyślij testowe</button>
         </div>
@@ -1443,7 +1482,6 @@ async function loadPrefs() {
       if (p.serverUrl) $('serverUrl').textContent = p.serverUrl;
       $('darkMode').checked = !!p.darkMode; document.body.classList.toggle('dark', !!p.darkMode);
       $('previewDarkMode').checked = !!p.previewDarkMode;
-      $('detailsDarkMode').checked = !!p.detailsDarkMode;
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
@@ -1561,7 +1599,6 @@ async function savePrefs() {
     separateByNip: $('separateByNip').checked,
     darkMode: $('darkMode').checked,
     previewDarkMode: $('previewDarkMode').checked,
-    detailsDarkMode: $('detailsDarkMode').checked,
     pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
     lanPort: parseInt($('lanPort').value) || 18150,
@@ -2206,7 +2243,6 @@ function renderTable() {
   html += '<th style="width:2rem"><input type="checkbox" id="checkAll" onchange="toggleAll(this.checked)"></th>';
   html += '<th style="width:2rem"></th>';
   html += '<th style="width:3rem"></th>';
-  html += '<th style="width:3rem"></th>';
   html += '<th style="width:5rem">Pliki</th>';
   for (const c of cols) {
     const arrow = sortCol === c.key ? (sortAsc ? ' &#9650;' : ' &#9660;') : '';
@@ -2227,7 +2263,6 @@ function renderTable() {
     html += '<tr id="row-' + idx + '"' + (hasFiles ? ' class="has-files"' : '') + '>';
     html += '<td><input type="checkbox" data-idx="' + idx + '" onchange="toggleSelect(' + idx + ', this.checked)"' + chk + '></td>';
     html += '<td class="dl-icon" id="icon-' + idx + '"></td>';
-    html += '<td><button class="btn-details" onclick="showDetails(' + idx + ', event)" title="Szczegoly faktury">&#128269;</button></td>';
     html += '<td><button class="btn-preview" onclick="showPreview(' + idx + ')" title="Podglad faktury">&#128196;</button></td>';
     html += '<td>' + badges + '</td>';
     html += '<td class="col-ksef" title="' + (inv.ksefNumber||'') + '">' + (inv.ksefNumber||'') + '</td>';
@@ -2867,6 +2902,48 @@ async function createDir() {
 }
 
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function checkWhitelist(btn, nip, account) {
+  const resultEl = document.getElementById(btn.id + '-result');
+  btn.disabled = true;
+  if (resultEl) { resultEl.textContent = '⏳ Sprawdzam...'; resultEl.className = 'wl-result'; }
+  try {
+    const res = await fetch('/whitelist-check?nip=' + encodeURIComponent(nip) + '&account=' + encodeURIComponent(account));
+    const data = await res.json();
+    // API MF returns { result: { accountAssigned: "TAK"|"NIE", requestDateTime, requestId } }
+    const result = data.result || data;
+    const assigned = result.accountAssigned;
+    const dt = (result.requestDateTime || new Date().toISOString().slice(0,10)).slice(0,10);
+    const key = result.requestId ? ' [' + result.requestId + ']' : '';
+    if (assigned === 'TAK') {
+      if (resultEl) { resultEl.textContent = '✓ na Białej Liście (' + dt + ')' + key; resultEl.className = 'wl-result ok'; }
+    } else if (assigned === 'NIE') {
+      if (resultEl) { resultEl.textContent = '✗ NIE na Białej Liście (' + dt + ')' + key; resultEl.className = 'wl-result fail'; }
+    } else {
+      const msg = data.message || data.code || result.message || 'nieznany błąd';
+      if (resultEl) { resultEl.textContent = '⚠ ' + msg; resultEl.className = 'wl-result err'; }
+    }
+  } catch (e) {
+    if (resultEl) { resultEl.textContent = '⚠ Błąd połączenia'; resultEl.className = 'wl-result err'; }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function copyToClipboard(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '&#10003; Skopiowano';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1800);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    ta.remove();
+  });
+}
 function escAttr(s) { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 
 // --- Invoice Details ---
@@ -2885,91 +2962,6 @@ document.addEventListener('keydown', (e) => {
     if ($('configModal').classList.contains('visible')) closeConfigEditor();
   }
 });
-
-async function showDetails(idx, event) {
-  closeDetails();
-  const inv = invoices.find(i => i._idx === idx) || {};
-  const cacheKey = inv.ksefNumber || ('idx-' + idx);
-
-  const overlay = document.createElement('div');
-  overlay.className = 'detail-overlay';
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDetails(); });
-
-  const pop = document.createElement('div');
-  pop.className = 'detail-popover' + ($('detailsDarkMode').checked ? ' details-dark' : '');
-  pop.innerHTML = '<div class="dp-header"><h3>Szczegoly faktury</h3><button class="dp-close" onclick="closeDetails()">&times;</button></div><div class="dp-body"><div class="dp-loading"><span class="spinner">&#8635;</span> Pobieranie...</div></div>';
-  overlay.appendChild(pop);
-  document.body.appendChild(overlay);
-  detailOverlay = overlay;
-
-  try {
-    let data = detailCache[cacheKey];
-    if (!data) {
-      const res = await fetch('/invoice-details?idx=' + idx);
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed'); }
-      data = await res.json();
-      detailCache[cacheKey] = data;
-    }
-    if (detailOverlay !== overlay) return; // closed while fetching
-    renderDetails(pop, data);
-  } catch (err) {
-    if (detailOverlay === overlay) {
-      pop.querySelector('.dp-body').innerHTML = '<div style="color:#c62828;padding:1rem">Blad: ' + escHtml(err.message) + '</div>';
-    }
-  }
-}
-
-function renderDetails(pop, d) {
-  let html = '<div class="dp-section"><h4>Naglowek</h4>';
-  html += dpRow('Data utworzenia', d.createdAt);
-  html += dpRow('System', d.systemInfo);
-  html += dpRow('Formularz', d.formCode != null ? d.formCode + (d.schemaVersion ? ' (v' + d.schemaVersion + ')' : '') : d.formCode);
-  html += dpRow('Typ faktury', d.invoiceType);
-  html += dpRow('Waluta', d.currency);
-  if (d.periodFrom || d.periodTo) html += dpRow('Okres', (d.periodFrom || '?') + ' — ' + (d.periodTo || '?'));
-  html += '</div>';
-
-  html += '<div class="dp-section"><h4>Kwoty</h4>';
-  html += dpRow('Netto', d.netTotal);
-  html += dpRow('VAT', d.vatTotal != null ? d.vatTotal + (d.vatTotalCurrency ? ' (walutowy: ' + d.vatTotalCurrency + ')' : '') : d.vatTotal);
-  html += dpRow('Brutto', d.grossTotal);
-  html += '</div>';
-
-  if (d.sellerAddress || d.buyerAddress) {
-    html += '<div class="dp-section"><h4>Adresy</h4>';
-    if (d.sellerAddress) html += dpRow('Sprzedawca', d.sellerAddress);
-    if (d.buyerAddress) html += dpRow('Nabywca', d.buyerAddress);
-    html += '</div>';
-  }
-
-  if (d.lineItems && d.lineItems.length > 0) {
-    html += '<div class="dp-section"><h4>Pozycje (' + d.lineItems.length + ')</h4>';
-    html += '<table><thead><tr><th>#</th><th>Nazwa</th><th>J.m.</th><th>Ilosc</th><th>Cena</th><th>Netto</th><th>Brutto</th><th>VAT%</th>';
-    if (d.lineItems.some(l => l.exchangeRate)) html += '<th>Kurs</th>';
-    html += '</tr></thead><tbody>';
-    for (const l of d.lineItems) {
-      html += '<tr><td>' + escHtml(String(l.nr??'')) + '</td><td>' + escHtml(l.name??'') + '</td><td>' + escHtml(String(l.unit??'')) + '</td><td>' + escHtml(String(l.qty??'')) + '</td><td class="amount">' + escHtml(String(l.unitPrice??'')) + '</td><td class="amount">' + escHtml(String(l.netAmount??'')) + '</td><td class="amount">' + escHtml(String(l.grossAmount??'')) + '</td><td>' + escHtml(String(l.vatRate??'')) + '</td>';
-      if (d.lineItems.some(li => li.exchangeRate)) html += '<td>' + escHtml(String(l.exchangeRate??'')) + '</td>';
-      html += '</tr>';
-    }
-    html += '</tbody></table></div>';
-  }
-
-  if (d.additionalDescriptions && d.additionalDescriptions.length > 0) {
-    html += '<div class="dp-section"><h4>Dodatkowe opisy</h4>';
-    for (const ad of d.additionalDescriptions) {
-      html += dpRow(ad.key ?? '', ad.value ?? '');
-    }
-    html += '</div>';
-  }
-
-  pop.querySelector('.dp-body').innerHTML = html;
-}
-
-function dpRow(label, value) {
-  if (!value && value !== 0) return '';
-  return '<div class="dp-row"><span class="dp-label">' + escHtml(String(label)) + '</span><span class="dp-val">' + escHtml(String(value)) + '</span></div>';
-}
 
 // --- Invoice Preview ---
 async function showPreview(idx) {
@@ -3007,8 +2999,14 @@ async function showPreview(idx) {
 }
 
 function renderPreview(pop, d, inv) {
+  const invNr = inv.invoiceNumber || '';
+  const copyBtn = (text, label) =>
+    // Store text in data-copy attribute to avoid quote conflicts inside onclick=""
+    '<button class="btn-copy" data-copy="' + text.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '" onclick="copyToClipboard(this,this.dataset.copy)" title="' + escHtml(label) + '">&#128203; Kopiuj</button>';
+
   let html = '<div class="preview-page">';
-  html += '<div class="preview-title">Faktura ' + escHtml(inv.invoiceNumber || '') + '</div>';
+  html += '<div class="preview-title-row"><span class="preview-title">Faktura ' + escHtml(invNr) + '</span>'
+        + (invNr ? copyBtn(invNr, 'Kopiuj numer faktury') : '') + '</div>';
   html += '<div class="preview-subtitle">KSeF: ' + escHtml(inv.ksefNumber || '') + ' | Data: ' + (inv.issueDate ? inv.issueDate.substring(0,10) : '');
   if (d.invoiceType) html += ' | Typ: ' + escHtml(d.invoiceType);
   if (d.currency) html += ' | Waluta: ' + escHtml(d.currency);
@@ -3024,12 +3022,14 @@ function renderPreview(pop, d, inv) {
 
   html += '<div class="preview-parties">';
   html += '<div class="preview-party"><h5>Sprzedawca</h5>';
-  html += '<div class="name">' + escHtml(inv.sellerName || '') + '</div>';
+  const sName = inv.sellerName || '';
+  html += '<div class="name">' + escHtml(sName) + (sName ? ' ' + copyBtn(sName, 'Kopiuj nazwę sprzedawcy') : '') + '</div>';
   if (inv.sellerNip) html += '<div class="nip">NIP: ' + escHtml(inv.sellerNip) + '</div>';
   if (d.sellerAddress) html += '<div class="addr">' + escHtml(d.sellerAddress) + '</div>';
   html += '</div>';
   html += '<div class="preview-party"><h5>Nabywca</h5>';
-  html += '<div class="name">' + escHtml(inv.buyerName || '') + '</div>';
+  const bName = inv.buyerName || '';
+  html += '<div class="name">' + escHtml(bName) + '</div>';
   if (d.buyerAddress) html += '<div class="addr">' + escHtml(d.buyerAddress) + '</div>';
   html += '</div>';
   html += '</div>';
@@ -3050,8 +3050,42 @@ function renderPreview(pop, d, inv) {
   html += '<div class="preview-totals"><table>';
   if (d.netTotal) html += '<tr><td class="label">Netto</td><td class="amount">' + d.netTotal + ' ' + (d.currency||'') + '</td></tr>';
   if (d.vatTotal) html += '<tr><td class="label">VAT</td><td class="amount">' + d.vatTotal + ' ' + (d.currency||'') + (d.vatTotalCurrency ? ' (wal.: ' + d.vatTotalCurrency + ')' : '') + '</td></tr>';
-  if (d.grossTotal) html += '<tr><td class="label total">Brutto</td><td class="amount total">' + d.grossTotal + ' ' + (d.currency||'') + '</td></tr>';
+  if (d.grossTotal) html += '<tr><td class="label total">Brutto</td><td class="amount total">' + d.grossTotal + ' ' + (d.currency||'') + ' ' + copyBtn(d.grossTotal, 'Kopiuj kwotę brutto') + '</td></tr>';
   html += '</table></div>';
+
+  // Payment / bank section
+  if (d.paymentMethod || d.dueDate || d.bankAccount) {
+    html += '<div class="preview-payment"><h5>Płatność</h5>';
+    if (d.paymentMethod || d.dueDate) {
+      html += '<div class="pay-meta">';
+      if (d.paymentMethod) html += 'Forma: <strong>' + escHtml(d.paymentMethod) + '</strong>';
+      if (d.paymentMethod && d.dueDate) html += ' &nbsp;|&nbsp; ';
+      if (d.dueDate) html += 'Termin: <strong>' + escHtml(d.dueDate) + '</strong>';
+      html += '</div>';
+    }
+    if (d.bankAccount) {
+      const acctRaw = d.bankAccount.replace(/\s/g, '');
+      const sellerNip = d.sellerNip || inv.sellerNip || '';
+      html += '<div class="bank-row">'
+            + '<span class="bank-nr">' + escHtml(d.bankAccount) + '</span>'
+            + copyBtn(acctRaw, 'Kopiuj numer konta (bez spacji)')
+            + '</div>';
+      if (d.bankName || d.bankDescription) {
+        html += '<div class="bank-name">' + escHtml(d.bankName || '') + (d.bankName && d.bankDescription ? ' — ' : '') + escHtml(d.bankDescription || '') + '</div>';
+      }
+      if (sellerNip) {
+        const wlBtnId = 'wl-' + (inv.ksefNumber || '').replace(/[^a-z0-9]/gi, '') + '-' + Date.now();
+        const nipAttr = sellerNip.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        const acctAttr = acctRaw.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        html += '<button class="btn-whitelist" id="' + wlBtnId + '"'
+              + ' data-nip="' + nipAttr + '" data-account="' + acctAttr + '"'
+              + ' onclick="checkWhitelist(this,this.dataset.nip,this.dataset.account)">&#128269; Sprawdź w Białej Liście</button>'
+              + '<span class="wl-result" id="' + wlBtnId + '-result"></span>'
+              + '<span class="wl-limit">Limit API MF: 100 zapytań/dzień per IP</span>';
+      }
+    }
+    html += '</div>';
+  }
 
   if (d.additionalDescriptions && d.additionalDescriptions.length > 0) {
     html += '<div class="preview-meta"><strong>Dodatkowe informacje:</strong><br>';
