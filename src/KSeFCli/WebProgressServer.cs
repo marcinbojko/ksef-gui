@@ -2471,7 +2471,7 @@ function connectSSE() {
         clearSelection();
         btnSearch.disabled = false; btnDownload.disabled = false;
         checkExisting();
-        setTimeout(() => progressWrap.classList.remove('visible'), 1200);
+        clearTimeout(progressHideTimeoutId); progressHideTimeoutId = setTimeout(hideProgress, 1200);
         break;
       case 'error': {
         const row = document.getElementById('row-' + d.current);
@@ -2517,6 +2517,8 @@ function connectSSE() {
 }
 
 let dlTotal = 0;
+let progressHideTimeoutId = null;
+function hideProgress() { progressHideTimeoutId = null; progressWrap.classList.remove('visible'); }
 function markDone(idx) {
   const row = document.getElementById('row-' + idx);
   const icon = document.getElementById('icon-' + idx);
@@ -2896,7 +2898,7 @@ async function doBrowserDownload() {
     clearSelection();
     bar.style.width = '100%'; bar.textContent = '100%';
     setStatus('Pobieranie gotowe.', 'done');
-    setTimeout(() => progressWrap.classList.remove('visible'), 1200);
+    clearTimeout(progressHideTimeoutId); progressHideTimeoutId = setTimeout(hideProgress, 1200);
   } catch (err) {
     setStatus('Błąd pobierania: ' + err.message, 'error');
     progressWrap.classList.remove('visible');

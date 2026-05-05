@@ -311,6 +311,7 @@ public class GuiCommand : IWithConfigCommand
         {
             _invoiceCache = new InvoiceCache();
             _invoiceCache.CheckIntegrity();
+            _invoiceCache.InitializeSchema();
         }
         catch (InvalidOperationException ex)
         {
@@ -2134,12 +2135,16 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private async Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
+    private Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
     {
-        // Snapshot profile identity before acquiring scope so ExpireStoredAccessToken targets the right profile.
         string requestProfile = ActiveProfile;
         ProfileConfig requestConfig = Config();
+        return GetInvoiceXmlWithRetryAsync(ksefNumber, requestProfile, requestConfig, ct);
+    }
 
+    private async Task<string> GetInvoiceXmlWithRetryAsync(
+        string ksefNumber, string requestProfile, ProfileConfig requestConfig, CancellationToken ct)
+    {
         // Own a fresh scope for this operation so a concurrent profile switch cannot dispose our client mid-retry.
         using IServiceScope requestScope = GetScope(requestConfig);
         IKSeFClient requestClient = requestScope.ServiceProvider.GetRequiredService<IKSeFClient>();
@@ -2173,14 +2178,18 @@ public class GuiCommand : IWithConfigCommand
 
     private async Task<string> GetOrCacheInvoiceXmlAsync(string ksefNumber, CancellationToken ct)
     {
-        string profileKey = GetProfileCacheKey();
+        // Snapshot once so cache read, KSeF fetch, and cache write all target the same profile.
+        string requestProfile = ActiveProfile;
+        ProfileConfig requestConfig = Config();
+        string profileKey = new TokenStore.Key(requestProfile, requestConfig).ToCacheKey();
+
         string? cached = _invoiceCache.TryGetXml(profileKey, ksefNumber);
         if (cached != null)
         {
             Log.LogInformation($"[xml-cache] hit for {ksefNumber}");
             return cached;
         }
-        string xml = await GetInvoiceXmlWithRetryAsync(ksefNumber, ct).ConfigureAwait(false);
+        string xml = await GetInvoiceXmlWithRetryAsync(ksefNumber, requestProfile, requestConfig, ct).ConfigureAwait(false);
         _invoiceCache.TrySetXml(profileKey, ksefNumber, xml);
         return xml;
     }

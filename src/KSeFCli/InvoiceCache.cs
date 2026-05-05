@@ -39,11 +39,6 @@ internal sealed class InvoiceCache
                 Directory.CreateDirectory(dir);
             }
             Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
-            EnsureSchema();
-        }
-        catch (SqliteException ex)
-        {
-            throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
         }
         catch (IOException ex)
         {
@@ -52,6 +47,19 @@ internal sealed class InvoiceCache
         catch (UnauthorizedAccessException ex)
         {
             throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>Creates tables and runs migrations. Must be called after CheckIntegrity() passes.</summary>
+    public void InitializeSchema()
+    {
+        try
+        {
+            EnsureSchema();
+        }
+        catch (SqliteException ex)
+        {
+            throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
         }
     }
 
