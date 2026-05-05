@@ -2284,6 +2284,7 @@ public class GuiCommand : IWithConfigCommand
             using (System.IO.Compression.ZipArchive zip = new(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
             {
                 int n = 0;
+                HashSet<string> usedNames = new(StringComparer.OrdinalIgnoreCase);
                 foreach ((int idx, InvoiceSummary inv) in toDownload)
                 {
                     n++;
@@ -2295,7 +2296,12 @@ public class GuiCommand : IWithConfigCommand
                     string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
                     byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
-                    string entryName = BuildFileName(inv, dlParams.CustomFilenames) + ".pdf";
+                    string baseName = BuildFileName(inv, dlParams.CustomFilenames);
+                    string entryName = baseName + ".pdf";
+                    for (int dup = 2; !usedNames.Add(entryName); dup++)
+                    {
+                        entryName = baseName + $"_{dup}.pdf";
+                    }
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Added {entryName} ({pdf.Length} bytes)");
                     System.IO.Compression.ZipArchiveEntry entry = zip.CreateEntry(entryName, System.IO.Compression.CompressionLevel.Fastest);
                     System.IO.Stream entryStream = entry.Open();
