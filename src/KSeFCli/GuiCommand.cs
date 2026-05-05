@@ -2174,28 +2174,14 @@ public class GuiCommand : IWithConfigCommand
     private async Task<string> GetOrCacheInvoiceXmlAsync(string ksefNumber, CancellationToken ct)
     {
         string profileKey = GetProfileCacheKey();
-        try
+        string? cached = _invoiceCache.TryGetXml(profileKey, ksefNumber);
+        if (cached != null)
         {
-            string? cached = _invoiceCache.GetXml(profileKey, ksefNumber);
-            if (cached != null)
-            {
-                Log.LogInformation($"[xml-cache] hit for {ksefNumber}");
-                return cached;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.LogWarning($"[xml-cache] GetXml failed for {ksefNumber}, fetching from KSeF: {ex.Message}");
+            Log.LogInformation($"[xml-cache] hit for {ksefNumber}");
+            return cached;
         }
         string xml = await GetInvoiceXmlWithRetryAsync(ksefNumber, ct).ConfigureAwait(false);
-        try
-        {
-            _invoiceCache.SetXml(profileKey, ksefNumber, xml);
-        }
-        catch (Exception ex)
-        {
-            Log.LogWarning($"[xml-cache] SetXml failed for {ksefNumber}: {ex.Message}");
-        }
+        _invoiceCache.TrySetXml(profileKey, ksefNumber, xml);
         return xml;
     }
 

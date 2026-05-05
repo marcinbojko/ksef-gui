@@ -41,7 +41,15 @@ internal sealed class InvoiceCache
             Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
             EnsureSchema();
         }
-        catch (Exception ex) when (ex is not InvalidOperationException)
+        catch (SqliteException ex)
+        {
+            throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
         }
@@ -515,9 +523,51 @@ internal sealed class InvoiceCache
         {
             throw;
         }
-        catch (Exception ex)
+        catch (SqliteException ex)
         {
             throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+    }
+
+    public string? TryGetXml(string profileKey, string ksefNumber)
+    {
+        try
+        {
+            return GetXml(profileKey, ksefNumber);
+        }
+        catch (SqliteException ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+            return null;
+        }
+        catch (IOException ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+            return null;
+        }
+    }
+
+    public void TrySetXml(string profileKey, string ksefNumber, string xmlContent)
+    {
+        try
+        {
+            SetXml(profileKey, ksefNumber, xmlContent);
+        }
+        catch (SqliteException ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+        }
+        catch (IOException ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
         }
     }
 

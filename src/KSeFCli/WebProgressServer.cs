@@ -231,11 +231,11 @@ internal sealed class WebProgressServer : IDisposable
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c start \"\" \"{path}\"") { CreateNoWindow = true });
             }
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-        catch (System.ComponentModel.Win32Exception) { }
-        catch (InvalidOperationException) { }
-        catch (PlatformNotSupportedException) { }
+        catch (IOException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (UnauthorizedAccessException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (System.ComponentModel.Win32Exception ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (InvalidOperationException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (PlatformNotSupportedException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
     }
 
     public void Dispose()
