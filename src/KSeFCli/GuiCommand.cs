@@ -307,17 +307,20 @@ public class GuiCommand : IWithConfigCommand
         _setupRequired = !File.Exists(Path.GetFullPath(ConfigFile));
         GuiPrefs savedPrefs = LoadPrefs();
         Log.ConfigureLogging(Verbose, Quiet, savedPrefs.JsonConsoleLog ?? false);
-        _invoiceCache = new InvoiceCache();
         try
         {
+            _invoiceCache = new InvoiceCache();
             _invoiceCache.CheckIntegrity();
         }
         catch (InvalidOperationException ex)
         {
-            Log.LogError($"[startup] Database integrity check failed — cannot start.\n{ex.Message}");
+            Log.LogError($"[startup] Database error — cannot start.\n{ex.Message}");
             Console.Error.WriteLine($"FATAL: {ex.Message}");
             Console.Error.WriteLine("Delete or restore the database file and restart.");
-            WebProgressServer.ShowErrorPage("Błąd bazy danych — aplikacja nie może się uruchomić", ex.Message);
+            WebProgressServer.ShowErrorPage(
+                "Błąd bazy danych — aplikacja nie może się uruchomić",
+                ex.Message,
+                _invoiceCache?.DbPath ?? InvoiceCache.DefaultDbPath);
             return 1;
         }
         if (_setupRequired)
@@ -2171,14 +2174,28 @@ public class GuiCommand : IWithConfigCommand
     private async Task<string> GetOrCacheInvoiceXmlAsync(string ksefNumber, CancellationToken ct)
     {
         string profileKey = GetProfileCacheKey();
-        string? cached = _invoiceCache.GetXml(profileKey, ksefNumber);
-        if (cached != null)
+        try
         {
-            Log.LogInformation($"[xml-cache] hit for {ksefNumber}");
-            return cached;
+            string? cached = _invoiceCache.GetXml(profileKey, ksefNumber);
+            if (cached != null)
+            {
+                Log.LogInformation($"[xml-cache] hit for {ksefNumber}");
+                return cached;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed for {ksefNumber}, fetching from KSeF: {ex.Message}");
         }
         string xml = await GetInvoiceXmlWithRetryAsync(ksefNumber, ct).ConfigureAwait(false);
-        _invoiceCache.SetXml(profileKey, ksefNumber, xml);
+        try
+        {
+            _invoiceCache.SetXml(profileKey, ksefNumber, xml);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed for {ksefNumber}: {ex.Message}");
+        }
         return xml;
     }
 

@@ -185,10 +185,11 @@ internal sealed class WebProgressServer : IDisposable
         }
     }
 
-    public static void ShowErrorPage(string title, string detail)
+    public static void ShowErrorPage(string title, string detail, string? dbPath = null)
     {
         string safeTitle = System.Net.WebUtility.HtmlEncode(title);
         string safeDetail = System.Net.WebUtility.HtmlEncode(detail);
+        string safeDbPath = System.Net.WebUtility.HtmlEncode(dbPath ?? "~/.cache/ksefcli/db/invoice-cache.db");
         string html = $$"""
             <!DOCTYPE html>
             <html lang="pl">
@@ -207,12 +208,12 @@ internal sealed class WebProgressServer : IDisposable
               <pre>{{safeDetail}}</pre>
               <div class="hint">
                 <strong>Co zrobić:</strong> Usuń lub przywróć plik bazy danych i uruchom aplikację ponownie.<br>
-                Plik bazy: <code>~/.cache/ksefcli/db/invoice-cache.db</code>
+                Plik bazy: <code>{{safeDbPath}}</code>
               </div>
             </body>
             </html>
             """;
-        string path = Path.Combine(Path.GetTempPath(), "ksefcli-error.html");
+        string path = Path.Join(Path.GetTempPath(), "ksefcli-error.html");
         try
         {
             File.WriteAllText(path, html, Encoding.UTF8);
@@ -230,10 +231,11 @@ internal sealed class WebProgressServer : IDisposable
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c start \"\" \"{path}\"") { CreateNoWindow = true });
             }
         }
-        catch
-        {
-            // Browser open failed — user still sees the FATAL message on stderr.
-        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (System.ComponentModel.Win32Exception) { }
+        catch (InvalidOperationException) { }
+        catch (PlatformNotSupportedException) { }
     }
 
     public void Dispose()
@@ -2877,6 +2879,7 @@ async function doBrowserDownload() {
   progressWrap.classList.add('visible');
   bar.style.width = '0%'; bar.textContent = '0%';
   setStatus('Generowanie PDF... 0 / ' + count, 'info');
+  connectSSE();
   try {
     const res = await fetch('/download-browser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error || msg; } catch { msg = await res.text().then(t => t.slice(0,120)).catch(() => msg); } throw new Error(msg); }

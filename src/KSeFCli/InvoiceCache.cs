@@ -17,24 +17,34 @@ internal sealed class InvoiceCache
     private static readonly string DefaultPath =
         Path.Combine(IGlobalCommand.CacheDir, "db", "invoice-cache.db");
 
+    public static string DefaultDbPath => DefaultPath;
+
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
 
     private readonly string _dbPath;
+    public string DbPath => _dbPath;
 
     public InvoiceCache(string? dbPath = null)
     {
         _dbPath = dbPath ?? DefaultPath;
-        bool isNew = !File.Exists(_dbPath);
-        string? dir = Path.GetDirectoryName(_dbPath);
-        if (!string.IsNullOrEmpty(dir))
+        try
         {
-            Directory.CreateDirectory(dir);
+            bool isNew = !File.Exists(_dbPath);
+            string? dir = Path.GetDirectoryName(_dbPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
+            EnsureSchema();
         }
-        Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
-        EnsureSchema();
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
     }
 
     /// <summary>Creates the table if it does not already exist, and logs row counts per profile.</summary>
@@ -480,23 +490,34 @@ internal sealed class InvoiceCache
     /// </summary>
     public void CheckIntegrity()
     {
-        using SqliteConnection conn = Open();
-        using SqliteCommand cmd = conn.CreateCommand();
-        cmd.CommandText = "PRAGMA quick_check";
-        using SqliteDataReader reader = cmd.ExecuteReader();
-        List<string> findings = new();
-        while (reader.Read())
+        try
         {
-            string row = reader.GetString(0);
-            if (!string.Equals(row, "ok", StringComparison.OrdinalIgnoreCase))
+            using SqliteConnection conn = Open();
+            using SqliteCommand cmd = conn.CreateCommand();
+            cmd.CommandText = "PRAGMA quick_check";
+            using SqliteDataReader reader = cmd.ExecuteReader();
+            List<string> findings = new();
+            while (reader.Read())
             {
-                findings.Add(row);
+                string row = reader.GetString(0);
+                if (!string.Equals(row, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    findings.Add(row);
+                }
+            }
+            if (findings.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"SQLite database integrity check failed ({_dbPath}):\n" + string.Join("\n", findings));
             }
         }
-        if (findings.Count > 0)
+        catch (InvalidOperationException)
         {
-            throw new InvalidOperationException(
-                $"SQLite database integrity check failed ({_dbPath}):\n" + string.Join("\n", findings));
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
         }
     }
 
