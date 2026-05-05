@@ -569,6 +569,11 @@ internal sealed class InvoiceCache
             Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
             return null;
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+            return null;
+        }
     }
 
     public void TrySetXml(string profileKey, string ksefNumber, string xmlContent)
@@ -582,6 +587,10 @@ internal sealed class InvoiceCache
             Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
         }
         catch (IOException ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+        }
+        catch (UnauthorizedAccessException ex)
         {
             Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
         }
