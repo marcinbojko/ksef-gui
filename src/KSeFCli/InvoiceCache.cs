@@ -61,6 +61,14 @@ internal sealed class InvoiceCache
         {
             throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
         }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
+        }
     }
 
     /// <summary>Creates the table if it does not already exist, and logs row counts per profile.</summary>
