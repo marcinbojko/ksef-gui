@@ -2265,7 +2265,7 @@ public class GuiCommand : IWithConfigCommand
             Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
             string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
             byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
-            string safeName = SanitizeFileName(inv.KsefNumber) + ".pdf";
+            string safeName = BuildFileName(inv, dlParams.CustomFilenames) + ".pdf";
             Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
             if (_server != null)
             {
@@ -2284,6 +2284,7 @@ public class GuiCommand : IWithConfigCommand
             using (System.IO.Compression.ZipArchive zip = new(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
             {
                 int n = 0;
+                HashSet<string> usedNames = new(StringComparer.OrdinalIgnoreCase);
                 foreach ((int idx, InvoiceSummary inv) in toDownload)
                 {
                     n++;
@@ -2295,7 +2296,12 @@ public class GuiCommand : IWithConfigCommand
                     string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
                     byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
-                    string entryName = SanitizeFileName(inv.KsefNumber) + ".pdf";
+                    string baseName = BuildFileName(inv, dlParams.CustomFilenames);
+                    string entryName = baseName + ".pdf";
+                    for (int dup = 2; !usedNames.Add(entryName); dup++)
+                    {
+                        entryName = baseName + $"_{dup}.pdf";
+                    }
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Added {entryName} ({pdf.Length} bytes)");
                     System.IO.Compression.ZipArchiveEntry entry = zip.CreateEntry(entryName, System.IO.Compression.CompressionLevel.Fastest);
                     System.IO.Stream entryStream = entry.Open();
@@ -2319,7 +2325,7 @@ public class GuiCommand : IWithConfigCommand
     {
         if (!customScheme)
         {
-            return UseInvoiceNumber ? inv.InvoiceNumber : inv.KsefNumber;
+            return UseInvoiceNumber ? SanitizeFileName(inv.InvoiceNumber) : inv.KsefNumber;
         }
 
         string date = inv.IssueDate.ToString("yyyy-MM-dd");
@@ -2341,15 +2347,16 @@ public class GuiCommand : IWithConfigCommand
     internal static string SanitizeFileName(string name)
     {
         // Path.GetInvalidFileNameChars() is OS-specific; ':' is missing on Linux but invalid on Windows.
-        // Include it explicitly for cross-platform filename compatibility.
-        HashSet<char> invalid = new HashSet<char>(Path.GetInvalidFileNameChars()) { ':', '*', '?', '"', '<', '>', '|' };
+        // '/' and '\' are path separators on one or both platforms — must be excluded from ZIP entry names too.
+        HashSet<char> invalid = new HashSet<char>(Path.GetInvalidFileNameChars()) { ':', '*', '?', '"', '<', '>', '|', '/', '\\' };
         string sanitized = string.Join("", name.Select(c => invalid.Contains(c) || c == ' ' ? '_' : c));
         if (sanitized.Length > 60)
         {
             sanitized = sanitized[..60];
         }
 
-        return sanitized.Trim();
+        sanitized = sanitized.Trim();
+        return string.IsNullOrEmpty(sanitized) ? "faktura" : sanitized;
     }
 
     private async Task<string> AuthAsync(CancellationToken ct)
