@@ -2265,7 +2265,7 @@ public class GuiCommand : IWithConfigCommand
             Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
             string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
             byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
-            string safeName = SanitizeFileName(inv.KsefNumber) + ".pdf";
+            string safeName = BuildFileName(inv, dlParams.CustomFilenames) + ".pdf";
             Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
             if (_server != null)
             {
@@ -2295,7 +2295,7 @@ public class GuiCommand : IWithConfigCommand
                     string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
                     byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
-                    string entryName = SanitizeFileName(inv.KsefNumber) + ".pdf";
+                    string entryName = BuildFileName(inv, dlParams.CustomFilenames) + ".pdf";
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Added {entryName} ({pdf.Length} bytes)");
                     System.IO.Compression.ZipArchiveEntry entry = zip.CreateEntry(entryName, System.IO.Compression.CompressionLevel.Fastest);
                     System.IO.Stream entryStream = entry.Open();

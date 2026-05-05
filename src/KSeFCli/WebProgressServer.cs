@@ -12,7 +12,7 @@ internal record SearchParams(string SubjectType, string From, string? To, string
 internal record DownloadParams(string OutputDir, int[]? SelectedIndices, bool CustomFilenames, bool ExportXml = true, bool ExportJson = false, bool ExportPdf = true, bool SeparateByNip = false, string? PdfColorScheme = null, string? SubjectType = null);
 internal record CheckExistingParams(string OutputDir, bool CustomFilenames, bool SeparateByNip, string? SubjectType = null);
 internal record DownloadSummaryParams(string OutputDir, string Month, bool SeparateByNip = false);
-internal record BrowserDownloadParams(int[]? Indices, string? PdfColorScheme = null, string? Month = null);
+internal record BrowserDownloadParams(int[]? Indices, string? PdfColorScheme = null, string? Month = null, bool CustomFilenames = false);
 
 internal sealed class WebProgressServer : IDisposable
 {
@@ -2874,7 +2874,8 @@ async function doBrowserDownload() {
   const body = {
     indices,
     pdfColorScheme: $('pdfColorScheme').value,
-    month
+    month,
+    customFilenames: $('customFilenames').checked
   };
   setBusyState(true);
   completed = 0; dlTotal = count;
