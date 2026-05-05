@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.8] — 2026-05-06
+
+### Added
+
+- **`DatabaseCorruptionException`** — dedicated exception type for actual SQLite corruption (PRAGMA quick_check failures), distinct from access/lock errors (`SqliteException`, `IOException`, `UnauthorizedAccessException`); startup now shows "Baza danych uszkodzona" vs "Błąd bazy danych" depending on the cause.
+- **`InitializeSchema()` separated from constructor** — `InvoiceCache` constructor no longer runs schema migrations; `CheckIntegrity()` is called first, then `InitializeSchema()`, so migrations never run on a corrupted database.
+
+### Fixed
+
+- **Browser download filename convention** — "Pobierz PDF / ZIP" now uses the same `BuildFileName` logic as "Zapisz" (respects custom filenames and `--useInvoiceNumber` flag) instead of always using the raw KSeF number.
+- **ZIP entry deduplication** — if `BuildFileName` produces identical names after sanitization or truncation (e.g., the `"faktura"` fallback), a `_2`, `_3`… suffix is appended to avoid silent duplicate entries in the archive.
+- **`SanitizeFileName`** now explicitly strips `/` and `\` on all platforms (previously only stripped on the OS where they are in `Path.GetInvalidFileNameChars()`); falls back to `"faktura"` if the sanitized result is empty.
+- **Progress bar stale timeout** — rapid consecutive downloads no longer flicker the progress bar; old auto-hide timer is cancelled before a new one is scheduled (`clearTimeout` + `progressHideTimeoutId`).
+- **Browser download SSE events** — `connectSSE()` is now called before the `/download-browser` fetch so `invoice_start`/`pdf_done` events are received even in a fresh browser session.
+- **Profile snapshot in XML cache** — `GetOrCacheInvoiceXmlAsync` captures `ActiveProfile`/`Config()` once and passes them to `GetInvoiceXmlWithRetryAsync`, preventing a concurrent profile switch from mixing cache keys with fetch credentials.
+- **`TryGetXml`/`TrySetXml`** now also catch `UnauthorizedAccessException` (in addition to `SqliteException` and `IOException`) so file-permission changes at runtime do not abort the invoice flow.
+- **`InitializeSchema()`** catches `IOException` and `UnauthorizedAccessException` in addition to `SqliteException` and wraps them as `InvalidOperationException`, so the startup error page is shown for all access failures during schema init.
+- **`ShowErrorPage`** uses `Path.Join` instead of `Path.Combine`, receives the actual database path from the caller, and uses specific `catch` types instead of a bare `catch`.
+
 ## [0.6.7] — 2026-05-05
 
 ### Added
