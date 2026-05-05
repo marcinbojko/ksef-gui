@@ -88,6 +88,18 @@ internal sealed class InvoiceCache
             }
         }
 
+        using SqliteCommand xmlCacheCmd = conn.CreateCommand();
+        xmlCacheCmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS invoice_xml_cache (
+                profile_key  TEXT NOT NULL,
+                ksef_number  TEXT NOT NULL,
+                xml_content  TEXT NOT NULL,
+                fetched_at   TEXT NOT NULL,
+                PRIMARY KEY (profile_key, ksef_number)
+            )
+            """;
+        xmlCacheCmd.ExecuteNonQuery();
+
         // Log per-profile row summary for diagnostics
         using SqliteCommand statsCmd = conn.CreateCommand();
         statsCmd.CommandText = "SELECT profile_key, fetched_at, length(invoices_json) FROM invoice_cache ORDER BY fetched_at DESC";
@@ -461,6 +473,58 @@ internal sealed class InvoiceCache
         int pendingRetries = (int)(long)(pendingCmd.ExecuteScalar() ?? 0L);
 
         return new NotificationStatus(lastSentAt, pendingRetries, lastOk, lastFailed, lastRetryCount);
+    }
+
+    /// <summary>
+    /// Runs PRAGMA quick_check. Throws InvalidOperationException with details if corruption is detected.
+    /// </summary>
+    public void CheckIntegrity()
+    {
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA quick_check";
+        using SqliteDataReader reader = cmd.ExecuteReader();
+        List<string> findings = new();
+        while (reader.Read())
+        {
+            string row = reader.GetString(0);
+            if (!string.Equals(row, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                findings.Add(row);
+            }
+        }
+        if (findings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"SQLite database integrity check failed ({_dbPath}):\n" + string.Join("\n", findings));
+        }
+    }
+
+    public string? GetXml(string profileKey, string ksefNumber)
+    {
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT xml_content FROM invoice_xml_cache WHERE profile_key = @pk AND ksef_number = @kn";
+        cmd.Parameters.AddWithValue("@pk", profileKey);
+        cmd.Parameters.AddWithValue("@kn", ksefNumber);
+        object? result = cmd.ExecuteScalar();
+        return result as string;
+    }
+
+    public void SetXml(string profileKey, string ksefNumber, string xmlContent)
+    {
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO invoice_xml_cache (profile_key, ksef_number, xml_content, fetched_at)
+            VALUES (@pk, @kn, @xml, @at)
+            ON CONFLICT(profile_key, ksef_number) DO UPDATE SET xml_content = excluded.xml_content, fetched_at = excluded.fetched_at
+            """;
+        cmd.Parameters.AddWithValue("@pk", profileKey);
+        cmd.Parameters.AddWithValue("@kn", ksefNumber);
+        cmd.Parameters.AddWithValue("@xml", xmlContent);
+        cmd.Parameters.AddWithValue("@at", DateTime.UtcNow.ToString("o"));
+        cmd.ExecuteNonQuery();
     }
 
     private SqliteConnection Open()

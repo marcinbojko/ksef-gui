@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.7] — unreleased
+
+### Added
+
+- **SQLite XML cache** — invoice XML fetched from KSeF is now stored in a new `invoice_xml_cache` table in the existing SQLite database. Subsequent requests for the same invoice (PDF preview, browser download, "Zapisz") reuse the cached XML without hitting the KSeF API. Cache persists across restarts and is keyed per profile.
+- **Browser download progress** — "Pobierz PDF / ZIP" now shows the progress bar and marks each invoice row in the table as it is processed, using the same SSE events (`invoice_start`, `pdf_done`) as the server-save flow. On completion the bar reaches 100% and the status line shows "Pobieranie gotowe."
+- **Startup database health check** — on every launch, `PRAGMA quick_check` is run against the SQLite database before the server starts. If corruption is detected, the app logs a `FATAL` error, opens a browser error page with the details and the database file path, and exits with code 1 instead of starting in a broken state.
+- **Selection cleared after download** — invoice row selections are automatically cleared after a successful "Zapisz zaznaczone / wszystkie" or "Pobierz PDF / ZIP" operation.
+
+### Fixed
+
+- Browser download ("Pobierz PDF / ZIP") no longer re-fetches XML from KSeF for invoices already downloaded or previewed in the same profile — hits the SQLite cache instead, avoiding rate-limit consumption on large batches.
+- Progress bar now auto-hides 1.2 s after a successful save or browser download instead of staying visible at 100%.
+
 ## [0.6.6] — 2026-05-04
 
 ### ⚠️ Breaking Changes
