@@ -2319,7 +2319,7 @@ public class GuiCommand : IWithConfigCommand
     {
         if (!customScheme)
         {
-            return UseInvoiceNumber ? inv.InvoiceNumber : inv.KsefNumber;
+            return UseInvoiceNumber ? SanitizeFileName(inv.InvoiceNumber) : inv.KsefNumber;
         }
 
         string date = inv.IssueDate.ToString("yyyy-MM-dd");
