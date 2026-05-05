@@ -12,10 +12,18 @@ namespace KSeFCli;
 /// re-fetch is to discover newly arrived invoices.
 /// DB location: ~/.cache/ksefcli/db/invoice-cache.db
 /// </summary>
+internal sealed class DatabaseCorruptionException : Exception
+{
+    public DatabaseCorruptionException(string dbPath, string details)
+        : base($"SQLite database integrity check failed ({dbPath}):\n{details}") { }
+}
+
 internal sealed class InvoiceCache
 {
     private static readonly string DefaultPath =
         Path.Combine(IGlobalCommand.CacheDir, "db", "invoice-cache.db");
+
+    public static string DefaultDbPath => DefaultPath;
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -23,18 +31,50 @@ internal sealed class InvoiceCache
     };
 
     private readonly string _dbPath;
+    public string DbPath => _dbPath;
 
     public InvoiceCache(string? dbPath = null)
     {
         _dbPath = dbPath ?? DefaultPath;
-        bool isNew = !File.Exists(_dbPath);
-        string? dir = Path.GetDirectoryName(_dbPath);
-        if (!string.IsNullOrEmpty(dir))
+        try
         {
-            Directory.CreateDirectory(dir);
+            bool isNew = !File.Exists(_dbPath);
+            string? dir = Path.GetDirectoryName(_dbPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
         }
-        Log.LogInformation($"Invoice cache DB: {_dbPath} ({(isNew ? "new" : $"{new FileInfo(_dbPath).Length / 1024.0:F1} KB")})");
-        EnsureSchema();
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Failed to open invoice database ({_dbPath}): {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>Creates tables and runs migrations. Must be called after CheckIntegrity() passes.</summary>
+    public void InitializeSchema()
+    {
+        try
+        {
+            EnsureSchema();
+        }
+        catch (SqliteException ex)
+        {
+            throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Failed to initialize invoice database schema ({_dbPath}): {ex.Message}", ex);
+        }
     }
 
     /// <summary>Creates the table if it does not already exist, and logs row counts per profile.</summary>
@@ -87,6 +127,18 @@ internal sealed class InvoiceCache
                 alter.ExecuteNonQuery();
             }
         }
+
+        using SqliteCommand xmlCacheCmd = conn.CreateCommand();
+        xmlCacheCmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS invoice_xml_cache (
+                profile_key  TEXT NOT NULL,
+                ksef_number  TEXT NOT NULL,
+                xml_content  TEXT NOT NULL,
+                fetched_at   TEXT NOT NULL,
+                PRIMARY KEY (profile_key, ksef_number)
+            )
+            """;
+        xmlCacheCmd.ExecuteNonQuery();
 
         // Log per-profile row summary for diagnostics
         using SqliteCommand statsCmd = conn.CreateCommand();
@@ -461,6 +513,102 @@ internal sealed class InvoiceCache
         int pendingRetries = (int)(long)(pendingCmd.ExecuteScalar() ?? 0L);
 
         return new NotificationStatus(lastSentAt, pendingRetries, lastOk, lastFailed, lastRetryCount);
+    }
+
+    /// <summary>
+    /// Runs PRAGMA quick_check. Throws <see cref="DatabaseCorruptionException"/> if corruption is
+    /// detected; propagates <see cref="SqliteException"/>, <see cref="IOException"/>, and
+    /// <see cref="UnauthorizedAccessException"/> as-is for access/lock problems.
+    /// </summary>
+    public void CheckIntegrity()
+    {
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA quick_check";
+        using SqliteDataReader reader = cmd.ExecuteReader();
+        List<string> findings = new();
+        while (reader.Read())
+        {
+            string row = reader.GetString(0);
+            if (!string.Equals(row, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                findings.Add(row);
+            }
+        }
+        if (findings.Count > 0)
+        {
+            throw new DatabaseCorruptionException(_dbPath, string.Join("\n", findings));
+        }
+    }
+
+    public string? TryGetXml(string profileKey, string ksefNumber)
+    {
+        try
+        {
+            return GetXml(profileKey, ksefNumber);
+        }
+        catch (SqliteException ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+            return null;
+        }
+        catch (IOException ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+            return null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.LogWarning($"[xml-cache] GetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+            return null;
+        }
+    }
+
+    public void TrySetXml(string profileKey, string ksefNumber, string xmlContent)
+    {
+        try
+        {
+            SetXml(profileKey, ksefNumber, xmlContent);
+        }
+        catch (SqliteException ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+        }
+        catch (IOException ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.LogWarning($"[xml-cache] SetXml failed ({ex.GetType().Name}) for ksef_number ending ...{ksefNumber[^Math.Min(4, ksefNumber.Length)..]}");
+        }
+    }
+
+    public string? GetXml(string profileKey, string ksefNumber)
+    {
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT xml_content FROM invoice_xml_cache WHERE profile_key = @pk AND ksef_number = @kn";
+        cmd.Parameters.AddWithValue("@pk", profileKey);
+        cmd.Parameters.AddWithValue("@kn", ksefNumber);
+        object? result = cmd.ExecuteScalar();
+        return result as string;
+    }
+
+    public void SetXml(string profileKey, string ksefNumber, string xmlContent)
+    {
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO invoice_xml_cache (profile_key, ksef_number, xml_content, fetched_at)
+            VALUES (@pk, @kn, @xml, @at)
+            ON CONFLICT(profile_key, ksef_number) DO UPDATE SET xml_content = excluded.xml_content, fetched_at = excluded.fetched_at
+            """;
+        cmd.Parameters.AddWithValue("@pk", profileKey);
+        cmd.Parameters.AddWithValue("@kn", ksefNumber);
+        cmd.Parameters.AddWithValue("@xml", xmlContent);
+        cmd.Parameters.AddWithValue("@at", DateTime.UtcNow.ToString("o"));
+        cmd.ExecuteNonQuery();
     }
 
     private SqliteConnection Open()

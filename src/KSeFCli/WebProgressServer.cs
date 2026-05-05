@@ -185,6 +185,59 @@ internal sealed class WebProgressServer : IDisposable
         }
     }
 
+    public static void ShowErrorPage(string title, string detail, string? dbPath = null)
+    {
+        string safeTitle = System.Net.WebUtility.HtmlEncode(title);
+        string safeDetail = System.Net.WebUtility.HtmlEncode(detail);
+        string safeDbPath = System.Net.WebUtility.HtmlEncode(dbPath ?? "~/.cache/ksefcli/db/invoice-cache.db");
+        string html = $$"""
+            <!DOCTYPE html>
+            <html lang="pl">
+            <head>
+              <meta charset="utf-8">
+              <title>{{safeTitle}}</title>
+              <style>
+                body { font-family: sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1.5rem; background: #fafafa; color: #212121; }
+                h1 { color: #b71c1c; }
+                pre { background: #fff3e0; border: 1px solid #ffcc80; padding: 1rem; border-radius: 4px; white-space: pre-wrap; word-break: break-word; font-size: .85rem; }
+                .hint { border-left: 4px solid #e53935; padding: .75rem 1rem; background: #fff; margin-top: 1.5rem; }
+              </style>
+            </head>
+            <body>
+              <h1>⚠ {{safeTitle}}</h1>
+              <pre>{{safeDetail}}</pre>
+              <div class="hint">
+                <strong>Co zrobić:</strong> Usuń lub przywróć plik bazy danych i uruchom aplikację ponownie.<br>
+                Plik bazy: <code>{{safeDbPath}}</code>
+              </div>
+            </body>
+            </html>
+            """;
+        string path = Path.Join(Path.GetTempPath(), "ksefcli-error.html");
+        try
+        {
+            File.WriteAllText(path, html, Encoding.UTF8);
+            string fileUrl = "file:///" + path.Replace('\\', '/').TrimStart('/');
+            if (OperatingSystem.IsLinux())
+            {
+                System.Diagnostics.Process.Start("xdg-open", fileUrl);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                System.Diagnostics.Process.Start("open", path);
+            }
+            else if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c start \"\" \"{path}\"") { CreateNoWindow = true });
+            }
+        }
+        catch (IOException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (UnauthorizedAccessException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (System.ComponentModel.Win32Exception ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (InvalidOperationException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+        catch (PlatformNotSupportedException ex) { Log.LogDebug($"[error-page] {ex.Message}"); }
+    }
+
     public void Dispose()
     {
         _cts?.Cancel();
@@ -2415,9 +2468,10 @@ function connectSSE() {
       case 'all_done':
         setStatus('Gotowe! Pobrano ' + (d.count || dlTotal) + ' faktur.', 'done');
         bar.style.width = '100%'; bar.textContent = '100%';
+        clearSelection();
         btnSearch.disabled = false; btnDownload.disabled = false;
-        btnDownloadSel.disabled = selectedInvoices.size === 0; btnBrowserDownload.disabled = selectedInvoices.size === 0;
         checkExisting();
+        clearTimeout(progressHideTimeoutId); progressHideTimeoutId = setTimeout(hideProgress, 1200);
         break;
       case 'error': {
         const row = document.getElementById('row-' + d.current);
@@ -2463,6 +2517,8 @@ function connectSSE() {
 }
 
 let dlTotal = 0;
+let progressHideTimeoutId = null;
+function hideProgress() { progressHideTimeoutId = null; progressWrap.classList.remove('visible'); }
 function markDone(idx) {
   const row = document.getElementById('row-' + idx);
   const icon = document.getElementById('icon-' + idx);
@@ -2813,6 +2869,7 @@ async function doDownload(selOnly) {
 
 async function doBrowserDownload() {
   const indices = selectedInvoices.size > 0 ? [...selectedInvoices] : null;
+  const count = indices ? indices.length : total;
   const month = $('fromDate').value || new Date().toISOString().slice(0, 7);
   const body = {
     indices,
@@ -2820,6 +2877,11 @@ async function doBrowserDownload() {
     month
   };
   setBusyState(true);
+  completed = 0; dlTotal = count;
+  progressWrap.classList.add('visible');
+  bar.style.width = '0%'; bar.textContent = '0%';
+  setStatus('Generowanie PDF... 0 / ' + count, 'info');
+  connectSSE();
   try {
     const res = await fetch('/download-browser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error || msg; } catch { msg = await res.text().then(t => t.slice(0,120)).catch(() => msg); } throw new Error(msg); }
@@ -2833,8 +2895,13 @@ async function doBrowserDownload() {
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+    clearSelection();
+    bar.style.width = '100%'; bar.textContent = '100%';
+    setStatus('Pobieranie gotowe.', 'done');
+    clearTimeout(progressHideTimeoutId); progressHideTimeoutId = setTimeout(hideProgress, 1200);
   } catch (err) {
     setStatus('Błąd pobierania: ' + err.message, 'error');
+    progressWrap.classList.remove('visible');
   } finally {
     setBusyState(false);
   }

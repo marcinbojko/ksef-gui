@@ -307,7 +307,34 @@ public class GuiCommand : IWithConfigCommand
         _setupRequired = !File.Exists(Path.GetFullPath(ConfigFile));
         GuiPrefs savedPrefs = LoadPrefs();
         Log.ConfigureLogging(Verbose, Quiet, savedPrefs.JsonConsoleLog ?? false);
-        _invoiceCache = new InvoiceCache();
+        try
+        {
+            _invoiceCache = new InvoiceCache();
+            _invoiceCache.CheckIntegrity();
+            _invoiceCache.InitializeSchema();
+        }
+        catch (DatabaseCorruptionException ex)
+        {
+            Log.LogError($"[startup] Database corrupted — cannot start.\n{ex.Message}");
+            Console.Error.WriteLine($"FATAL: {ex.Message}");
+            Console.Error.WriteLine("Delete or restore the database file and restart.");
+            WebProgressServer.ShowErrorPage(
+                "Baza danych uszkodzona — aplikacja nie może się uruchomić",
+                ex.Message,
+                _invoiceCache?.DbPath ?? InvoiceCache.DefaultDbPath);
+            return 1;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log.LogError($"[startup] Database error — cannot start.\n{ex.Message}");
+            Console.Error.WriteLine($"FATAL: {ex.Message}");
+            Console.Error.WriteLine("Delete or restore the database file and restart.");
+            WebProgressServer.ShowErrorPage(
+                "Błąd bazy danych — aplikacja nie może się uruchomić",
+                ex.Message,
+                _invoiceCache?.DbPath ?? InvoiceCache.DefaultDbPath);
+            return 1;
+        }
         if (_setupRequired)
         {
             Log.LogInformation("No config file found. Opening setup wizard in GUI.");
@@ -2049,7 +2076,7 @@ public class GuiCommand : IWithConfigCommand
                 }
 
                 // Fetch XML — shared helper handles 429 rate-limit retry and 401 token-refresh.
-                string invoiceXml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
+                string invoiceXml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
 
                 // Write desired formats to workdir, then move to output
                 if (dlParams.ExportJson)
@@ -2119,12 +2146,16 @@ public class GuiCommand : IWithConfigCommand
         }
     }
 
-    private async Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
+    private Task<string> GetInvoiceXmlWithRetryAsync(string ksefNumber, CancellationToken ct)
     {
-        // Snapshot profile identity before acquiring scope so ExpireStoredAccessToken targets the right profile.
         string requestProfile = ActiveProfile;
         ProfileConfig requestConfig = Config();
+        return GetInvoiceXmlWithRetryAsync(ksefNumber, requestProfile, requestConfig, ct);
+    }
 
+    private async Task<string> GetInvoiceXmlWithRetryAsync(
+        string ksefNumber, string requestProfile, ProfileConfig requestConfig, CancellationToken ct)
+    {
         // Own a fresh scope for this operation so a concurrent profile switch cannot dispose our client mid-retry.
         using IServiceScope requestScope = GetScope(requestConfig);
         IKSeFClient requestClient = requestScope.ServiceProvider.GetRequiredService<IKSeFClient>();
@@ -2154,6 +2185,24 @@ public class GuiCommand : IWithConfigCommand
                 tokenExpiredRetried = true;
             }
         }
+    }
+
+    private async Task<string> GetOrCacheInvoiceXmlAsync(string ksefNumber, CancellationToken ct)
+    {
+        // Snapshot once so cache read, KSeF fetch, and cache write all target the same profile.
+        string requestProfile = ActiveProfile;
+        ProfileConfig requestConfig = Config();
+        string profileKey = new TokenStore.Key(requestProfile, requestConfig).ToCacheKey();
+
+        string? cached = _invoiceCache.TryGetXml(profileKey, ksefNumber);
+        if (cached != null)
+        {
+            Log.LogInformation($"[xml-cache] hit for {ksefNumber}");
+            return cached;
+        }
+        string xml = await GetInvoiceXmlWithRetryAsync(ksefNumber, requestProfile, requestConfig, ct).ConfigureAwait(false);
+        _invoiceCache.TrySetXml(profileKey, ksefNumber, xml);
+        return xml;
     }
 
     // Ownership of the returned Stream is transferred to the caller (WebProgressServer),
@@ -2206,14 +2255,22 @@ public class GuiCommand : IWithConfigCommand
 
         if (toDownload.Count == 1)
         {
-            (int _, InvoiceSummary inv) = toDownload[0];
+            (int idx, InvoiceSummary inv) = toDownload[0];
+            if (_server != null)
+            {
+                await _server.SendEventAsync("invoice_start", new { current = idx, name = inv.KsefNumber, progress = 0, total = 1 }).ConfigureAwait(false);
+            }
             Log.LogInformation($"[browser-dl] Fetching XML for {inv.KsefNumber}");
-            string xml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
+            string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
             Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
             string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
             byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
             string safeName = SanitizeFileName(inv.KsefNumber) + ".pdf";
             Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
+            if (_server != null)
+            {
+                await _server.SendEventAsync("pdf_done", new { current = idx, progress = 1, total = 1 }).ConfigureAwait(false);
+            }
             return (new System.IO.MemoryStream(pdf), "application/pdf", safeName);
         }
         else
@@ -2227,11 +2284,15 @@ public class GuiCommand : IWithConfigCommand
             using (System.IO.Compression.ZipArchive zip = new(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
             {
                 int n = 0;
-                foreach ((int _, InvoiceSummary inv) in toDownload)
+                foreach ((int idx, InvoiceSummary inv) in toDownload)
                 {
                     n++;
+                    if (_server != null)
+                    {
+                        await _server.SendEventAsync("invoice_start", new { current = idx, name = inv.KsefNumber, progress = n - 1, total = toDownload.Count }).ConfigureAwait(false);
+                    }
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Fetching {inv.KsefNumber}");
-                    string xml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
+                    string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
                     byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
                     string entryName = SanitizeFileName(inv.KsefNumber) + ".pdf";
@@ -2241,6 +2302,10 @@ public class GuiCommand : IWithConfigCommand
                     await using (entryStream.ConfigureAwait(false))
                     {
                         await entryStream.WriteAsync(pdf, ct).ConfigureAwait(false);
+                    }
+                    if (_server != null)
+                    {
+                        await _server.SendEventAsync("pdf_done", new { current = idx, progress = n, total = toDownload.Count }).ConfigureAwait(false);
                     }
                 }
             }
@@ -2308,7 +2373,7 @@ public class GuiCommand : IWithConfigCommand
         }
 
         InvoiceSummary inv = _cachedInvoices[idx];
-        string xml = await GetInvoiceXmlWithRetryAsync(inv.KsefNumber, ct).ConfigureAwait(false);
+        string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
 
         XDocument doc = XDocument.Parse(xml);
         XNamespace fallbackNs = "http://crd.gov.pl/wzor/2025/06/25/13775/";
