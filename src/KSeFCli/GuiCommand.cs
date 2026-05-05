@@ -2341,15 +2341,16 @@ public class GuiCommand : IWithConfigCommand
     internal static string SanitizeFileName(string name)
     {
         // Path.GetInvalidFileNameChars() is OS-specific; ':' is missing on Linux but invalid on Windows.
-        // Include it explicitly for cross-platform filename compatibility.
-        HashSet<char> invalid = new HashSet<char>(Path.GetInvalidFileNameChars()) { ':', '*', '?', '"', '<', '>', '|' };
+        // '/' and '\' are path separators on one or both platforms — must be excluded from ZIP entry names too.
+        HashSet<char> invalid = new HashSet<char>(Path.GetInvalidFileNameChars()) { ':', '*', '?', '"', '<', '>', '|', '/', '\\' };
         string sanitized = string.Join("", name.Select(c => invalid.Contains(c) || c == ' ' ? '_' : c));
         if (sanitized.Length > 60)
         {
             sanitized = sanitized[..60];
         }
 
-        return sanitized.Trim();
+        sanitized = sanitized.Trim();
+        return string.IsNullOrEmpty(sanitized) ? "faktura" : sanitized;
     }
 
     private async Task<string> AuthAsync(CancellationToken ct)
