@@ -313,6 +313,17 @@ public class GuiCommand : IWithConfigCommand
             _invoiceCache.CheckIntegrity();
             _invoiceCache.InitializeSchema();
         }
+        catch (DatabaseCorruptionException ex)
+        {
+            Log.LogError($"[startup] Database corrupted — cannot start.\n{ex.Message}");
+            Console.Error.WriteLine($"FATAL: {ex.Message}");
+            Console.Error.WriteLine("Delete or restore the database file and restart.");
+            WebProgressServer.ShowErrorPage(
+                "Baza danych uszkodzona — aplikacja nie może się uruchomić",
+                ex.Message,
+                _invoiceCache?.DbPath ?? InvoiceCache.DefaultDbPath);
+            return 1;
+        }
         catch (InvalidOperationException ex)
         {
             Log.LogError($"[startup] Database error — cannot start.\n{ex.Message}");

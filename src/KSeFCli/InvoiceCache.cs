@@ -12,6 +12,12 @@ namespace KSeFCli;
 /// re-fetch is to discover newly arrived invoices.
 /// DB location: ~/.cache/ksefcli/db/invoice-cache.db
 /// </summary>
+internal sealed class DatabaseCorruptionException : Exception
+{
+    public DatabaseCorruptionException(string dbPath, string details)
+        : base($"SQLite database integrity check failed ({dbPath}):\n{details}") { }
+}
+
 internal sealed class InvoiceCache
 {
     private static readonly string DefaultPath =
@@ -510,46 +516,28 @@ internal sealed class InvoiceCache
     }
 
     /// <summary>
-    /// Runs PRAGMA quick_check. Throws InvalidOperationException with details if corruption is detected.
+    /// Runs PRAGMA quick_check. Throws <see cref="DatabaseCorruptionException"/> if corruption is
+    /// detected; propagates <see cref="SqliteException"/>, <see cref="IOException"/>, and
+    /// <see cref="UnauthorizedAccessException"/> as-is for access/lock problems.
     /// </summary>
     public void CheckIntegrity()
     {
-        try
+        using SqliteConnection conn = Open();
+        using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA quick_check";
+        using SqliteDataReader reader = cmd.ExecuteReader();
+        List<string> findings = new();
+        while (reader.Read())
         {
-            using SqliteConnection conn = Open();
-            using SqliteCommand cmd = conn.CreateCommand();
-            cmd.CommandText = "PRAGMA quick_check";
-            using SqliteDataReader reader = cmd.ExecuteReader();
-            List<string> findings = new();
-            while (reader.Read())
+            string row = reader.GetString(0);
+            if (!string.Equals(row, "ok", StringComparison.OrdinalIgnoreCase))
             {
-                string row = reader.GetString(0);
-                if (!string.Equals(row, "ok", StringComparison.OrdinalIgnoreCase))
-                {
-                    findings.Add(row);
-                }
-            }
-            if (findings.Count > 0)
-            {
-                throw new InvalidOperationException(
-                    $"SQLite database integrity check failed ({_dbPath}):\n" + string.Join("\n", findings));
+                findings.Add(row);
             }
         }
-        catch (InvalidOperationException)
+        if (findings.Count > 0)
         {
-            throw;
-        }
-        catch (SqliteException ex)
-        {
-            throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
-        }
-        catch (IOException ex)
-        {
-            throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new InvalidOperationException($"Cannot open invoice database ({_dbPath}): {ex.Message}", ex);
+            throw new DatabaseCorruptionException(_dbPath, string.Join("\n", findings));
         }
     }
 
