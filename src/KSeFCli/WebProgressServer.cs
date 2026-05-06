@@ -40,6 +40,9 @@ internal sealed class WebProgressServer : IDisposable
     /// <summary>Called when the user requests a monthly summary CSV. Returns the output file path.</summary>
     public Func<DownloadSummaryParams, CancellationToken, Task<string>>? OnDownloadSummary { get; set; }
 
+    /// <summary>Called when the user requests a monthly summary CSV for browser download. Returns (stream, contentType, fileName).</summary>
+    public Func<DownloadSummaryParams, CancellationToken, Task<(System.IO.Stream Data, string ContentType, string FileName)>>? OnBrowserDownloadSummary { get; set; }
+
     /// <summary>Called when the user requests ad-hoc browser download. Returns (stream, contentType, fileName). Caller disposes the stream.</summary>
     public Func<BrowserDownloadParams, CancellationToken, Task<(System.IO.Stream Data, string ContentType, string FileName)>>? OnBrowserDownload { get; set; }
 
@@ -508,6 +511,35 @@ internal sealed class WebProgressServer : IDisposable
                 string filePath = await OnDownloadSummary(sumParams, ct).ConfigureAwait(false);
                 return JsonSerializer.Serialize(new { ok = true, filePath });
             }).ConfigureAwait(false);
+        }
+        else if (path == "/download-summary-browser" && method == "POST")
+        {
+            if (OnBrowserDownloadSummary == null)
+            {
+                WriteErrorResponse(ctx, 501, "Browser summary download not configured");
+                return;
+            }
+            try
+            {
+                using StreamReader bodyReader = new(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                string body = await bodyReader.ReadToEndAsync(ct).ConfigureAwait(false);
+                DownloadSummaryParams sumParams = JsonSerializer.Deserialize<DownloadSummaryParams>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new DownloadSummaryParams(".", "");
+                (System.IO.Stream dataStream, string contentType, string fileName) = await OnBrowserDownloadSummary(sumParams, ct).ConfigureAwait(false);
+                await using (dataStream.ConfigureAwait(false))
+                {
+                    ctx.Response.ContentType = contentType;
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
+                    ctx.Response.ContentLength64 = dataStream.Length;
+                    await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.LogError($"[summary-dl] {ex.GetType().Name}: {ex.Message}");
+                WriteErrorResponse(ctx, 500, ex.Message);
+            }
         }
         else if (path == "/invoice-details" && method == "GET")
         {
@@ -1397,7 +1429,8 @@ body.dark .pref-label{color:#aaa}
   <button class="btn-success" id="btnDownloadSel" onclick="doDownload(true)">Zapisz zaznaczone</button>
   <button class="btn-success" id="btnDownload" onclick="doDownload(false)" style="background:#1976d2">Zapisz wszystkie</button>
   <button class="btn-success" id="btnBrowserDownload" onclick="doBrowserDownload()" style="background:#e65100">Pobierz PDF</button>
-  <button class="btn-success" id="btnSummary" onclick="doSummary()" style="background:#7b1fa2">Podsumowanie CSV</button>
+  <button class="btn-success" id="btnSummary" onclick="doSummary()" style="background:#7b1fa2" disabled>Zapisz CSV</button>
+  <button class="btn-success" id="btnSummaryBrowser" onclick="doBrowserSummary()" style="background:#e65100" disabled>Pobierz CSV</button>
   <span class="count" id="countLabel"></span>
 </div>
 <div class="modal-overlay" id="folderModal">
@@ -1455,7 +1488,7 @@ const bar = $('bar'), progressWrap = $('progressWrap'),
       tableWrap = $('tableWrap'), downloadBar = $('downloadBar'), filterBar = $('filterBar'),
       selToolbar = $('selToolbar'), selCount = $('selCount'),
       btnSearch = $('btnSearch'), btnDownload = $('btnDownload'), btnDownloadSel = $('btnDownloadSel'), btnBrowserDownload = $('btnBrowserDownload'),
-      btnSummary = $('btnSummary'), countLabel = $('countLabel');
+      btnSummary = $('btnSummary'), btnSummaryBrowser = $('btnSummaryBrowser'), countLabel = $('countLabel');
 let invoices = [], total = 0, completed = 0, sortCol = null, sortAsc = true, es = null;
 let profileSwitchGen = 0; // incremented on every profile switch; stale async results discard themselves
 let activeCurrencies = new Set();
@@ -1523,8 +1556,8 @@ async function loadCachedInvoices() {
       };
       knownInvoiceKsefNumbers = new Set(invoices.map(i => i.ksefNumber));
     }
+    refreshExchangeRates(); // sets fxRatesFetchInProgress before buildCurrencyFilter renders
     buildCurrencyFilter();
-    refreshExchangeRates(); // async — re-renders chart with PLN equivalents when rates arrive
     displayAll = false;
     currentPage = 0;
     renderTable();
@@ -1729,9 +1762,10 @@ async function onProfileChange() {
   countLabel.textContent = '';
   lastSearchParams = null;
   knownInvoiceKsefNumbers = null;
-  setStatus('Profil zmieniony na "' + chosen + '".', 'idle');
-  fetchTokenStatus();
-  loadCachedInvoices();
+  buildCurrencyFilter();
+  renderTable();
+  setStatus('Profil zmieniony na "' + chosen + '". Kliknij Szukaj aby wyszukać faktury.', 'idle');
+  await fetchTokenStatus();
 }
 
 function togglePrefs() { openPrefs(); }
@@ -2245,7 +2279,7 @@ function buildCurrencyFilter() {
     let summaryHtml = '';
     const allRatesMissing = hasNonPln && missingRate && !convertedAny;
     if (hasNonPln && fxRatesFetchInProgress) {
-      summaryHtml = '<div class="hbar-summary hbar-summary-wait">Oczekiwanie na kursy NBP…</div>';
+      summaryHtml = '<div class="hbar-summary hbar-summary-wait">⏳ Pobieranie kursów NBP…</div>';
     } else if (hasNonPln && fxRatesFetchFailed && Object.keys(fxRates).length === 0) {
       summaryHtml = '<div class="hbar-summary hbar-summary-warn">Nie udało się pobrać kursów NBP</div>';
     } else if (hasNonPln && Object.keys(fxRates).length === 0) {
@@ -2281,6 +2315,7 @@ function updateFilteredCount() {
 }
 
 function renderTable() {
+  updateSummaryButtons();
   if (!invoices.length) { tableWrap.innerHTML = '<div class="empty">Brak faktur.</div>'; return; }
   const cols = [
     {key:'ksefNumber', label:'Numer KSeF'},
@@ -2610,6 +2645,12 @@ function setBusyState(busy) {
   btnBrowserDownload.disabled = busy || selectedInvoices.size === 0;
 }
 
+function updateSummaryButtons() {
+  const hasInvoices = total > 0;
+  btnSummary.disabled = !hasInvoices;
+  btnSummaryBrowser.disabled = !hasInvoices;
+}
+
 async function doSearch() {
   searchRunning = true;
   setBusyState(true);
@@ -2647,8 +2688,8 @@ async function doSearch() {
     } else {
       setStatus('Znaleziono ' + total + ' faktur.', total > 0 ? 'info' : 'idle');
     }
+    refreshExchangeRates(); // sets fxRatesFetchInProgress before buildCurrencyFilter renders
     buildCurrencyFilter();
-    refreshExchangeRates(); // async — re-renders chart with PLN equivalents when rates arrive
     displayAll = false;
     currentPage = 0;
     renderTable();
@@ -2721,8 +2762,8 @@ async function silentRefresh() {
     } else {
       setStatus('Auto-od\u015Bwie\u017Canie: ' + total + ' faktur.', 'idle');
     }
+    refreshExchangeRates(); // sets fxRatesFetchInProgress before buildCurrencyFilter renders
     buildCurrencyFilter();
-    refreshExchangeRates(); // async — keeps PLN conversions fresh during background refreshes
     renderTable();
     checkExisting();
     await fetchTokenStatus();
@@ -2923,6 +2964,32 @@ async function doSummary() {
     setStatus('Błąd: ' + err.message, 'error');
   } finally {
     btnSummary.disabled = false;
+  }
+}
+
+async function doBrowserSummary() {
+  const month = $('fromDate').value;
+  if (!month) { setStatus('Wybierz miesiąc w polu "Od".', 'error'); return; }
+  btnSummaryBrowser.disabled = true;
+  setStatus('Generowanie CSV...', 'info');
+  try {
+    const body = { outputDir: '.', month, separateByNip: false };
+    const res = await fetch('/download-summary-browser', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!res.ok) { let msg = 'HTTP ' + res.status; try { const e = await res.json(); msg = e.error || msg; } catch {} throw new Error(msg); }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename="([^"]+)"/);
+    const fileName = nameMatch ? nameMatch[1] : 'summary.csv';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+    setStatus('Pobieranie CSV gotowe.', 'done');
+  } catch (err) {
+    setStatus('Błąd: ' + err.message, 'error');
+  } finally {
+    btnSummaryBrowser.disabled = false;
   }
 }
 

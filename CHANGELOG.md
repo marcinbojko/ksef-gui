@@ -4,9 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [0.6.9] — unreleased
 
+### Added
+
+- **"Pobierz CSV" browser download button** (orange) — downloads the monthly CSV summary directly to the browser without saving to the server; "Podsumowanie CSV" renamed to "Zapisz CSV" (purple), behaviour unchanged.
+- **NBP rate loading indicator** — shows "⏳ Pobieranie kursów NBP…" while rates are being fetched instead of a static "waiting" message; `refreshExchangeRates()` is now called before `buildCurrencyFilter()` so `fxRatesFetchInProgress` is set before the first render.
+
+### Fixed
+
+- **Profile switch clears invoice list** — switching profiles now fully clears the invoice view (previously cached invoices for the new profile were immediately loaded and displayed); token status is refreshed synchronously for the new profile.
+- **"Zapisz CSV" / "Pobierz CSV" button state** — buttons are enabled only when the invoice list is non-empty, regardless of ongoing download operations; they are no longer blocked by `setBusyState` during invoice save/download flows.
+
 ### Changed
 
-- **KSeF client updated to v2.4.0** (był rc6.1.1 z 2025-12-18) — dodaje obsługę formatu Problem Details dla błędów 400/429/410, wsparcie HTTP 410 Gone dla wygasłych operacji eksportu oraz parametr `onlyMetadata` dla eksportu faktur.
+- **KSeF client updated to v2.4.0** (was rc6.1.1 from 2025-12-18) — adds Problem Details error handling for 400/429/410 responses, HTTP 410 Gone support for expired export operations, and `onlyMetadata` parameter for invoice exports.
 
 ---
 
