@@ -1955,6 +1955,12 @@ public class GuiCommand : IWithConfigCommand
         return Task.FromResult(filePath);
     }
 
+    // Ownership of the returned Stream is transferred to the caller (WebProgressServer),
+    // which disposes it via `await using`. CodeQL cannot track cross-method ownership.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000",
+        Justification = "Stream ownership is transferred to the caller which disposes it.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "cs/local-not-disposed",
+        Justification = "Stream ownership is transferred to the caller which disposes it.")]
     private Task<(System.IO.Stream Data, string ContentType, string FileName)> BrowserDownloadSummaryAsync(
         DownloadSummaryParams sumParams, CancellationToken ct)
     {
@@ -2031,7 +2037,9 @@ public class GuiCommand : IWithConfigCommand
                 return "";
             }
 
-            if (value[0] is '=' or '+' or '-' or '@')
+            int firstNonWs = 0;
+            while (firstNonWs < value.Length && char.IsWhiteSpace(value[firstNonWs])) { firstNonWs++; }
+            if (firstNonWs < value.Length && value[firstNonWs] is '=' or '+' or '-' or '@')
             {
                 value = "'" + value;
             }

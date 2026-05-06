@@ -528,17 +528,21 @@ internal sealed class WebProgressServer : IDisposable
                 (System.IO.Stream dataStream, string contentType, string fileName) = await OnBrowserDownloadSummary(sumParams, ct).ConfigureAwait(false);
                 await using (dataStream.ConfigureAwait(false))
                 {
-                    ctx.Response.ContentType = contentType;
                     ctx.Response.StatusCode = 200;
-                    ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
-                    ctx.Response.ContentLength64 = dataStream.Length;
+                    ctx.Response.ContentType = contentType;
+                    string safeBase = Path.GetFileName(fileName);
+                    if (string.IsNullOrWhiteSpace(safeBase)) { safeBase = "summary.csv"; }
+                    safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
+                    string encoded = Uri.EscapeDataString(safeBase);
+                    ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
+                    if (dataStream.CanSeek) { ctx.Response.ContentLength64 = dataStream.Length; }
                     await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Log.LogError($"[summary-dl] {ex.GetType().Name}: {ex.Message}");
-                WriteErrorResponse(ctx, 500, ex.Message);
+                WriteErrorResponse(ctx, 500, "Internal server error");
             }
         }
         else if (path == "/invoice-details" && method == "GET")
