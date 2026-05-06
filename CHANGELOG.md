@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.9] — unreleased
+
+### Changed
+
+- **KSeF client updated to v2.4.0** (był rc6.1.1 z 2025-12-18) — dodaje obsługę formatu Problem Details dla błędów 400/429/410, wsparcie HTTP 410 Gone dla wygasłych operacji eksportu oraz parametr `onlyMetadata` dla eksportu faktur.
+
+---
+
 ## [0.6.8] — 2026-05-06
 
 ### Added
