@@ -1851,8 +1851,7 @@ public static class KSeFInvoicePdf
         if (string.IsNullOrEmpty(normalizedVerificationUrl)) { normalizedVerificationUrl = null; }
 
         string? normalizedHash = ksefInvoiceHash?.Trim();
-        if (string.IsNullOrEmpty(normalizedHash)) { normalizedHash = null; }
-        else if (normalizedHash.Length > MaxKsefHashLength) { normalizedHash = normalizedHash[..MaxKsefHashLength]; }
+        if (string.IsNullOrEmpty(normalizedHash) || normalizedHash.Length > MaxKsefHashLength) { normalizedHash = null; }
 
         InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
         return KSeFInvoicePdfGenerator.Generate(

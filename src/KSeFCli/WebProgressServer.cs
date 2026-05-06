@@ -535,7 +535,7 @@ internal sealed class WebProgressServer : IDisposable
                     safeBase = System.Text.RegularExpressions.Regex.Replace(safeBase, @"[\x00-\x1F\x7F""\\]", "_");
                     string encoded = Uri.EscapeDataString(safeBase);
                     ctx.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeBase}\"; filename*=UTF-8''{encoded}";
-                    if (dataStream.CanSeek) { ctx.Response.ContentLength64 = dataStream.Length; }
+                    if (dataStream.CanSeek) { dataStream.Seek(0, System.IO.SeekOrigin.Begin); ctx.Response.ContentLength64 = dataStream.Length; }
                     await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
                 }
             }
@@ -2654,10 +2654,11 @@ function setBusyState(busy) {
   btnBrowserDownload.disabled = busy || selectedInvoices.size === 0;
 }
 
+let summaryInFlight = false;
 function updateSummaryButtons() {
   const hasInvoices = total > 0;
-  btnSummary.disabled = !hasInvoices;
-  btnSummaryBrowser.disabled = !hasInvoices;
+  btnSummary.disabled = !hasInvoices || summaryInFlight;
+  btnSummaryBrowser.disabled = !hasInvoices || summaryInFlight;
 }
 
 async function doSearch() {
@@ -2961,7 +2962,7 @@ async function doBrowserDownload() {
 async function doSummary() {
   const month = $('fromDate').value;
   if (!month) { setStatus('Wybierz miesiąc w polu "Od".', 'error'); return; }
-  btnSummary.disabled = true;
+  summaryInFlight = true; updateSummaryButtons();
   setStatus('Generowanie podsumowania...', 'info');
   try {
     const body = { outputDir: $('outputDir').value || '.', month, separateByNip: $('separateByNip').checked };
@@ -2972,14 +2973,14 @@ async function doSummary() {
   } catch (err) {
     setStatus('Błąd: ' + err.message, 'error');
   } finally {
-    updateSummaryButtons();
+    summaryInFlight = false; updateSummaryButtons();
   }
 }
 
 async function doBrowserSummary() {
   const month = $('fromDate').value;
   if (!month) { setStatus('Wybierz miesiąc w polu "Od".', 'error'); return; }
-  btnSummaryBrowser.disabled = true;
+  summaryInFlight = true; updateSummaryButtons();
   setStatus('Generowanie CSV...', 'info');
   try {
     const body = { outputDir: '.', month, separateByNip: false };
