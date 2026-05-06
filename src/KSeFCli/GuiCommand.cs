@@ -432,6 +432,7 @@ public class GuiCommand : IWithConfigCommand
         server.OnDownload = DownloadAsync;
         server.OnBrowserDownload = BrowserDownloadAsync;
         server.OnDownloadSummary = GenerateSummaryAsync;
+        server.OnBrowserDownloadSummary = BrowserDownloadSummaryAsync;
         server.OnAuth = AuthAsync;
         server.OnInvoiceDetails = InvoiceDetailsAsync;
         server.OnQuit = () =>
@@ -1931,17 +1932,58 @@ public class GuiCommand : IWithConfigCommand
 
     private Task<string> GenerateSummaryAsync(DownloadSummaryParams sumParams, CancellationToken ct)
     {
-        // Snapshot mutable state immediately to avoid races with profile/cache switches
         List<InvoiceSummary>? cached = _cachedInvoices?.ToList();
         string profile = ActiveProfile;
         string? nip = sumParams.SeparateByNip ? Config().Nip : null;
 
+        (string monthKey, List<InvoiceSummary> filtered) = ParseAndFilterSummary(cached, sumParams.Month);
+
+        string outputDir = string.IsNullOrWhiteSpace(sumParams.OutputDir) ? OutputDir : sumParams.OutputDir;
+        if (!string.IsNullOrEmpty(nip))
+        {
+            outputDir = Path.Join(outputDir, nip);
+        }
+        Directory.CreateDirectory(outputDir);
+        string filePath = Path.Join(outputDir, $"summary-{monthKey}.csv");
+
+        Log.LogInformation($"[summary] Generating monthly summary for profile '{profile}', month={monthKey}, invoices in cache={cached!.Count}, matching={filtered.Count}, output={filePath}");
+
+        byte[] bytes = BuildSummaryCsvBytes(filtered, monthKey);
+        File.WriteAllBytes(filePath, bytes);
+
+        Log.LogInformation($"[summary] Saved {filtered.Count} invoice(s) for {monthKey} to {filePath} ({bytes.Length} bytes)");
+        return Task.FromResult(filePath);
+    }
+
+    // Ownership of the returned Stream is transferred to the caller (WebProgressServer),
+    // which disposes it via `await using`. CodeQL cannot track cross-method ownership.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000",
+        Justification = "Stream ownership is transferred to the caller which disposes it.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "cs/local-not-disposed",
+        Justification = "Stream ownership is transferred to the caller which disposes it.")]
+    private Task<(System.IO.Stream Data, string ContentType, string FileName)> BrowserDownloadSummaryAsync(
+        DownloadSummaryParams sumParams, CancellationToken ct)
+    {
+        List<InvoiceSummary>? cached = _cachedInvoices?.ToList();
+        string profile = ActiveProfile;
+
+        (string monthKey, List<InvoiceSummary> filtered) = ParseAndFilterSummary(cached, sumParams.Month);
+
+        Log.LogInformation($"[summary-dl] Browser download for profile '{profile}', month={monthKey}, matching={filtered.Count}");
+
+        byte[] bytes = BuildSummaryCsvBytes(filtered, monthKey);
+        string fileName = $"summary-{monthKey}.csv";
+        return Task.FromResult<(System.IO.Stream, string, string)>((new System.IO.MemoryStream(bytes), "text/csv; charset=utf-8", fileName));
+    }
+
+    private static (string MonthKey, List<InvoiceSummary> Filtered) ParseAndFilterSummary(
+        List<InvoiceSummary>? cached, string month)
+    {
         if (cached == null || cached.Count == 0)
         {
             throw new InvalidOperationException("Brak faktur. Wykonaj najpierw wyszukiwanie.");
         }
 
-        string month = sumParams.Month; // "YYYY-MM"
         if (!DateOnly.TryParseExact(month, "yyyy-MM", out DateOnly parsedMonth))
         {
             throw new InvalidOperationException($"Nieprawidłowy format miesiąca: '{month}'. Oczekiwany format: RRRR-MM.");
@@ -1953,16 +1995,11 @@ public class GuiCommand : IWithConfigCommand
             .OrderBy(i => i.IssueDate)
             .ToList();
 
-        string outputDir = string.IsNullOrWhiteSpace(sumParams.OutputDir) ? OutputDir : sumParams.OutputDir;
-        if (!string.IsNullOrEmpty(nip))
-        {
-            outputDir = Path.Join(outputDir, nip);
-        }
-        Directory.CreateDirectory(outputDir);
-        string filePath = Path.Join(outputDir, $"summary-{monthKey}.csv");
+        return (monthKey, filtered);
+    }
 
-        Log.LogInformation($"[summary] Generating monthly summary for profile '{profile}', month={monthKey}, invoices in cache={cached.Count}, matching={filtered.Count}, output={filePath}");
-
+    private static byte[] BuildSummaryCsvBytes(List<InvoiceSummary> filtered, string monthKey)
+    {
         StringBuilder sb = new();
         sb.AppendLine($"Podsumowanie faktur za: {monthKey}");
         sb.AppendLine($"Liczba faktur: {filtered.Count}");
@@ -1989,14 +2026,9 @@ public class GuiCommand : IWithConfigCommand
             sb.AppendLine($"Razem {grp.Key}:;{total.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
         }
 
-        // UTF-8 with BOM for Excel compatibility
         byte[] bom = [0xEF, 0xBB, 0xBF];
         byte[] content = Encoding.UTF8.GetBytes(sb.ToString());
-        byte[] bytes = [.. bom, .. content];
-        File.WriteAllBytes(filePath, bytes);
-
-        Log.LogInformation($"[summary] Saved {filtered.Count} invoice(s) for {monthKey} to {filePath} ({bytes.Length} bytes)");
-        return Task.FromResult(filePath);
+        return [.. bom, .. content];
 
         static string Csv(string? value)
         {
@@ -2005,8 +2037,9 @@ public class GuiCommand : IWithConfigCommand
                 return "";
             }
 
-            // Neutralize formula injection: Excel/Calc treat cells starting with =,+,-,@ as formulas
-            if (value[0] is '=' or '+' or '-' or '@')
+            int firstNonWs = 0;
+            while (firstNonWs < value.Length && char.IsWhiteSpace(value[firstNonWs])) { firstNonWs++; }
+            if (firstNonWs < value.Length && value[firstNonWs] is '=' or '+' or '-' or '@')
             {
                 value = "'" + value;
             }
@@ -2104,7 +2137,7 @@ public class GuiCommand : IWithConfigCommand
                     IVerificationLinkService? pdfLinkSvc = _scope?.ServiceProvider.GetService<IVerificationLinkService>();
                     string? ksefVerificationUrl = TryBuildVerificationUrl(pdfLinkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
 
-                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl).ConfigureAwait(false);
+                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl, inv.InvoiceHash).ConfigureAwait(false);
                     string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
                     await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
                     string finalPdf = Path.Combine(outputDir, $"{fileName}.pdf");
@@ -2264,7 +2297,7 @@ public class GuiCommand : IWithConfigCommand
             string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
             Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
             string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
-            byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
+            byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl, inv.InvoiceHash).ConfigureAwait(false);
             string safeName = BuildFileName(inv, dlParams.CustomFilenames) + ".pdf";
             Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
             if (_server != null)
@@ -2295,7 +2328,7 @@ public class GuiCommand : IWithConfigCommand
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Fetching {inv.KsefNumber}");
                     string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
-                    byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
+                    byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl, inv.InvoiceHash).ConfigureAwait(false);
                     string baseName = BuildFileName(inv, dlParams.CustomFilenames);
                     string entryName = baseName + ".pdf";
                     for (int dup = 2; !usedNames.Add(entryName); dup++)

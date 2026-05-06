@@ -73,13 +73,18 @@ internal record InvoiceData(
     string? WZ,
     List<string> NrUmowy,
     string? NrFaZaliczkowej,
-    bool OdwrotneObciazenie,
+    bool MetodaKasowa,
     bool Samofakturowanie,
-    string? ProceduraMarzy,
-    bool NoweŚrodkiTransportu,
+    bool OdwrotneObciazenie,
+    bool MechanizmPodzielonejPlatnosci,
+    string? ProceduraMarzySzczegoly,
     string? PodstawaZwolnienia,
     string? PodstawaZwolnieniaA,
     string? PodstawaZwolnieniaB,
+    string? PodstawaZwolnieniaC,
+    bool DostawaWewnatrzwspolnotowa,
+    bool ProceduraUproszczona,
+    bool PodmiotyPowiazane,
     List<string> NrZamowienia,
     string? NrPartiiDostawy,
     string? Incoterms,
@@ -89,6 +94,8 @@ internal record InvoiceData(
     string? SystemInfo,
     // Not in the XML — injected from API response metadata after parsing
     string? KsefReferenceNumber,
+    // SHA-256 hash of the invoice document (base64), returned by the KSeF API as InvoiceHash.
+    string? KsefInvoiceHash,
     // Pre-computed KSeF verification URL: https://qr.ksef.mf.gov.pl/invoice/{nip}/{dd-MM-yyyy}/{hash}
     // Built by IVerificationLinkService in the download/search pipeline; null when not available.
     string? KsefVerificationUrl
@@ -312,13 +319,23 @@ internal static class KSeFInvoiceParser
             WZ: Val(fa, "WZ"),
             NrUmowy: umowy,
             NrFaZaliczkowej: nrFaZal,
-            OdwrotneObciazenie: Val(fa, "P_16") == "1",
+            MetodaKasowa: Val(fa, "P_16") == "1",
             Samofakturowanie: Val(fa, "P_17") == "1",
-            ProceduraMarzy: Val(fa, "P_18"),
-            NoweŚrodkiTransportu: Val(fa, "P_18A") == "1",
-            PodstawaZwolnienia: Val(fa, "P_19"),
+            OdwrotneObciazenie: Val(fa, "P_18") == "1",
+            MechanizmPodzielonejPlatnosci: Val(fa, "P_18A") == "1",
+            ProceduraMarzySzczegoly:
+                El(fa, "P_PMarzy_2") != null ? "procedura marży dla biur podróży" :
+                El(fa, "P_PMarzy_3_1") != null ? "procedura marży - towary używane" :
+                El(fa, "P_PMarzy_3_2") != null ? "procedura marży - dzieła sztuki" :
+                El(fa, "P_PMarzy_3_3") != null ? "procedura marży - przedmioty kolekcjonerskie i antyki" :
+                El(fa, "P_PMarzy") != null ? "procedura marży" : null,
+            PodstawaZwolnienia: Val(fa, "P_19") == "1" ? "tak" : null,
             PodstawaZwolnieniaA: Val(fa, "P_19A"),
             PodstawaZwolnieniaB: Val(fa, "P_19B"),
+            PodstawaZwolnieniaC: Val(fa, "P_19C"),
+            DostawaWewnatrzwspolnotowa: Val(fa, "P_22") == "1",
+            ProceduraUproszczona: Val(fa, "P_23") == "1",
+            PodmiotyPowiazane: Val(fa, "TP") == "1",
             NrZamowienia: zamowienia,
             NrPartiiDostawy: nrPartiiDostawy,
             Incoterms: incoterms,
@@ -327,6 +344,7 @@ internal static class KSeFInvoiceParser
             Bdo: rejestry is null ? null : Val(rejestry, "BDO"),
             SystemInfo: Val(naglowek, "SystemInfo"),
             KsefReferenceNumber: null,
+            KsefInvoiceHash: null,
             KsefVerificationUrl: null
         );
     }
@@ -604,10 +622,11 @@ internal static class KSeFInvoiceSanitizer
         WZ = Text(d.WZ),
         NrUmowy = d.NrUmowy.Select(u => Text(u) ?? "").ToList(),
         NrFaZaliczkowej = Text(d.NrFaZaliczkowej),
-        ProceduraMarzy = Text(d.ProceduraMarzy),
-        PodstawaZwolnienia = Text(d.PodstawaZwolnienia),
+        ProceduraMarzySzczegoly = Text(d.ProceduraMarzySzczegoly),
+        PodstawaZwolnienia = d.PodstawaZwolnienia,
         PodstawaZwolnieniaA = Text(d.PodstawaZwolnieniaA),
         PodstawaZwolnieniaB = Text(d.PodstawaZwolnieniaB),
+        PodstawaZwolnieniaC = Text(d.PodstawaZwolnieniaC),
         NrZamowienia = d.NrZamowienia.Select(z => Text(z) ?? "").ToList(),
         NrPartiiDostawy = Text(d.NrPartiiDostawy),
         Incoterms = Text(d.Incoterms),
@@ -1025,6 +1044,14 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                             t.Span(d.KsefReferenceNumber).FontSize(8).Bold().FontColor(RedAccent);
                         });
                     }
+                    if (!string.IsNullOrEmpty(d.KsefInvoiceHash))
+                    {
+                        right.Item().PaddingTop(1).Text(t =>
+                        {
+                            t.Span("Skrót dokumentu: ").FontSize(6.5f).FontColor(Gray);
+                            t.Span(d.KsefInvoiceHash).FontSize(6.5f).FontColor(Gray);
+                        });
+                    }
                 });
             });
 
@@ -1113,10 +1140,14 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     }
                     // Special procedure flags
                     List<string> flags = new List<string>();
-                    if (d.OdwrotneObciazenie) { flags.Add("Odwrotne obciążenie (P_16)"); }
-                    if (d.Samofakturowanie) { flags.Add("Samofakturowanie (P_17)"); }
-                    if (!string.IsNullOrEmpty(d.ProceduraMarzy)) { flags.Add("Procedura marży: " + d.ProceduraMarzy); }
-                    if (d.NoweŚrodkiTransportu) { flags.Add("Nowe środki transportu (P_18A)"); }
+                    if (d.MetodaKasowa) { flags.Add("Metoda kasowa"); }
+                    if (d.Samofakturowanie) { flags.Add("samofakturowanie"); }
+                    if (d.OdwrotneObciazenie) { flags.Add("odwrotne obciążenie"); }
+                    if (d.MechanizmPodzielonejPlatnosci) { flags.Add("mechanizm podzielonej płatności"); }
+                    if (!string.IsNullOrEmpty(d.ProceduraMarzySzczegoly)) { flags.Add(d.ProceduraMarzySzczegoly); }
+                    if (d.DostawaWewnatrzwspolnotowa) { flags.Add("WDT nowych środków transportu"); }
+                    if (d.ProceduraUproszczona) { flags.Add("procedura uproszczona — transakcja trójstronna (art. 136)"); }
+                    if (d.PodmiotyPowiazane) { flags.Add("podmioty powiązane"); }
                     foreach (string flag in flags)
                     {
                         det.Item().PaddingTop(2).Text(t =>
@@ -1124,20 +1155,19 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                             t.Span(flag).FontSize(7.5f).Bold().FontColor(RedAccent);
                         });
                     }
-                    // VAT exemption basis
+                    // VAT exemption basis (P_19 is a marker; P_19A/B/C carry the legal text)
                     if (!string.IsNullOrEmpty(d.PodstawaZwolnienia))
                     {
                         det.Item().PaddingTop(2).Text(t =>
                         {
-                            t.Span("Podstawa zwolnienia (P_19): ").FontSize(7.5f).FontColor(Gray);
-                            t.Span(d.PodstawaZwolnienia).FontSize(7.5f);
+                            t.Span("Zwolnienie z VAT (P_19)").FontSize(7.5f).Bold().FontColor(RedAccent);
                         });
                     }
                     if (!string.IsNullOrEmpty(d.PodstawaZwolnieniaA))
                     {
                         det.Item().PaddingTop(1).Text(t =>
                         {
-                            t.Span("Przepis (P_19A): ").FontSize(7.5f).FontColor(Gray);
+                            t.Span("Przepis ustawy (P_19A): ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.PodstawaZwolnieniaA).FontSize(7.5f);
                         });
                     }
@@ -1145,8 +1175,16 @@ internal sealed class KSeFInvoicePdfGenerator(PdfColorScheme scheme)
                     {
                         det.Item().PaddingTop(1).Text(t =>
                         {
-                            t.Span("Opis zwolnienia (P_19B): ").FontSize(7.5f).FontColor(Gray);
+                            t.Span("Przepis dyrektywy 2006/112/WE (P_19B): ").FontSize(7.5f).FontColor(Gray);
                             t.Span(d.PodstawaZwolnieniaB).FontSize(7.5f);
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(d.PodstawaZwolnieniaC))
+                    {
+                        det.Item().PaddingTop(1).Text(t =>
+                        {
+                            t.Span("Inna podstawa zwolnienia (P_19C): ").FontSize(7.5f).FontColor(Gray);
+                            t.Span(d.PodstawaZwolnieniaC).FontSize(7.5f);
                         });
                     }
                     // Transaction conditions
@@ -1795,31 +1833,29 @@ public static class KSeFInvoicePdf
     // KSeF reference numbers follow the pattern NIP-YYYYMMDD-HASH-SEQ; cap at 256 (same as TZnakowy in FA3.xsd).
     private const int MaxKsefReferenceNumberLength = 256;
 
+    // SHA-256 in base64 is always 44 chars; cap generously to guard against malformed values.
+    private const int MaxKsefHashLength = 64;
+
     public static byte[] FromXml(
         string xmlContent,
         string? colorScheme = null,
         string? ksefReferenceNumber = null,
-        string? ksefVerificationUrl = null)
+        string? ksefVerificationUrl = null,
+        string? ksefInvoiceHash = null)
     {
         string? normalizedKsefRef = ksefReferenceNumber?.Trim();
-        if (string.IsNullOrEmpty(normalizedKsefRef))
-        {
-            normalizedKsefRef = null;
-        }
-        else if (normalizedKsefRef.Length > MaxKsefReferenceNumberLength)
-        {
-            normalizedKsefRef = normalizedKsefRef[..MaxKsefReferenceNumberLength];
-        }
+        if (string.IsNullOrEmpty(normalizedKsefRef)) { normalizedKsefRef = null; }
+        else if (normalizedKsefRef.Length > MaxKsefReferenceNumberLength) { normalizedKsefRef = normalizedKsefRef[..MaxKsefReferenceNumberLength]; }
 
         string? normalizedVerificationUrl = ksefVerificationUrl?.Trim();
-        if (string.IsNullOrEmpty(normalizedVerificationUrl))
-        {
-            normalizedVerificationUrl = null;
-        }
+        if (string.IsNullOrEmpty(normalizedVerificationUrl)) { normalizedVerificationUrl = null; }
+
+        string? normalizedHash = ksefInvoiceHash?.Trim();
+        if (string.IsNullOrEmpty(normalizedHash) || normalizedHash.Length > MaxKsefHashLength) { normalizedHash = null; }
 
         InvoiceData data = KSeFInvoiceSanitizer.Sanitize(xmlContent, KSeFInvoiceParser.Parse(xmlContent));
         return KSeFInvoicePdfGenerator.Generate(
-            data with { KsefReferenceNumber = normalizedKsefRef, KsefVerificationUrl = normalizedVerificationUrl },
+            data with { KsefReferenceNumber = normalizedKsefRef, KsefInvoiceHash = normalizedHash, KsefVerificationUrl = normalizedVerificationUrl },
             PdfColorScheme.FromName(colorScheme));
     }
 }

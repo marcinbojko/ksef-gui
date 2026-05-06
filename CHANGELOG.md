@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.9] — 2026-05-06
+
+### Added
+
+- **"Pobierz CSV" browser download button** (orange) — downloads the monthly CSV summary directly to the browser without saving to the server; "Podsumowanie CSV" renamed to "Zapisz CSV" (purple), behaviour unchanged.
+- **NBP rate loading indicator** — shows "⏳ Pobieranie kursów NBP…" while rates are being fetched instead of a static "waiting" message; `refreshExchangeRates()` is now called before `buildCurrencyFilter()` so `fxRatesFetchInProgress` is set before the first render.
+- **PDF — additional FA(3) annotation fields** — four fields previously missing from the PDF are now rendered when present in the invoice XML: `P_19C` (other legal basis for VAT exemption), `P_22` (intra-EU delivery of new means of transport), `P_23` (simplified procedure in triangular transactions), `TP` (related parties). All are shown conditionally — no label is printed when the field is absent.
+- **PDF — margin procedure annotations** — `P_PMarzy` family now parsed and displayed: "procedura marży dla biur podróży" (`P_PMarzy_2`), "procedura marży - towary używane" (`P_PMarzy_3_1`), "procedura marży - dzieła sztuki" (`P_PMarzy_3_2`), "procedura marży - przedmioty kolekcjonerskie i antyki" (`P_PMarzy_3_3`).
+
+### Fixed
+
+- **PDF — annotation field mapping corrected** — three fields were mapped to wrong regulatory labels due to FA(3) schema numbering: `P_16` is "Metoda kasowa" (not reverse charge), `P_18` is "odwrotne obciążenie" (not margin scheme), `P_18A` is "mechanizm podzielonej płatności" (not new means of transport). Field `P_PMarzy` (margin scheme) was not parsed at all.
+- **PDF — VAT exemption labels corrected** — `P_19` is now shown as a marker ("Zwolnienie z VAT"), `P_19A` label changed to "Przepis ustawy", `P_19B` label changed to "Przepis dyrektywy 2006/112/WE".
+- **Profile switch clears invoice list** — switching profiles now fully clears the invoice view (previously cached invoices for the new profile were immediately loaded and displayed); token status is refreshed synchronously for the new profile.
+- **"Zapisz CSV" / "Pobierz CSV" button state** — buttons are enabled only when the invoice list is non-empty, regardless of ongoing download operations; they are no longer blocked by `setBusyState` during invoice save/download flows.
+
+### Changed
+
+- **KSeF client updated to v2.4.0** (was rc6.1.1 from 2025-12-18) — adds Problem Details error handling for 400/429/410 responses, HTTP 410 Gone support for expired export operations, and `onlyMetadata` parameter for invoice exports.
+
+---
+
 ## [0.6.8] — 2026-05-06
 
 ### Added

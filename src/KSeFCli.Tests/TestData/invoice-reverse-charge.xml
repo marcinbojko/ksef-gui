@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Scenario: Reverse charge (P_16=1) + self-billing (P_17=1) annotations -->
+<!-- Scenario: Reverse charge (P_18=1) + self-billing (P_17=1) + cash method (P_16=1) annotations -->
 <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
   <Naglowek>
     <KodFormularza kodSystemowy="FA (2)" wersjaSchemy="1-0E">FA</KodFormularza>
@@ -36,6 +36,7 @@
     <RodzajFaktury>VAT</RodzajFaktury>
     <P_16>1</P_16>
     <P_17>1</P_17>
+    <P_18>1</P_18>
     <FaWiersz>
       <NrWierszaFa>1</NrWierszaFa>
       <P_7>Złom stalowy (odwrotne obciążenie)</P_7>
