@@ -2137,7 +2137,7 @@ public class GuiCommand : IWithConfigCommand
                     IVerificationLinkService? pdfLinkSvc = _scope?.ServiceProvider.GetService<IVerificationLinkService>();
                     string? ksefVerificationUrl = TryBuildVerificationUrl(pdfLinkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
 
-                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl).ConfigureAwait(false);
+                    byte[] pdfContent = await XML2PDFCommand.XML2PDF(invoiceXml, Quiet, ct, dlParams.PdfColorScheme, inv.KsefNumber, ksefVerificationUrl, inv.InvoiceHash).ConfigureAwait(false);
                     string tmpPdf = Path.Combine(workDir, $"{fileName}.pdf");
                     await File.WriteAllBytesAsync(tmpPdf, pdfContent, ct).ConfigureAwait(false);
                     string finalPdf = Path.Combine(outputDir, $"{fileName}.pdf");
@@ -2297,7 +2297,7 @@ public class GuiCommand : IWithConfigCommand
             string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
             Log.LogInformation($"[browser-dl] Generating PDF for {inv.KsefNumber}");
             string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
-            byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
+            byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl, inv.InvoiceHash).ConfigureAwait(false);
             string safeName = BuildFileName(inv, dlParams.CustomFilenames) + ".pdf";
             Log.LogInformation($"[browser-dl] PDF ready: {safeName} ({pdf.Length} bytes)");
             if (_server != null)
@@ -2328,7 +2328,7 @@ public class GuiCommand : IWithConfigCommand
                     Log.LogInformation($"[browser-dl] [{n}/{toDownload.Count}] Fetching {inv.KsefNumber}");
                     string xml = await GetOrCacheInvoiceXmlAsync(inv.KsefNumber, ct).ConfigureAwait(false);
                     string? verificationUrl = TryBuildVerificationUrl(linkSvc, inv.Seller?.Nip, inv.IssueDate, inv.InvoiceHash);
-                    byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl).ConfigureAwait(false);
+                    byte[] pdf = await XML2PDFCommand.XML2PDF(xml, Quiet, ct, colorScheme, inv.KsefNumber, verificationUrl, inv.InvoiceHash).ConfigureAwait(false);
                     string baseName = BuildFileName(inv, dlParams.CustomFilenames);
                     string entryName = baseName + ".pdf";
                     for (int dup = 2; !usedNames.Add(entryName); dup++)

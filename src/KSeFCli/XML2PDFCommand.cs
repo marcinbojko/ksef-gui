@@ -56,14 +56,15 @@ public class XML2PDFCommand : IGlobalCommand
 
     public static Task<byte[]> XML2PDF(
         string xmlContent, bool quiet, CancellationToken cancellationToken,
-        string? colorScheme = null, string? ksefReferenceNumber = null, string? ksefVerificationUrl = null)
+        string? colorScheme = null, string? ksefReferenceNumber = null, string? ksefVerificationUrl = null,
+        string? ksefInvoiceHash = null)
     {
         if (!quiet)
         {
             Log.LogInformation("Generating PDF (native renderer)...");
         }
 
-        return Task.FromResult(KSeFInvoicePdf.FromXml(xmlContent, colorScheme, ksefReferenceNumber, ksefVerificationUrl));
+        return Task.FromResult(KSeFInvoicePdf.FromXml(xmlContent, colorScheme, ksefReferenceNumber, ksefVerificationUrl, ksefInvoiceHash));
     }
 
     public static void AssertPdfGeneratorAvailable()

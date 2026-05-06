@@ -539,6 +539,11 @@ internal sealed class WebProgressServer : IDisposable
                     await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
                 }
             }
+            catch (InvalidOperationException ex)
+            {
+                Log.LogWarning($"[summary-dl] Validation error: {ex.Message}");
+                WriteErrorResponse(ctx, 400, ex.Message);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Log.LogError($"[summary-dl] {ex.GetType().Name}: {ex.Message}");
@@ -2967,7 +2972,7 @@ async function doSummary() {
   } catch (err) {
     setStatus('Błąd: ' + err.message, 'error');
   } finally {
-    btnSummary.disabled = false;
+    updateSummaryButtons();
   }
 }
 
@@ -2993,7 +2998,7 @@ async function doBrowserSummary() {
   } catch (err) {
     setStatus('Błąd: ' + err.message, 'error');
   } finally {
-    btnSummaryBrowser.disabled = false;
+    updateSummaryButtons();
   }
 }
 
