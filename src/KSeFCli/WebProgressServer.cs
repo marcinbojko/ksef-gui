@@ -549,6 +549,11 @@ internal sealed class WebProgressServer : IDisposable
                 Log.LogError($"[summary-dl] {ex.GetType().Name}: {ex.Message}");
                 WriteErrorResponse(ctx, 500, "Internal server error");
             }
+            finally
+            {
+                try { ctx.Response.Close(); }
+                catch (ObjectDisposedException) { }
+            }
         }
         else if (path == "/invoice-details" && method == "GET")
         {
@@ -2999,7 +3004,7 @@ async function doBrowserSummary() {
   } catch (err) {
     setStatus('Błąd: ' + err.message, 'error');
   } finally {
-    updateSummaryButtons();
+    summaryInFlight = false; updateSummaryButtons();
   }
 }
 
