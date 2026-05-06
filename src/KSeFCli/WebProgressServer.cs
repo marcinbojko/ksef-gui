@@ -517,6 +517,7 @@ internal sealed class WebProgressServer : IDisposable
             if (OnBrowserDownloadSummary == null)
             {
                 WriteErrorResponse(ctx, 501, "Browser summary download not configured");
+                ctx.Response.Close();
                 return;
             }
             try
@@ -539,12 +540,16 @@ internal sealed class WebProgressServer : IDisposable
                     await dataStream.CopyToAsync(ctx.Response.OutputStream, ct).ConfigureAwait(false);
                 }
             }
+            catch (OperationCanceledException)
+            {
+                Log.LogInformation("[summary-dl] Cancelled by client.");
+            }
             catch (InvalidOperationException ex)
             {
                 Log.LogWarning($"[summary-dl] Validation error: {ex.Message}");
                 WriteErrorResponse(ctx, 400, ex.Message);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
                 Log.LogError($"[summary-dl] {ex.GetType().Name}: {ex.Message}");
                 WriteErrorResponse(ctx, 500, "Internal server error");
@@ -552,7 +557,7 @@ internal sealed class WebProgressServer : IDisposable
             finally
             {
                 try { ctx.Response.Close(); }
-                catch (ObjectDisposedException) { }
+                catch (ObjectDisposedException ex) { Log.LogDebug($"[summary-dl] Response already disposed: {ex.Message}"); }
             }
         }
         else if (path == "/invoice-details" && method == "GET")
