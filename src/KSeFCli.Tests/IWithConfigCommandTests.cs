@@ -1,3 +1,5 @@
+using KSeF.Client.Core.Models.Authorization;
+
 using Microsoft.Extensions.DependencyInjection;
 
 using Xunit;
@@ -124,6 +126,41 @@ profiles:
         TestCommand cmd = new TestCommand { TokenCache = _tempCacheFile };
         TokenStore tokenStore = cmd.GetTokenStore();
         Assert.NotNull(tokenStore);
+    }
+
+    [Fact]
+    public void ExpireStoredAccessToken_WritesMinValueSentinel_InPositiveOffsetTimeZone()
+    {
+        ProfileConfig profile = new ProfileConfig { Nip = "1234567890", Environment = "demo", Token = "demo-token" };
+        TestCommand cmd = new TestCommand { TokenCache = _tempCacheFile };
+        TokenStore.Key key = new TokenStore.Key("test", profile);
+        cmd.GetTokenStore().SetToken(key, new TokenStore.Data(new AuthenticationOperationStatusResponse
+        {
+            AccessToken = new TokenInfo { Token = "access", ValidUntil = DateTimeOffset.UtcNow.AddHours(2) },
+            RefreshToken = new TokenInfo { Token = "refresh", ValidUntil = DateTimeOffset.UtcNow.AddDays(7) },
+        }));
+
+        // Regression for 0.6.9: the sentinel was DateTime.MinValue, whose implicit conversion
+        // to DateTimeOffset applies the local time zone and throws east of UTC. Force such a
+        // zone while the sentinel is written (effective on Unix; harmless no-op on Windows).
+        string? originalTz = Environment.GetEnvironmentVariable("TZ");
+        try
+        {
+            Environment.SetEnvironmentVariable("TZ", "Europe/Warsaw");
+            TimeZoneInfo.ClearCachedData();
+            cmd.ExpireStoredAccessToken("test", profile);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TZ", originalTz);
+            TimeZoneInfo.ClearCachedData();
+        }
+
+        TokenStore.Data? stored = cmd.GetTokenStore().GetToken(key);
+        Assert.NotNull(stored);
+        Assert.Equal(DateTimeOffset.MinValue, stored!.Response.AccessToken.ValidUntil);
+        Assert.Equal(string.Empty, stored.Response.AccessToken.Token);
+        Assert.Equal("refresh", stored.Response.RefreshToken.Token);
     }
 
     [Fact]
