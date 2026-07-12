@@ -134,10 +134,11 @@ profiles:
         ProfileConfig profile = new ProfileConfig { Nip = "1234567890", Environment = "demo", Token = "demo-token" };
         TestCommand cmd = new TestCommand { TokenCache = _tempCacheFile };
         TokenStore.Key key = new TokenStore.Key("test", profile);
+        DateTimeOffset refreshValidUntil = DateTimeOffset.UtcNow.AddDays(7);
         cmd.GetTokenStore().SetToken(key, new TokenStore.Data(new AuthenticationOperationStatusResponse
         {
             AccessToken = new TokenInfo { Token = "access", ValidUntil = DateTimeOffset.UtcNow.AddHours(2) },
-            RefreshToken = new TokenInfo { Token = "refresh", ValidUntil = DateTimeOffset.UtcNow.AddDays(7) },
+            RefreshToken = new TokenInfo { Token = "refresh", ValidUntil = refreshValidUntil },
         }));
 
         // Regression for 0.6.9: the sentinel was DateTime.MinValue, whose implicit conversion
@@ -161,6 +162,7 @@ profiles:
         Assert.Equal(DateTimeOffset.MinValue, stored!.Response.AccessToken.ValidUntil);
         Assert.Equal(string.Empty, stored.Response.AccessToken.Token);
         Assert.Equal("refresh", stored.Response.RefreshToken.Token);
+        Assert.Equal(refreshValidUntil, stored.Response.RefreshToken.ValidUntil);
     }
 
     [Fact]
