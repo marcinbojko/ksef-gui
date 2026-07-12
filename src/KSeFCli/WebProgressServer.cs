@@ -1639,7 +1639,7 @@ async function loadPrefs() {
     }
   } catch {}
 }
-loadPrefs().then(() => loadCachedInvoices());
+loadPrefs();
 
 function applySetupMode(required) {
   const banner = $('setupBanner');

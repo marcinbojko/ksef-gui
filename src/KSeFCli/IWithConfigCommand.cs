@@ -440,7 +440,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
             tokenStore.SetToken(key, new TokenStore.Data(new AuthenticationOperationStatusResponse
             {
-                AccessToken = new TokenInfo { Token = string.Empty, ValidUntil = DateTime.MinValue },
+                // DateTimeOffset.MinValue, not DateTime.MinValue: the implicit DateTime→DateTimeOffset
+                // conversion applies the local time zone, and east of UTC year 0001 underflows and throws.
+                AccessToken = new TokenInfo { Token = string.Empty, ValidUntil = DateTimeOffset.MinValue },
                 RefreshToken = stored.Response.RefreshToken,
             }));
             Log.LogDebug($"[bg-refresh] '{profileName}': access token invalidated (KSeF revokes after search session)");

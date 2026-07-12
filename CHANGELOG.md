@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.10] — unreleased
+
+### ⚠️ Breaking Changes
+
+- **Background refresh and notifications were completely broken since 0.6.9 (2026-05-06)** — the KSeF client v2.4.0 update changed `TokenInfo.ValidUntil` from `DateTime` to `DateTimeOffset`; assigning `DateTime.MinValue` in `ExpireStoredAccessToken` then threw `ArgumentOutOfRangeException` at runtime in any time zone east of UTC (e.g. `TZ=Europe/Warsaw`), killing every background refresh cycle right after the invoice fetch. No cache updates, no new-invoice detection, and **no Slack/Teams/email notifications** were performed since the 0.6.9 deployment. Fixed by using `DateTimeOffset.MinValue`.
+- **Expect a one-time notification burst after upgrading** — profiles whose cache was last written by 0.6.9's broken refresh will treat every current-month invoice added since then as new and notify about all of them in the first successful refresh cycle.
+
+---
+
 ## [0.6.9] — 2026-05-06
 
 ### Added
