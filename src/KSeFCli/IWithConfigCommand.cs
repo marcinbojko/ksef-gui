@@ -206,7 +206,8 @@ public abstract class IWithConfigCommand : IGlobalCommand
                 Value = config.Nip
             },
             EncryptedToken = encryptedTokenB64,
-            AuthorizationPolicy = null
+            // Tells KSeF which MF key encrypted the token, so auth keeps working while MF rotates keys
+            PublicKeyId = cryptographyService.KsefTokenPublicKeyId
         };
         SignatureResponse signature = await ksefClient.SubmitKsefTokenAuthRequestAsync(request, cancellationToken).ConfigureAwait(false);
         Log.LogInformation("4. Checking authentication status");
@@ -356,6 +357,9 @@ public abstract class IWithConfigCommand : IGlobalCommand
         services.AddKSeFClient(options =>
         {
             options.BaseUrl = KsefEnvironmentConfig.BaseUrls[environment];
+            // ksefcli has its own retry/backoff (429 handling, background refresh skip); the library's
+            // circuit breaker would throw KsefCircuitBreakerOpenException, which those paths don't handle.
+            options.CircuitBreaker.Enabled = false;
         });
         ServiceCollectionExtensions.AddCryptographyClient(services);
         ServiceProvider provider = services.BuildServiceProvider();
