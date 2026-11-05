@@ -174,6 +174,10 @@ public abstract class IWithConfigCommand : IGlobalCommand
         return response;
     }
 
+    /// <summary>
+    /// Authenticates with a KSeF token: gets a challenge, encrypts "token|timestamp" with the MF public key,
+    /// submits it with that key's ID, and polls until KSeF issues the access token.
+    /// </summary>
     public async Task<AuthenticationOperationStatusResponse> TokenAuth(IServiceScope scope, CancellationToken cancellationToken, ProfileConfig? profileOverride = null)
     {
         ProfileConfig config = profileOverride ?? Config();
@@ -343,6 +347,10 @@ public abstract class IWithConfigCommand : IGlobalCommand
 
     protected internal IServiceScope GetScope() => GetScope(Config());
 
+    /// <summary>
+    /// Builds a DI scope with the KSeF client configured for the profile's environment
+    /// (client-side circuit breaker disabled; ksefcli handles retries itself).
+    /// </summary>
     protected internal IServiceScope GetScope(ProfileConfig profile)
     {
         IServiceCollection services = new ServiceCollection();
