@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Scenario: Reverse charge (P_18=1) + self-billing (P_17=1) + cash method (P_16=1) annotations -->
+<!-- Scenario: Reverse charge (P_18=1) + self-billing (P_17=1) + cash method (P_16=1) annotations in Fa/Adnotacje; net in P_13_10 (oo) -->
 <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
   <Naglowek>
     <KodFormularza kodSystemowy="FA (2)" wersjaSchemy="1-0E">FA</KodFormularza>
@@ -34,9 +34,6 @@
     <P_1>2024-04-03</P_1>
     <P_2>FV/2024/04/003</P_2>
     <RodzajFaktury>VAT</RodzajFaktury>
-    <P_16>1</P_16>
-    <P_17>1</P_17>
-    <P_18>1</P_18>
     <FaWiersz>
       <NrWierszaFa>1</NrWierszaFa>
       <P_7>Złom stalowy (odwrotne obciążenie)</P_7>
@@ -44,10 +41,26 @@
       <P_8B>5</P_8B>
       <P_9A>1000.00</P_9A>
       <P_11>5000.00</P_11>
-      <P_12>np</P_12>
+      <P_12>oo</P_12>
     </FaWiersz>
-    <P_13_7>5000.00</P_13_7>
+    <P_13_10>5000.00</P_13_10>
     <P_15>5000.00</P_15>
+    <Adnotacje>
+      <P_16>1</P_16>
+      <P_17>1</P_17>
+      <P_18>1</P_18>
+      <P_18A>2</P_18A>
+      <Zwolnienie>
+        <P_19N>1</P_19N>
+      </Zwolnienie>
+      <NoweSrodkiTransportu>
+        <P_22N>1</P_22N>
+      </NoweSrodkiTransportu>
+      <P_23>2</P_23>
+      <PMarzy>
+        <P_PMarzyN>1</P_PMarzyN>
+      </PMarzy>
+    </Adnotacje>
     <Platnosc>
       <FormaPlatnosci>6</FormaPlatnosci>
       <TerminPlatnosci>

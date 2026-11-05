@@ -110,27 +110,34 @@ internal static class KSeFInvoiceParser
     // 10 MB ceiling — a real KSeF invoice is well under 1 MB
     private const long MaxXmlBytes = 10 * 1024 * 1024;
 
-    // Mapping from P_13_* suffix to human-readable VAT rate label per FA(3) schema.
+    // Mapping from P_13_* suffix to human-readable VAT rate label per FA(3) schema
+    // (see the xsd:documentation of P_13_1 … P_13_11 in Resources/FA3.xsd).
     // Unknown suffixes fall back to the raw suffix string.
     private static readonly IReadOnlyDictionary<string, string> VatSuffixLabels =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["1"] = "23%",
-            ["2"] = "8%",
-            ["3"] = "5%",
-            ["4"] = "3%",
-            ["5"] = "0% (WDT)",
-            ["6"] = "zw",
-            ["7"] = "np",
-            ["8"] = "oo",
-            ["9"] = "0% (eksport)",
-            ["10"] = "0% (transport)",
-            ["11"] = "zw (inne)",
+            ["1"] = "23%",            // stawka podstawowa (23% / 22%)
+            ["2"] = "8%",             // stawka obniżona pierwsza (8% / 7%)
+            ["3"] = "5%",             // stawka obniżona druga
+            ["4"] = "ryczałt taxi",   // ryczałt dla taksówek osobowych
+            ["5"] = "OSS",            // procedura szczególna, dział XII rozdz. 6a
+            ["6_1"] = "0%",           // 0% z wyłączeniem WDT i eksportu
+            ["6_2"] = "0% (WDT)",     // 0% — wewnątrzwspólnotowa dostawa towarów
+            ["6_3"] = "0% (eksport)", // 0% — eksport
+            ["7"] = "zw",             // sprzedaż zwolniona od podatku
+            ["8"] = "np",             // poza terytorium kraju
+            ["9"] = "np (art. 100)",  // usługi z art. 100 ust. 1 pkt 4
+            ["10"] = "oo",            // odwrotne obciążenie
+            ["11"] = "marża",         // procedura marży (art. 119 i 120)
         };
 
     private static string SuffixToRate(string suffix) =>
         VatSuffixLabels.TryGetValue(suffix, out string? label) ? label : suffix;
 
+    /// <summary>
+    /// Parses an FA(3) invoice XML into <see cref="InvoiceData"/>, following the FA(3) element
+    /// nesting (e.g. annotation flags under Fa/Adnotacje).
+    /// </summary>
     public static InvoiceData Parse(string xmlContent)
     {
         if (System.Text.Encoding.UTF8.GetByteCount(xmlContent) > MaxXmlBytes)
@@ -156,6 +163,9 @@ internal static class KSeFInvoiceParser
 
         XElement? El(XElement parent, string name) =>
             parent.Element(ns + name) ?? parent.Element(name);
+
+        XElement? Child(XElement? parent, string name) =>
+            parent is null ? null : El(parent, name);
 
         string? Val(XElement? parent, string name) =>
             parent is null ? null : El(parent, name)?.Value?.Trim();
@@ -211,10 +221,11 @@ internal static class KSeFInvoiceParser
             .OrderBy(w => w.Nr)
             .ToList();
 
-        // VAT summary — dynamic scan of all P_13_* present in Fa (schema-driven, no hardcoded rate list)
+        // VAT summary — dynamic scan of all P_13_* present in Fa (schema-driven, no hardcoded rate list).
+        // Document order is kept: the FA(3) xsd:sequence already orders P_13_1 … P_13_11, and
+        // suffixes such as "6_1" are not plain integers, so a numeric sort would misplace them.
         List<VatRow> vatRows = fa.Elements()
             .Where(e => e.Name.LocalName.StartsWith("P_13_", StringComparison.Ordinal))
-            .OrderBy(e => int.TryParse(e.Name.LocalName["P_13_".Length..], out int n) ? n : int.MaxValue)
             .Select(e =>
             {
                 string suffix = e.Name.LocalName["P_13_".Length..];
@@ -293,6 +304,13 @@ internal static class KSeFInvoiceParser
         XElement? rejestry = stopka is null ? null : El(stopka, "Rejestry");
         XElement? okresEl = El(fa, "OkresFa");
 
+        // Annotation flags live in Fa/Adnotacje (P_16 … P_18A, P_23), with P_19*, P_22 and
+        // P_PMarzy* nested one level deeper — not directly under Fa.
+        XElement? adnotacje = El(fa, "Adnotacje");
+        XElement? zwolnienie = Child(adnotacje, "Zwolnienie");
+        XElement? noweSrodkiTransportu = Child(adnotacje, "NoweSrodkiTransportu");
+        XElement? pMarzy = Child(adnotacje, "PMarzy");
+
         return new InvoiceData(
             RodzajFaktury: Val(fa, "RodzajFaktury"),
             Numer: Val(fa, "P_2"),
@@ -319,22 +337,22 @@ internal static class KSeFInvoiceParser
             WZ: Val(fa, "WZ"),
             NrUmowy: umowy,
             NrFaZaliczkowej: nrFaZal,
-            MetodaKasowa: Val(fa, "P_16") == "1",
-            Samofakturowanie: Val(fa, "P_17") == "1",
-            OdwrotneObciazenie: Val(fa, "P_18") == "1",
-            MechanizmPodzielonejPlatnosci: Val(fa, "P_18A") == "1",
+            MetodaKasowa: Val(adnotacje, "P_16") == "1",
+            Samofakturowanie: Val(adnotacje, "P_17") == "1",
+            OdwrotneObciazenie: Val(adnotacje, "P_18") == "1",
+            MechanizmPodzielonejPlatnosci: Val(adnotacje, "P_18A") == "1",
             ProceduraMarzySzczegoly:
-                El(fa, "P_PMarzy_2") != null ? "procedura marży dla biur podróży" :
-                El(fa, "P_PMarzy_3_1") != null ? "procedura marży - towary używane" :
-                El(fa, "P_PMarzy_3_2") != null ? "procedura marży - dzieła sztuki" :
-                El(fa, "P_PMarzy_3_3") != null ? "procedura marży - przedmioty kolekcjonerskie i antyki" :
-                El(fa, "P_PMarzy") != null ? "procedura marży" : null,
-            PodstawaZwolnienia: Val(fa, "P_19") == "1" ? "tak" : null,
-            PodstawaZwolnieniaA: Val(fa, "P_19A"),
-            PodstawaZwolnieniaB: Val(fa, "P_19B"),
-            PodstawaZwolnieniaC: Val(fa, "P_19C"),
-            DostawaWewnatrzwspolnotowa: Val(fa, "P_22") == "1",
-            ProceduraUproszczona: Val(fa, "P_23") == "1",
+                Child(pMarzy, "P_PMarzy_2") != null ? "procedura marży dla biur podróży" :
+                Child(pMarzy, "P_PMarzy_3_1") != null ? "procedura marży - towary używane" :
+                Child(pMarzy, "P_PMarzy_3_2") != null ? "procedura marży - dzieła sztuki" :
+                Child(pMarzy, "P_PMarzy_3_3") != null ? "procedura marży - przedmioty kolekcjonerskie i antyki" :
+                Child(pMarzy, "P_PMarzy") != null ? "procedura marży" : null,
+            PodstawaZwolnienia: Val(zwolnienie, "P_19") == "1" ? "tak" : null,
+            PodstawaZwolnieniaA: Val(zwolnienie, "P_19A"),
+            PodstawaZwolnieniaB: Val(zwolnienie, "P_19B"),
+            PodstawaZwolnieniaC: Val(zwolnienie, "P_19C"),
+            DostawaWewnatrzwspolnotowa: Val(noweSrodkiTransportu, "P_22") == "1",
+            ProceduraUproszczona: Val(adnotacje, "P_23") == "1",
             PodmiotyPowiazane: Val(fa, "TP") == "1",
             NrZamowienia: zamowienia,
             NrPartiiDostawy: nrPartiiDostawy,

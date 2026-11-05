@@ -189,10 +189,51 @@ public class PdfGenerationTests
         Assert.Equal("3900.00", vat23.Net);
         Assert.Equal("897.00", vat23.Vat);
 
-        // P_13_7 = "niepodlegający opodatkowaniu" (np), not "zwolniony" (zw=P_13_6)
-        VatRow vatNp = Assert.Single(d.VatRows, v => v.Rate == "np");
-        Assert.Equal("1000.00", vatNp.Net);
-        Assert.Null(vatNp.Vat);
+        // FA(3): P_13_7 = "sprzedaż zwolniona od podatku" (zw)
+        VatRow vatZw = Assert.Single(d.VatRows, v => v.Rate == "zw");
+        Assert.Equal("1000.00", vatZw.Net);
+        Assert.Null(vatZw.Vat);
+    }
+
+    [Fact]
+    public void ParseInvoice_AnnotationFlags_AreReadFromAdnotacje()
+    {
+        string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        string xml = File.ReadAllText(Path.Join(dir, "TestData", "invoice-reverse-charge.xml"));
+        InvoiceData d = KSeFInvoiceParser.Parse(xml);
+        Assert.True(d.MetodaKasowa);
+        Assert.True(d.Samofakturowanie);
+        Assert.True(d.OdwrotneObciazenie);
+        Assert.False(d.MechanizmPodzielonejPlatnosci); // P_18A = 2
+        Assert.False(d.ProceduraUproszczona);          // P_23 = 2
+        Assert.Null(d.PodstawaZwolnienia);             // Zwolnienie/P_19N = 1
+        Assert.False(d.DostawaWewnatrzwspolnotowa);    // NoweSrodkiTransportu/P_22N = 1
+        Assert.Null(d.ProceduraMarzySzczegoly);        // PMarzy/P_PMarzyN = 1
+        VatRow oo = Assert.Single(d.VatRows);
+        Assert.Equal("oo", oo.Rate);
+    }
+
+    [Fact]
+    public void ParseInvoice_NestedAnnotations_AreReadFromSubsections()
+    {
+        string xml = LoadSampleXml().Replace("<P_15>5897.00</P_15>", """
+            <P_15>5897.00</P_15>
+            <Adnotacje>
+              <P_16>2</P_16><P_17>2</P_17><P_18>2</P_18><P_18A>1</P_18A>
+              <Zwolnienie><P_19>1</P_19><P_19A>art. 43 ust. 1 pkt 37</P_19A></Zwolnienie>
+              <NoweSrodkiTransportu><P_22>1</P_22></NoweSrodkiTransportu>
+              <P_23>1</P_23>
+              <PMarzy><P_PMarzy>1</P_PMarzy><P_PMarzy_3_1>1</P_PMarzy_3_1></PMarzy>
+            </Adnotacje>
+            """, StringComparison.Ordinal);
+        InvoiceData d = KSeFInvoiceParser.Parse(xml);
+        Assert.False(d.MetodaKasowa);
+        Assert.True(d.MechanizmPodzielonejPlatnosci);
+        Assert.Equal("tak", d.PodstawaZwolnienia);
+        Assert.Equal("art. 43 ust. 1 pkt 37", d.PodstawaZwolnieniaA);
+        Assert.True(d.DostawaWewnatrzwspolnotowa);
+        Assert.True(d.ProceduraUproszczona);
+        Assert.Equal("procedura marży - towary używane", d.ProceduraMarzySzczegoly);
     }
 
     [Fact]

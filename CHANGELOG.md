@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.11] — unreleased
+
+### Fixed
+
+- **PDF — VAT summary labels corrected to the FA(3) schema** — the `P_13_*` suffix table was misaligned from suffix 4 onward. Most visibly, `P_13_7` (tax-exempt sales) was labelled "np" instead of "zw", and `P_13_8`/`P_13_10` were labelled "oo"/"0% (transport)". Labels now follow the schema: 4 = taxi flat rate, 5 = OSS, 6_1/6_2/6_3 = 0% domestic/intra-EU (WDT)/export, 7 = zw, 8 = np, 9 = np (art. 100), 10 = oo, 11 = margin scheme. VAT rows keep the schema's document order, so the 0% rows (`6_x`) no longer sort to the end.
+- **PDF — annotations were never shown for schema-valid invoices** — cash method, self-billing, reverse charge, split payment and triangular simplified procedure (`P_16`–`P_18A`, `P_23`) were read directly from `Fa` instead of `Fa/Adnotacje`, and VAT exemption basis (`P_19*`), intra-EU new means of transport (`P_22`) and margin scheme (`P_PMarzy*`) were read from `Fa` instead of their `Adnotacje/Zwolnienie`, `Adnotacje/NoweSrodkiTransportu` and `Adnotacje/PMarzy` sections. They are now read from the correct location.
+
+---
+
 ## [0.6.10] — 2026-07-12
 
 ### ⚠️ Breaking Changes
