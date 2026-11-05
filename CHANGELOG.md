@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.11] — unreleased
+
+### Fixed
+
+- **PDF generation crashed on invoices with a prefixed FA namespace** ([#57](https://github.com/marcinbojko/ksef-gui/issues/57)) — some invoicing systems bind the FA schema to a prefix (`<ns2:Faktura xmlns:ns2="http://crd.gov.pl/wzor/...">`) while the default `xmlns` points to a different schema (`DefinicjeTypy`). The parser took the namespace from the default `xmlns`, found no `<Fa>` element and threw `NullReferenceException` wherever a PDF is generated: the `XML2PDF` and `PobierzFaktury` commands and the GUI PDF download (save to disk and browser download). The namespace is now read from the root element itself. The same fix applies to the `QRDoFaktury` and `LinkDoFaktury` commands, which failed on such invoices with "Could not find seller NIP in invoice XML".
+
+---
+
 ## [0.6.10] — 2026-07-12
 
 ### ⚠️ Breaking Changes

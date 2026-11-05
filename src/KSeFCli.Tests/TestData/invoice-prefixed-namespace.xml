@@ -1,0 +1,134 @@
+<ns2:Faktura xmlns="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/" xmlns:ns2="http://crd.gov.pl/wzor/2025/06/25/13775/">
+  <ns2:Naglowek>
+    <ns2:KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</ns2:KodFormularza>
+    <ns2:WariantFormularza>3</ns2:WariantFormularza>
+    <ns2:DataWytworzeniaFa>2026-09-01T07:47:38Z</ns2:DataWytworzeniaFa>
+    <ns2:SystemInfo>Test System</ns2:SystemInfo>
+  </ns2:Naglowek>
+  <ns2:Podmiot1>
+    <ns2:DaneIdentyfikacyjne>
+      <ns2:NIP>1234567890</ns2:NIP>
+      <ns2:Nazwa>Company A sp.z o.o.</ns2:Nazwa>
+    </ns2:DaneIdentyfikacyjne>
+    <ns2:Adres>
+      <ns2:KodKraju>PL</ns2:KodKraju>
+      <ns2:AdresL1>ul. Testowa 1</ns2:AdresL1>
+      <ns2:AdresL2>00-000 Warszawa</ns2:AdresL2>
+    </ns2:Adres>
+  </ns2:Podmiot1>
+  <ns2:Podmiot2>
+    <ns2:DaneIdentyfikacyjne>
+      <ns2:NIP>9876543210</ns2:NIP>
+      <ns2:Nazwa>Company B</ns2:Nazwa>
+    </ns2:DaneIdentyfikacyjne>
+    <ns2:Adres>
+      <ns2:KodKraju>PL</ns2:KodKraju>
+      <ns2:AdresL1>ul. Alternatywna 2</ns2:AdresL1>
+      <ns2:AdresL2>01-000 Warszawa</ns2:AdresL2>
+    </ns2:Adres>
+    <ns2:AdresKoresp>
+      <ns2:KodKraju>PL</ns2:KodKraju>
+      <ns2:AdresL1>ul. Korespondencji 3</ns2:AdresL1>
+      <ns2:AdresL2>02-000 Warszawa</ns2:AdresL2>
+    </ns2:AdresKoresp>
+    <ns2:NrKlienta>123456</ns2:NrKlienta>
+    <ns2:JST>2</ns2:JST>
+    <ns2:GV>2</ns2:GV>
+  </ns2:Podmiot2>
+  <ns2:Podmiot3>
+    <ns2:DaneIdentyfikacyjne>
+      <ns2:BrakID>1</ns2:BrakID>
+      <ns2:Nazwa>Company C</ns2:Nazwa>
+    </ns2:DaneIdentyfikacyjne>
+    <ns2:Adres>
+      <ns2:KodKraju>PL</ns2:KodKraju>
+      <ns2:AdresL1>ul. Trzecia 4</ns2:AdresL1>
+      <ns2:AdresL2>03-000 Warszawa</ns2:AdresL2>
+    </ns2:Adres>
+    <ns2:Rola>2</ns2:Rola>
+  </ns2:Podmiot3>
+  <ns2:Fa>
+    <ns2:KodWaluty>PLN</ns2:KodWaluty>
+    <ns2:P_1>2026-09-01</ns2:P_1>
+    <ns2:P_2>FV/001/09/26</ns2:P_2>
+    <ns2:OkresFa>
+      <ns2:P_6_Od>2026-09-01</ns2:P_6_Od>
+      <ns2:P_6_Do>2026-09-30</ns2:P_6_Do>
+    </ns2:OkresFa>
+    <ns2:P_13_1>122.28</ns2:P_13_1>
+    <ns2:P_14_1>28.13</ns2:P_14_1>
+    <ns2:P_15>150.41</ns2:P_15>
+    <ns2:Adnotacje>
+      <ns2:P_16>2</ns2:P_16>
+      <ns2:P_17>2</ns2:P_17>
+      <ns2:P_18>2</ns2:P_18>
+      <ns2:P_18A>2</ns2:P_18A>
+      <ns2:Zwolnienie>
+        <ns2:P_19N>1</ns2:P_19N>
+      </ns2:Zwolnienie>
+      <ns2:NoweSrodkiTransportu>
+        <ns2:P_22N>1</ns2:P_22N>
+      </ns2:NoweSrodkiTransportu>
+      <ns2:P_23>2</ns2:P_23>
+      <ns2:PMarzy>
+        <ns2:P_PMarzyN>1</ns2:P_PMarzyN>
+      </ns2:PMarzy>
+    </ns2:Adnotacje>
+    <ns2:RodzajFaktury>VAT</ns2:RodzajFaktury>
+    <ns2:FaWiersz>
+      <ns2:NrWierszaFa>1</ns2:NrWierszaFa>
+      <ns2:P_7>Service item 1</ns2:P_7>
+      <ns2:P_8B>1</ns2:P_8B>
+      <ns2:P_9B>7.38</ns2:P_9B>
+      <ns2:P_11A>7.38</ns2:P_11A>
+      <ns2:P_12>23</ns2:P_12>
+    </ns2:FaWiersz>
+    <ns2:FaWiersz>
+      <ns2:NrWierszaFa>2</ns2:NrWierszaFa>
+      <ns2:P_7>Service item 2</ns2:P_7>
+      <ns2:P_8B>1</ns2:P_8B>
+      <ns2:P_9B>11.85</ns2:P_9B>
+      <ns2:P_11A>11.85</ns2:P_11A>
+      <ns2:P_12>23</ns2:P_12>
+    </ns2:FaWiersz>
+    <ns2:FaWiersz>
+      <ns2:NrWierszaFa>3</ns2:NrWierszaFa>
+      <ns2:P_7>Service item 3</ns2:P_7>
+      <ns2:P_8B>1</ns2:P_8B>
+      <ns2:P_9B>5.19</ns2:P_9B>
+      <ns2:P_11A>5.19</ns2:P_11A>
+      <ns2:P_12>23</ns2:P_12>
+    </ns2:FaWiersz>
+    <ns2:FaWiersz>
+      <ns2:NrWierszaFa>4</ns2:NrWierszaFa>
+      <ns2:P_7>Service item 4</ns2:P_7>
+      <ns2:P_8B>1</ns2:P_8B>
+      <ns2:P_9B>116.48</ns2:P_9B>
+      <ns2:P_11A>116.48</ns2:P_11A>
+      <ns2:P_12>23</ns2:P_12>
+    </ns2:FaWiersz>
+    <ns2:FaWiersz>
+      <ns2:NrWierszaFa>5</ns2:NrWierszaFa>
+      <ns2:P_7>Service item 5</ns2:P_7>
+      <ns2:P_8B>1</ns2:P_8B>
+      <ns2:P_9B>9.51</ns2:P_9B>
+      <ns2:P_11A>9.51</ns2:P_11A>
+      <ns2:P_12>23</ns2:P_12>
+    </ns2:FaWiersz>
+    <ns2:Platnosc>
+      <ns2:TerminPlatnosci>
+        <ns2:Termin>2026-09-15</ns2:Termin>
+      </ns2:TerminPlatnosci>
+      <ns2:FormaPlatnosci>6</ns2:FormaPlatnosci>
+      <ns2:RachunekBankowy>
+        <ns2:NrRB>1234567890123456789012345</ns2:NrRB>
+        <ns2:NazwaBanku>Generic Bank</ns2:NazwaBanku>
+      </ns2:RachunekBankowy>
+    </ns2:Platnosc>
+  </ns2:Fa>
+  <ns2:Stopka>
+    <ns2:Rejestry>
+      <ns2:PelnaNazwa>Company A sp.z o.o.</ns2:PelnaNazwa>
+    </ns2:Rejestry>
+  </ns2:Stopka>
+</ns2:Faktura>

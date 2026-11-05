@@ -243,6 +243,7 @@ public class PdfGenerationTests
         ["invoice-reverse-charge.xml",       "Reverse charge + self-billing flags (P_16/P_17)"],
         ["invoice-multi-vat-rates.xml",      "Multiple VAT rates (23%, 8%, 5%, np)"],
         ["invoice-correction.xml",           "Correction invoice (KOR) with negative amounts"],
+        ["invoice-prefixed-namespace.xml",   "FA schema bound to ns2: prefix, default xmlns points elsewhere (issue #57)"],
     ];
 
     [Theory]
@@ -254,6 +255,23 @@ public class PdfGenerationTests
         byte[] pdf = KSeFInvoicePdf.FromXml(xml);
         Assert.True(IsPdfHeader(pdf), $"Scenario '{description}': expected %PDF header");
         Assert.True(pdf.Length > 1024, $"Scenario '{description}': PDF too small ({pdf.Length} bytes)");
+    }
+
+    // Regression for issue #57: the FA elements live in the ns2: namespace while the default
+    // xmlns points to the DefinicjeTypy schema. The parser must use the root element's own
+    // namespace, otherwise <Fa> is not found and Parse throws NullReferenceException.
+    [Fact]
+    public void ParseInvoice_PrefixedNamespace_ReadsFields()
+    {
+        string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        string xml = File.ReadAllText(Path.Join(dir, "TestData", "invoice-prefixed-namespace.xml"));
+        InvoiceData d = KSeFInvoiceParser.Parse(xml);
+        Assert.Equal("FV/001/09/26", d.Numer);
+        Assert.Equal("2026-09-01", d.DataFaktury);
+        Assert.Equal("PLN", d.Waluta);
+        Assert.Equal("1234567890", d.Sprzedawca.Nip);
+        Assert.Equal("9876543210", d.Nabywca.Nip);
+        Assert.Equal(5, d.Wiersze.Count);
     }
 
     // ── Currency rendering ────────────────────────────────────────────────────
