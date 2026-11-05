@@ -40,7 +40,7 @@ public class QRDoFakturyCommand : IWithConfigCommand
             throw new InvalidDataException("Invoice XML is missing the root element.");
         }
 
-        XNamespace ns = xmlDoc.Root.GetDefaultNamespace();
+        XNamespace ns = xmlDoc.Root.Name.Namespace;
 
         string sellerNip = xmlDoc.Root.Element(ns + "Podmiot1")?.Element(ns + "DaneIdentyfikacyjne")?.Element(ns + "NIP")?.Value ?? throw new InvalidDataException("Could not find seller NIP in invoice XML.");
         string issueDateValue = xmlDoc.Root.Element(ns + "Fa")?.Element(ns + "P_1")?.Value ?? throw new InvalidDataException("Could not find issue date in invoice XML.");
