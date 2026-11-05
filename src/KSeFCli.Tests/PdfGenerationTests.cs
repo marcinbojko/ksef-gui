@@ -196,6 +196,18 @@ public class PdfGenerationTests
     }
 
     [Fact]
+    public void ParseInvoice_VatRows_KeepSchemaOrderForNonNumericSuffixes()
+    {
+        // "6_1" is not a plain integer suffix; a numeric sort would push it after P_13_7.
+        // Rows must follow the FA(3) xsd:sequence order: P_13_1, P_13_6_1, P_13_7.
+        string xml = LoadSampleXml().Replace(
+            "<P_13_7>", "<P_13_6_1>500.00</P_13_6_1>\n    <P_13_7>", StringComparison.Ordinal);
+        InvoiceData d = KSeFInvoiceParser.Parse(xml);
+        Assert.Equal(["23%", "0%", "zw"], d.VatRows.Select(v => v.Rate));
+        Assert.Equal("500.00", d.VatRows[1].Net);
+    }
+
+    [Fact]
     public void ParseInvoice_AnnotationFlags_AreReadFromAdnotacje()
     {
         string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
