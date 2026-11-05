@@ -159,7 +159,9 @@ internal static class KSeFInvoiceParser
         }
 
         XElement root = doc.Root!;
-        XNamespace ns = root.GetDefaultNamespace() == XNamespace.None ? FallbackNs : root.GetDefaultNamespace();
+        // Use the root element's own namespace: invoices may bind the FA schema to a prefix (ns2:Faktura)
+        // while the default xmlns points to a different schema, so GetDefaultNamespace() would be wrong.
+        XNamespace ns = root.Name.Namespace == XNamespace.None ? FallbackNs : root.Name.Namespace;
 
         XElement? El(XElement parent, string name) =>
             parent.Element(ns + name) ?? parent.Element(name);
