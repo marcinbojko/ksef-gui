@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.11] — unreleased
+## [0.7.0] — unreleased
+
+### Changed
+
+- **KSeF client library upgraded from 2.4.0 to 2.9.0** (`thirdparty/ksef-client-csharp`) — picks up the fix for MF public keys not refreshing after a forced refresh, support for overlapping keys during MF key rotation, and updated cryptography packages. Token authentication now sends the ID of the MF public key used to encrypt the token (`PublicKeyId`), as the library's own auth flow does, so logins keep working during MF key rotation. The library's new client-side circuit breaker (on by default since 2.6.0) is disabled: ksefcli already retries and backs off on its own, and the breaker's `KsefCircuitBreakerOpenException` would bypass that handling.
+
+## [0.6.11] — 2026-11-05
 
 ### Fixed
 
