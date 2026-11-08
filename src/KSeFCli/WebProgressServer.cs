@@ -992,7 +992,9 @@ td input[type=checkbox]{cursor:pointer;width:1rem;height:1rem}
 tr.has-files>td{background:rgba(46,125,50,.05)}
 tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .preview-page{padding:2rem;max-width:800px;margin:0 auto;font-size:.85rem;line-height:1.5}
-.preview-title{font-size:1.1rem;font-weight:700}
+.preview-ids{display:grid;grid-template-columns:auto minmax(0,auto) auto;justify-content:center;align-items:center;column-gap:.6rem;row-gap:.3rem;margin-bottom:.3rem}
+.preview-id-label{font-size:.8rem;font-weight:600;color:#666;text-align:right}
+.preview-id-value{font-size:1.1rem;font-weight:700;overflow-wrap:anywhere}
 .preview-subtitle{text-align:center;font-size:.8rem;color:#666;margin-bottom:.6rem}
 .preview-qr{text-align:center;margin-bottom:1rem}.preview-qr img{width:90px;height:90px;border:1px solid #ddd;border-radius:4px}
 .preview-qr a{display:inline-flex;align-items:center;gap:.25rem;font-size:.72rem;color:#1565c0;margin-top:.4rem;text-decoration:none;border:1px solid #1565c0;border-radius:4px;padding:.2rem .5rem;transition:background .15s,color .15s}.preview-qr a:hover{background:#1565c0;color:#fff}@media(prefers-color-scheme:dark){.preview-qr a{color:#90caf9;border-color:#90caf9}.preview-qr a:hover{background:#90caf9;color:#000}}
@@ -1026,7 +1028,6 @@ tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .wl-result{font-size:.78rem;margin-left:.5rem;font-weight:600}
 .wl-result.ok{color:#2e7d32}.wl-result.fail{color:#c62828}.wl-result.err{color:#e65100}
 .wl-limit{display:block;font-size:.7rem;color:#999;margin-top:.3rem}
-.preview-title-row{display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.2rem}
 .detail-overlay{display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;overflow-y:auto;padding:1rem}
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.visible{display:flex}
@@ -1091,7 +1092,7 @@ body.dark .chip.active{background:#1565c0;color:#fff;border-color:#1565c0}
 .detail-popover.preview-dark .dp-header h3{color:#e0e0e0}
 .detail-popover.preview-dark .dp-close{color:#888}
 .detail-popover.preview-dark .dp-close:hover{color:#e0e0e0}
-.detail-popover.preview-dark .preview-subtitle{color:#aaa}
+.detail-popover.preview-dark .preview-subtitle,.detail-popover.preview-dark .preview-id-label{color:#aaa}
 .detail-popover.preview-dark .preview-party{border-color:#444}
 .detail-popover.preview-dark .preview-party h5{color:#888}
 .detail-popover.preview-dark .preview-party .name{color:#e0e0e0}
@@ -1409,6 +1410,14 @@ body.dark .pref-label{color:#aaa}
           <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem"><input type="checkbox" id="previewDarkMode"> Włącz</label>
         </div>
         <div class="pref-row">
+          <span class="pref-label">Kopiuj przy otwarciu podglądu</span>
+          <select id="previewAutoCopy">
+            <option value="none">Nic</option>
+            <option value="invoiceNumber">Numer faktury</option>
+            <option value="ksefNumber">Numer KSeF</option>
+          </select>
+        </div>
+        <div class="pref-row">
           <span class="pref-label">Testuj powiadomienia</span>
           <button class="btn-sm btn-prefs" onclick="sendSampleNotification()">&#128276; Wyślij testowe</button>
         </div>
@@ -1605,6 +1614,7 @@ async function loadPrefs() {
       if (p.serverUrl) $('serverUrl').textContent = p.serverUrl;
       $('darkMode').checked = !!p.darkMode; document.body.classList.toggle('dark', !!p.darkMode);
       $('previewDarkMode').checked = !!p.previewDarkMode;
+      $('previewAutoCopy').value = p.previewAutoCopy || 'none';
       if (p.pdfColorScheme) $('pdfColorScheme').value = p.pdfColorScheme;
       if (p.jsonConsoleLog) $('jsonConsoleLog').checked = p.jsonConsoleLog;
       $('autoRefreshMinutes').value = p.autoRefreshMinutes ?? 0;
@@ -1722,6 +1732,7 @@ async function savePrefs() {
     separateByNip: $('separateByNip').checked,
     darkMode: $('darkMode').checked,
     previewDarkMode: $('previewDarkMode').checked,
+    previewAutoCopy: $('previewAutoCopy').value,
     pdfColorScheme: $('pdfColorScheme').value,
     selectedProfile: $('profileSelect').value,
     lanPort: parseInt($('lanPort').value) || 18150,
@@ -3180,17 +3191,28 @@ async function showPreview(idx) {
 
 function renderPreview(pop, d, inv) {
   const invNr = inv.invoiceNumber || '';
-  const copyBtn = (text, label) =>
+  const copyBtn = (text, label, copyId) =>
     // Store text in data-copy attribute to avoid quote conflicts inside onclick=""
-    '<button class="btn-copy" data-copy="' + text.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '" onclick="copyToClipboard(this,this.dataset.copy)" title="' + escHtml(label) + '">&#128203; Kopiuj</button>';
+    '<button class="btn-copy" data-copy="' + text.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '"'
+    + (copyId ? ' data-copy-id="' + copyId + '"' : '')
+    + ' onclick="copyToClipboard(this,this.dataset.copy)" title="' + escHtml(label) + '">&#128203; Kopiuj</button>';
 
   let html = '<div class="preview-page">';
-  html += '<div class="preview-title-row"><span class="preview-title">Faktura ' + escHtml(invNr) + '</span>'
-        + (invNr ? copyBtn(invNr, 'Kopiuj numer faktury') : '') + '</div>';
-  html += '<div class="preview-subtitle">KSeF: ' + escHtml(inv.ksefNumber || '') + ' | Data: ' + (inv.issueDate ? inv.issueDate.substring(0,10) : '');
-  if (d.invoiceType) html += ' | Typ: ' + escHtml(d.invoiceType);
-  if (d.currency) html += ' | Waluta: ' + escHtml(d.currency);
-  html += '</div>';
+  const ksefNr = inv.ksefNumber || '';
+  // Invoice number and KSeF number share one grid (label | value | copy) so both rows align and match in size
+  const idRow = (label, value, copyLabel, copyId) =>
+    '<span class="preview-id-label">' + label + '</span>'
+    + '<span class="preview-id-value">' + escHtml(value) + '</span>'
+    + '<span>' + (value ? copyBtn(value, copyLabel, copyId) : '') + '</span>';
+  html += '<div class="preview-ids">'
+        + idRow('Faktura', invNr, 'Kopiuj numer faktury', 'invoiceNumber')
+        + (ksefNr ? idRow('KSeF', ksefNr, 'Kopiuj numer KSeF', 'ksefNumber') : '')
+        + '</div>';
+  const meta = [];
+  if (inv.issueDate) meta.push('Data: ' + escHtml(inv.issueDate.substring(0,10)));
+  if (d.invoiceType) meta.push('Typ: ' + escHtml(d.invoiceType));
+  if (d.currency) meta.push('Waluta: ' + escHtml(d.currency));
+  if (meta.length) html += '<div class="preview-subtitle">' + meta.join(' | ') + '</div>';
 
   if (inv.ksefVerificationUrl) {
     const qrSrc = '/qr?url=' + encodeURIComponent(inv.ksefVerificationUrl);
@@ -3284,6 +3306,13 @@ function renderPreview(pop, d, inv) {
 
   html += '</div>';
   pop.querySelector('.dp-body').innerHTML = html;
+
+  // Auto-copy the number chosen in settings by clicking its own Kopiuj button (same feedback as a manual click)
+  const autoCopy = $('previewAutoCopy').value;
+  if (autoCopy !== 'none') {
+    const btn = pop.querySelector('.btn-copy[data-copy-id="' + autoCopy + '"]');
+    if (btn) { copyToClipboard(btn, btn.dataset.copy); }
+  }
 }
 
 // --- Check existing files ---

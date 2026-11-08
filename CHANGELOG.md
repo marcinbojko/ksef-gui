@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] — unreleased
+## [0.7.1] — unreleased
+
+### Added
+
+- **Invoice preview — auto-copy on open** — new setting in Preferences → Appearance, "Kopiuj przy otwarciu podglądu", with the choices none (default), invoice number, or KSeF number. When set, opening an invoice preview copies the chosen number to the clipboard, and its "Kopiuj" button shows "Skopiowano" as confirmation. Stored as `previewAutoCopy` in `gui-prefs.json`; unknown values fall back to none.
+
+### Changed
+
+- **Invoice preview — KSeF number gets its own copy button** — the invoice number and the KSeF number are now shown as two aligned rows of the same size, each with a "Kopiuj" button, so the KSeF number (required in transfer titles from 2027-01-01) can be copied in one click. Date, type and currency moved to the line below.
+
+## [0.7.0] — 2026-11-06
 
 ### Changed
 

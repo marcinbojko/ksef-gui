@@ -404,4 +404,16 @@ public class GuiCommandTests : IDisposable
             Assert.Equal(value, doc.RootElement.GetProperty("autoRefreshMinutes").GetInt32());
         }
     }
+
+    [Theory]
+    [InlineData("invoiceNumber", "invoiceNumber")]
+    [InlineData("ksefNumber", "ksefNumber")]
+    [InlineData("none", "none")]
+    [InlineData(null, "none")]
+    [InlineData("", "none")]
+    [InlineData("KSEFNUMBER", "none")]
+    public void NormalizePreviewAutoCopy_AcceptsOnlyKnownValues(string? input, string expected)
+    {
+        Assert.Equal(expected, GuiCommand.NormalizePreviewAutoCopy(input));
+    }
 }

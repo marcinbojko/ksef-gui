@@ -76,6 +76,7 @@ public class GuiCommand : IWithConfigCommand
         bool? ListenOnAll = null,
         bool? DarkMode = null,
         bool? PreviewDarkMode = null,
+        string? PreviewAutoCopy = null,
         bool? DetailsDarkMode = null,
         string? PdfColorScheme = null,
         int? AutoRefreshMinutes = null,
@@ -112,6 +113,16 @@ public class GuiCommand : IWithConfigCommand
         string ActiveProfile,
         string ConfigFilePath,
         ProfileEditorData[] Profiles);
+
+    /// <summary>
+    /// Returns the value to copy to the clipboard when the invoice preview opens:
+    /// "invoiceNumber", "ksefNumber" or "none" (default for missing or unknown values).
+    /// </summary>
+    internal static string NormalizePreviewAutoCopy(string? value) => value switch
+    {
+        "invoiceNumber" or "ksefNumber" => value,
+        _ => "none",
+    };
 
     private static GuiPrefs LoadPrefs()
     {
@@ -459,6 +470,7 @@ public class GuiCommand : IWithConfigCommand
                 serverUrl = server.LocalUrl,
                 darkMode = prefs.DarkMode ?? false,
                 previewDarkMode = prefs.PreviewDarkMode ?? false,
+                previewAutoCopy = NormalizePreviewAutoCopy(prefs.PreviewAutoCopy),
                 detailsDarkMode = prefs.DetailsDarkMode ?? false,
                 pdfColorScheme = prefs.PdfColorScheme ?? "navy",
                 autoRefreshMinutes = prefs.AutoRefreshMinutes ?? 0,
@@ -496,6 +508,9 @@ public class GuiCommand : IWithConfigCommand
                 ListenOnAll: root.TryGetProperty("listenOnAll", out JsonElement loa) ? loa.GetBoolean() : null,
                 DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
                 PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null,
+                PreviewAutoCopy: root.TryGetProperty("previewAutoCopy", out JsonElement pac) && pac.ValueKind == JsonValueKind.String
+                    ? NormalizePreviewAutoCopy(pac.GetString())
+                    : null,
                 DetailsDarkMode: root.TryGetProperty("detailsDarkMode", out JsonElement ddm) ? ddm.GetBoolean() : null,
                 PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null,
                 AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
