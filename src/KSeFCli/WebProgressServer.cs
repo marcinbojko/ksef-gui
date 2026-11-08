@@ -1022,6 +1022,7 @@ tr.has-files:hover>td{background:rgba(46,125,50,.1)}
 .btn-copy{display:inline-flex;align-items:center;gap:.25rem;background:#e8f5e9;border:1px solid #81c784;border-radius:4px;padding:.15rem .45rem;font-size:.72rem;cursor:pointer;color:#2e7d32;white-space:nowrap;transition:all .15s}
 .btn-copy:hover{background:#c8e6c9;border-color:#4caf50;color:#1b5e20}
 .btn-copy.copied{background:#a5d6a7;border-color:#388e3c;color:#1b5e20}
+.btn-copy.copy-failed{background:#fff3e0;border-color:#ef6c00;color:#e65100}
 .btn-whitelist{display:inline-flex;align-items:center;gap:.3rem;font-size:.78rem;color:#1565c0;background:none;border:1px solid #1565c0;border-radius:4px;padding:.25rem .6rem;cursor:pointer;transition:background .15s,color .15s}
 .btn-whitelist:hover{background:#1565c0;color:#fff}
 .btn-whitelist:disabled{opacity:.5;cursor:wait}
@@ -1111,6 +1112,7 @@ body.dark .chip.active{background:#1565c0;color:#fff;border-color:#1565c0}
 .detail-popover.preview-dark .btn-copy{background:#1b5e20;border-color:#4caf50;color:#a5d6a7}
 .detail-popover.preview-dark .btn-copy:hover{background:#2e7d32;border-color:#66bb6a;color:#c8e6c9}
 .detail-popover.preview-dark .btn-copy.copied{background:#388e3c;border-color:#81c784;color:#e8f5e9}
+.detail-popover.preview-dark .btn-copy.copy-failed{background:#4e2a00;border-color:#ffb74d;color:#ffcc80}
 .detail-popover.preview-dark .btn-whitelist{color:#90caf9;border-color:#90caf9}
 .detail-popover.preview-dark .btn-whitelist:hover{background:#90caf9;color:#000}
 .detail-popover.preview-dark .wl-result.ok{color:#a5d6a7}
@@ -3115,25 +3117,34 @@ async function checkWhitelist(btn, nip, account) {
   }
 }
 
-function copyToClipboard(btn, text) {
-  const showOk = () => {
-    const orig = btn.innerHTML;
-    btn.innerHTML = '&#10003; Skopiowano';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1800);
-  };
+// Writes text to the clipboard; resolves to true only if the write actually succeeded.
+// Must be called directly from a user action (click) — Firefox/Safari reject writes once that activation expires.
+function writeClipboard(text) {
   const fallback = () => {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); showOk(); } catch (_) {}
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
     ta.remove();
+    return ok;
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(showOk).catch(fallback);
-  } else {
-    fallback();
+    return navigator.clipboard.writeText(text).then(() => true, fallback);
   }
+  return Promise.resolve(fallback());
+}
+
+// Briefly shows the copy result on a Kopiuj button, then restores its label.
+function flashCopyResult(btn, ok) {
+  const orig = btn.innerHTML;
+  btn.innerHTML = ok ? '&#10003; Skopiowano' : '&#9888; Nie skopiowano';
+  btn.classList.add(ok ? 'copied' : 'copy-failed');
+  setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied', 'copy-failed'); }, 1800);
+}
+
+function copyToClipboard(btn, text) {
+  writeClipboard(text).then(ok => flashCopyResult(btn, ok));
 }
 function escAttr(s) { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 
@@ -3159,6 +3170,12 @@ async function showPreview(idx) {
   closeDetails();
   const inv = invoices.find(i => i._idx === idx) || {};
 
+  // Start the auto-copy now, while the click still counts as a user action — not after the details fetch below
+  const autoCopyId = $('previewAutoCopy').value;
+  const autoCopyText = autoCopyId === 'invoiceNumber' ? inv.invoiceNumber
+                     : autoCopyId === 'ksefNumber' ? inv.ksefNumber : '';
+  const autoCopy = autoCopyText ? { id: autoCopyId, result: writeClipboard(autoCopyText) } : null;
+
   const overlay = document.createElement('div');
   overlay.className = 'detail-overlay';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDetails(); });
@@ -3181,7 +3198,7 @@ async function showPreview(idx) {
       detailCache[cacheKey] = data;
     }
     if (detailOverlay !== overlay) return;
-    renderPreview(pop, data, inv);
+    renderPreview(pop, data, inv, autoCopy);
   } catch (err) {
     if (detailOverlay === overlay) {
       pop.querySelector('.dp-body').innerHTML = '<div style="color:#c62828;padding:1rem">Blad: ' + escHtml(err.message) + '</div>';
@@ -3189,7 +3206,7 @@ async function showPreview(idx) {
   }
 }
 
-function renderPreview(pop, d, inv) {
+function renderPreview(pop, d, inv, autoCopy) {
   const invNr = inv.invoiceNumber || '';
   const copyBtn = (text, label, copyId) =>
     // Store text in data-copy attribute to avoid quote conflicts inside onclick=""
@@ -3307,11 +3324,12 @@ function renderPreview(pop, d, inv) {
   html += '</div>';
   pop.querySelector('.dp-body').innerHTML = html;
 
-  // Auto-copy the number chosen in settings by clicking its own Kopiuj button (same feedback as a manual click)
-  const autoCopy = $('previewAutoCopy').value;
-  if (autoCopy !== 'none') {
-    const btn = pop.querySelector('.btn-copy[data-copy-id="' + autoCopy + '"]');
-    if (btn) { copyToClipboard(btn, btn.dataset.copy); }
+  // Show the result of the auto-copy started in showPreview on the matching Kopiuj button
+  if (autoCopy) {
+    autoCopy.result.then(ok => {
+      const btn = pop.querySelector('.btn-copy[data-copy-id="' + autoCopy.id + '"]');
+      if (btn) { flashCopyResult(btn, ok); }
+    });
   }
 }
 
