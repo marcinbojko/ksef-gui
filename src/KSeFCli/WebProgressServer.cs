@@ -3136,11 +3136,17 @@ function writeClipboard(text) {
 }
 
 // Briefly shows the copy result on a Kopiuj button, then restores its label.
+// The original label is saved once, and a new result cancels the pending reset, so rapid clicks can't leave it stuck.
 function flashCopyResult(btn, ok) {
-  const orig = btn.innerHTML;
+  if (btn.dataset.label === undefined) { btn.dataset.label = btn.innerHTML; }
+  clearTimeout(btn._copyResetTimer);
+  btn.classList.remove('copied', 'copy-failed');
   btn.innerHTML = ok ? '&#10003; Skopiowano' : '&#9888; Nie skopiowano';
   btn.classList.add(ok ? 'copied' : 'copy-failed');
-  setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied', 'copy-failed'); }, 1800);
+  btn._copyResetTimer = setTimeout(() => {
+    btn.innerHTML = btn.dataset.label;
+    btn.classList.remove('copied', 'copy-failed');
+  }, 1800);
 }
 
 function copyToClipboard(btn, text) {
