@@ -76,6 +76,7 @@ public class GuiCommand : IWithConfigCommand
         bool? ListenOnAll = null,
         bool? DarkMode = null,
         bool? PreviewDarkMode = null,
+        string? PreviewAutoCopy = null,
         bool? DetailsDarkMode = null,
         string? PdfColorScheme = null,
         int? AutoRefreshMinutes = null,
@@ -113,7 +114,23 @@ public class GuiCommand : IWithConfigCommand
         string ConfigFilePath,
         ProfileEditorData[] Profiles);
 
-    private static GuiPrefs LoadPrefs()
+    /// <summary>
+    /// Returns the value to copy to the clipboard when the invoice preview opens:
+    /// "invoiceNumber", "ksefNumber" or "none" (default for missing or unknown values).
+    /// </summary>
+    internal static string NormalizePreviewAutoCopy(string? value) => value switch
+    {
+        "invoiceNumber" or "ksefNumber" => value,
+        _ => "none",
+    };
+
+    /// <summary>
+    /// Reads gui-prefs.json (falling back to the legacy cache location) and returns defaults when
+    /// no file exists. When <paramref name="throwOnReadFailure"/> is true, a file that exists but
+    /// cannot be read or parsed throws instead of returning defaults, so a caller that would save
+    /// the result cannot overwrite the user's settings with defaults.
+    /// </summary>
+    private static GuiPrefs LoadPrefs(bool throwOnReadFailure = false)
     {
         // One-time migration: move gui-prefs.json from the old cache location to ~/.config.
         if (!File.Exists(PrefsPath) && File.Exists(LegacyPrefsPath))
@@ -158,6 +175,7 @@ public class GuiCommand : IWithConfigCommand
         // Try PrefsPath first, then fall back to LegacyPrefsPath (still present when copy failed).
         // Log and continue to the next candidate on any read/parse failure; return defaults only
         // if both are unavailable or unparseable.
+        Exception? readFailure = null;
         foreach (string candidate in new[] { PrefsPath, LegacyPrefsPath })
         {
             try
@@ -174,15 +192,22 @@ public class GuiCommand : IWithConfigCommand
             catch (IOException ex)
             {
                 Log.LogWarning($"[prefs] Failed to load {candidate}: {ex.GetType().Name}: {ex.Message}.");
+                readFailure = ex;
             }
             catch (UnauthorizedAccessException ex)
             {
                 Log.LogWarning($"[prefs] Failed to load {candidate}: {ex.GetType().Name}: {ex.Message}.");
+                readFailure = ex;
             }
             catch (JsonException ex)
             {
                 Log.LogWarning($"[prefs] Failed to parse {candidate}: {ex.GetType().Name}: {ex.Message}.");
+                readFailure = ex;
             }
+        }
+        if (throwOnReadFailure && readFailure != null)
+        {
+            throw new IOException($"Cannot read preferences ({readFailure.GetType().Name}: {readFailure.Message})", readFailure);
         }
         return new GuiPrefs();
     }
@@ -442,7 +467,9 @@ public class GuiCommand : IWithConfigCommand
         };
         server.OnLoadPrefs = () =>
         {
-            GuiPrefs prefs = LoadPrefs();
+            // Fail the request on an unreadable file: the browser keeps saves blocked instead of
+            // saving the form defaults over the user's settings.
+            GuiPrefs prefs = LoadPrefs(throwOnReadFailure: true);
             return Task.FromResult<object>(new
             {
                 outputDir = prefs.OutputDir ?? OutputDir,
@@ -459,6 +486,7 @@ public class GuiCommand : IWithConfigCommand
                 serverUrl = server.LocalUrl,
                 darkMode = prefs.DarkMode ?? false,
                 previewDarkMode = prefs.PreviewDarkMode ?? false,
+                previewAutoCopy = NormalizePreviewAutoCopy(prefs.PreviewAutoCopy),
                 detailsDarkMode = prefs.DetailsDarkMode ?? false,
                 pdfColorScheme = prefs.PdfColorScheme ?? "navy",
                 autoRefreshMinutes = prefs.AutoRefreshMinutes ?? 0,
@@ -483,7 +511,8 @@ public class GuiCommand : IWithConfigCommand
             bool jsonConsoleLog = root.TryGetProperty("jsonConsoleLog", out JsonElement jcl) && jcl.GetBoolean();
             Log.LogDebug($"SavePrefs: selectedProfile={newProfile ?? "(null)"}, activeProfile={ActiveProfile}, switching={!string.IsNullOrEmpty(newProfile) && newProfile != ActiveProfile}");
             // Load existing prefs first so we can preserve fields not sent by JS (e.g. ProfilePrefs with webhook URLs).
-            GuiPrefs existingPrefs = LoadPrefs();
+            // An unreadable file fails the save rather than dropping those fields.
+            GuiPrefs existingPrefs = LoadPrefs(throwOnReadFailure: true);
             GuiPrefs newPrefs = new GuiPrefs(
                 OutputDir: root.TryGetProperty("outputDir", out JsonElement od) ? od.GetString() : null,
                 ExportXml: root.TryGetProperty("exportXml", out JsonElement ex) ? ex.GetBoolean() : null,
@@ -496,6 +525,9 @@ public class GuiCommand : IWithConfigCommand
                 ListenOnAll: root.TryGetProperty("listenOnAll", out JsonElement loa) ? loa.GetBoolean() : null,
                 DarkMode: root.TryGetProperty("darkMode", out JsonElement dm) ? dm.GetBoolean() : null,
                 PreviewDarkMode: root.TryGetProperty("previewDarkMode", out JsonElement pdm) ? pdm.GetBoolean() : null,
+                PreviewAutoCopy: root.TryGetProperty("previewAutoCopy", out JsonElement pac) && pac.ValueKind == JsonValueKind.String
+                    ? NormalizePreviewAutoCopy(pac.GetString())
+                    : null,
                 DetailsDarkMode: root.TryGetProperty("detailsDarkMode", out JsonElement ddm) ? ddm.GetBoolean() : null,
                 PdfColorScheme: root.TryGetProperty("pdfColorScheme", out JsonElement pcs) ? pcs.GetString() : null,
                 AutoRefreshMinutes: root.TryGetProperty("autoRefreshMinutes", out JsonElement arm) ? arm.GetInt32() : null,
