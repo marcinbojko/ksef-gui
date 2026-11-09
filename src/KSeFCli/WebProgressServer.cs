@@ -1655,7 +1655,8 @@ async function loadPrefs() {
     }
   } catch {}
 }
-loadPrefs();
+// Kept so openPrefs() can wait for the startup load instead of sending a second request.
+let pendingPrefsLoad = loadPrefs();
 
 function applySetupMode(required) {
   const banner = $('setupBanner');
@@ -1808,8 +1809,13 @@ async function onProfileChange() {
 }
 
 function togglePrefs() { openPrefs(); }
+// Opens the Preferences window once the stored values are in the form; retries the load only if it failed.
 async function openPrefs() {
-  if (!prefsLoaded) { await loadPrefs(); } // retry a failed initial load
+  await pendingPrefsLoad;
+  if (!prefsLoaded) {
+    pendingPrefsLoad = loadPrefs();
+    await pendingPrefsLoad;
+  }
   $('prefsModal').classList.add('visible');
 }
 function closePrefs() { $('prefsModal').classList.remove('visible'); }
