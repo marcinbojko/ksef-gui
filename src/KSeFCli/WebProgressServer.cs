@@ -1599,6 +1599,9 @@ async function loadCachedInvoices() {
 
 // Load saved preferences
 let currentSessionProfile = '';
+// Saves are refused until the form holds the stored values; otherwise a save after a failed
+// load would overwrite every stored preference with the form defaults.
+let prefsLoaded = false;
 async function loadPrefs() {
   try {
     const res = await fetch('/prefs');
@@ -1647,6 +1650,7 @@ async function loadPrefs() {
         currentSessionProfile = p.selectedProfile || '';
         if (entries.length <= 1) sel.disabled = true;
       }
+      prefsLoaded = true;
       applySetupMode(!!p.setupRequired);
     }
   } catch {}
@@ -1725,6 +1729,9 @@ setInterval(() => { fetchTokenStatus(); }, 60000);
 setInterval(() => { fetchNotifStatus(); }, 120000);
 
 async function savePrefs() {
+  if (!prefsLoaded) {
+    throw new Error('ustawienia nie zostały wczytane — zamknij i otwórz Preferencje ponownie');
+  }
   const prefs = {
     outputDir: $('outputDir').value || '.',
     exportXml: $('expXml').checked,
@@ -1801,7 +1808,10 @@ async function onProfileChange() {
 }
 
 function togglePrefs() { openPrefs(); }
-function openPrefs() { $('prefsModal').classList.add('visible'); }
+async function openPrefs() {
+  if (!prefsLoaded) { await loadPrefs(); } // retry a failed initial load
+  $('prefsModal').classList.add('visible');
+}
 function closePrefs() { $('prefsModal').classList.remove('visible'); }
 async function cancelPrefs() { await loadPrefs(); closePrefs(); }
 async function saveAndClosePrefs() {
